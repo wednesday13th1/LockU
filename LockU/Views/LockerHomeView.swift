@@ -1,0 +1,215 @@
+import SwiftUI
+
+struct LockerHomeView: View {
+    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var appModel: LockUAppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let onShare: () -> Void
+    let onCode: () -> Void
+    let onSettings: () -> Void
+    @State private var appeared = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let horizontalInset = max(6.0, min(18.0, proxy.size.width * 0.035))
+            let lockerWidth = min(proxy.size.width - horizontalInset * 2, LockUDesign.contentMaxWidth)
+
+            VStack(spacing: 0) {
+                LockerUtilityBar(
+                    onShare: onShare,
+                    onCode: onCode,
+                    onSettings: onSettings
+                )
+                ZStack {
+                    LockerFrameView(
+                        lockerColor: Color(lockUHex: settingsRepository.settings.lockerColorHex)
+                    )
+                    .opacity(appModel.lockerDoorState.isOpenOrOpening ? 1 : 0.12)
+                    .blur(radius: appModel.lockerDoorState == .closed ? 1.5 : 0)
+                    .animation(
+                        reduceMotion
+                            ? LockUDesign.Motion.soft
+                            : LockUDesign.Motion.soft.delay(
+                                appModel.lockerDoorState == .opening ? 0.2 : 0
+                            ),
+                        value: appModel.lockerDoorState
+                    )
+
+                    LockerDoorView()
+                        .zIndex(10)
+                }
+            }
+            .frame(width: lockerWidth, height: proxy.size.height)
+            .frame(maxWidth: .infinity)
+            .opacity(appeared ? 1 : 0.65)
+            .offset(y: appeared ? 0 : 8)
+            .onAppear {
+                guard !appeared else { return }
+                if reduceMotion {
+                    appeared = true
+                } else {
+                    withAnimation(.easeOut(duration: 0.45)) { appeared = true }
+                }
+            }
+        }
+    }
+}
+
+private struct LockerUtilityBar: View {
+    let onShare: () -> Void
+    let onCode: () -> Void
+    let onSettings: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(Date.now.formatted(.dateTime.month(.abbreviated).day()))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.white.opacity(0.78))
+            Spacer()
+            utilityButton("Share", icon: "square.and.arrow.up", action: onShare)
+            utilityButton("Locker Code", icon: "number", action: onCode)
+            utilityButton("Settings", icon: "gearshape", action: onSettings)
+        }
+        .frame(minHeight: 44)
+        .padding(.horizontal, 8)
+    }
+
+    private func utilityButton(
+        _ label: String,
+        icon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .frame(width: 36, height: 36)
+                .background(.white.opacity(0.13), in: Circle())
+        }
+        .foregroundStyle(.white)
+        .accessibilityLabel(label)
+    }
+}
+
+struct LockerFrameView: View {
+    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    let lockerColor: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            let frameWidth = max(10.0, min(17.0, proxy.size.width * 0.035))
+            let topHeight = max(44.0, min(60.0, proxy.size.height * 0.09))
+
+            ZStack {
+                LockerInteriorSurface()
+                    .padding(.horizontal, frameWidth)
+                    .padding(.top, topHeight)
+                    .padding(.bottom, frameWidth)
+
+                VStack(spacing: 0) {
+                    topFrame(height: topHeight)
+                    Spacer(minLength: 0)
+                    metalBar.frame(height: frameWidth)
+                }
+
+                HStack(spacing: 0) {
+                    metalBar.frame(width: frameWidth)
+                    Spacer(minLength: 0)
+                    metalBar.frame(width: frameWidth)
+                }
+                .padding(.top, topHeight - 1)
+
+                LockerNamePlateView(
+                    number: settingsRepository.settings.lockerNumber,
+                    ownerName: settingsRepository.settings.ownerName
+                )
+                .frame(width: min(118, proxy.size.width * 0.29))
+                .position(x: frameWidth + min(66, proxy.size.width * 0.17), y: topHeight / 2)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .shadow(color: LockUDesign.Shadow.floating, radius: 18, y: 8)
+        }
+    }
+
+    private var metalBar: some View {
+        LinearGradient(
+            colors: [lockerColor.opacity(0.72), lockerColor, lockerColor.opacity(0.62)],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .overlay(alignment: .top) {
+            Rectangle().fill(LockUDesign.Color.metalHighlight).frame(height: 1)
+        }
+    }
+
+    private func topFrame(height: CGFloat) -> some View {
+        metalBar
+            .frame(height: height)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(.black.opacity(0.22)).frame(height: 3)
+            }
+    }
+}
+
+private struct LockerInteriorSurface: View {
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        LockUDesign.Color.lockerInterior.opacity(0.91),
+                        LockUDesign.Color.lockerBlueDark,
+                        LockUDesign.Color.lockerInterior
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                LinearGradient(
+                    colors: [.white.opacity(0.08), .clear, .black.opacity(0.16)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                LockerInteriorContent()
+                RoundedRectangle(cornerRadius: 2)
+                    .strokeBorder(.black.opacity(0.28), lineWidth: 4)
+            }
+        }
+    }
+}
+
+struct LockerNamePlateView: View {
+    let number: String
+    let ownerName: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("LOCKU")
+                .font(.system(.caption2, design: .rounded).weight(.bold))
+                .tracking(1.4)
+            Text(number.isEmpty ? "24" : number)
+                .font(.system(.title2, design: .rounded).weight(.heavy))
+                .minimumScaleFactor(0.7)
+            Text(ownerName.isEmpty ? "My Locker" : ownerName)
+                .font(.caption2.weight(.medium))
+                .lineLimit(1)
+        }
+        .foregroundStyle(LockUDesign.Color.ink)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(
+                colors: [.white.opacity(0.85), LockUDesign.Color.shelfCream],
+                startPoint: .top,
+                endPoint: .bottom
+            ),
+            in: RoundedRectangle(cornerRadius: 3)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 3).stroke(.black.opacity(0.25)))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Locker \(number), \(ownerName.isEmpty ? "My Locker" : ownerName)")
+    }
+}
+
+#Preview("Locker Home") {
+    LockURootView()
+}
