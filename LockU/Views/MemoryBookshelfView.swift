@@ -8,114 +8,128 @@ struct MemoryMonth: Identifiable, Hashable {
 
 struct MemoryBookshelfView: View {
     @EnvironmentObject private var repository: MemoryRepository
+    @State private var selectedMonthID: Date?
 
     private var months: [MemoryMonth] {
         let calendar = Calendar.current
-        let groups = Dictionary(grouping: repository.memories) { memory in
+        return Dictionary(grouping: repository.memories) { memory in
             calendar.date(from: calendar.dateComponents([.year, .month], from: memory.createdAt))
                 ?? memory.createdAt
         }
-        return groups
-            .map { MemoryMonth(startDate: $0.key, memories: $0.value) }
-            .sorted { $0.startDate > $1.startDate }
+        .map { MemoryMonth(startDate: $0.key, memories: $0.value.sorted { $0.createdAt > $1.createdAt }) }
+        .sorted { $0.startDate > $1.startDate }
+    }
+
+    private var selectedMonth: MemoryMonth? {
+        if let selectedMonthID,
+           let selected = months.first(where: { $0.id == selectedMonthID }) {
+            return selected
+        }
+        return months.first
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                if months.isEmpty {
-                    ContentUnavailableView(
-                        "Your first chapter is waiting",
-                        systemImage: "book.closed",
-                        description: Text("Save today's photo and it will appear here.")
-                    )
-                    .padding(.top, 80)
-                } else {
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 145), spacing: 18)],
-                        spacing: 22
-                    ) {
-                        ForEach(months) { month in
-                            NavigationLink(value: month) {
-                                MonthBookCover(month: month)
-                            }
-                            .buttonStyle(.plain)
-                        }
+            ZStack {
+                LockUPageBackground()
+                VStack(spacing: 14) {
+                    header
+                    if let selectedMonth {
+                        memoryGrid(selectedMonth)
+                    } else {
+                        ContentUnavailableView(
+                            "最初の思い出を残そう",
+                            systemImage: "photo.on.rectangle.angled",
+                            description: Text("今日の写真がここに並びます。")
+                        )
+                        .foregroundStyle(LockUDesign.Color.textPrimary)
                     }
-                    .padding()
                 }
             }
-            .navigationTitle("Memory Book")
-            .navigationDestination(for: MemoryMonth.self) { month in
-                MemoryMonthView(month: month)
+            .navigationBarHidden(true)
+            .onAppear {
+                if selectedMonthID == nil { selectedMonthID = months.first?.id }
             }
         }
     }
-}
 
-private struct MonthBookCover: View {
-    let month: MemoryMonth
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var header: some View {
+        HStack {
+            Text("Memories")
+                .font(LockUDesign.Typography.screenTitle)
             Spacer()
-            Text(month.startDate.formatted(.dateTime.month(.wide)))
-                .font(.title2.bold())
-            Text(month.startDate.formatted(.dateTime.year()))
-                .font(.subheadline)
-            Text("\(month.memories.count) memories")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Menu {
+                ForEach(months) { month in
+                    Button(month.startDate.formatted(.dateTime.month(.wide).year())) {
+                        selectedMonthID = month.id
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(selectedMonth?.startDate.formatted(.dateTime.month(.abbreviated)) ?? "Month")
+                    Image(systemName: "chevron.down")
+                }
+                .font(LockUDesign.Typography.caption)
+                .foregroundStyle(LockUDesign.Color.textPrimary)
+                .frame(minWidth: 78, minHeight: 44)
+                .background(LockUDesign.Color.surface, in: RoundedRectangle(cornerRadius: 10))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(.black.opacity(0.05), lineWidth: 0.8)
+                }
+            }
+            .accessibilityLabel("月を選択")
         }
-        .foregroundStyle(LockUDesign.Color.ink)
-        .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 205, alignment: .leading)
-        .background(
-            LinearGradient(
-                colors: [LockUDesign.Color.cream, LockUDesign.Color.lavender.opacity(0.75)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 7)
-        )
-        .overlay(alignment: .leading) {
-            Rectangle().fill(.black.opacity(0.12)).frame(width: 7)
-        }
-        .shadow(color: LockUDesign.shadow, radius: 12, x: 4, y: 7)
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
     }
-}
 
-private struct MemoryMonthView: View {
-    @EnvironmentObject private var repository: MemoryRepository
-    let month: MemoryMonth
-
-    var body: some View {
+    private func memoryGrid(_ month: MemoryMonth) -> some View {
         ScrollView {
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 130), spacing: 4)],
-                spacing: 4
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: 11, alignment: .top),
+                    count: 3
+                ),
+                spacing: 15
             ) {
-                ForEach(month.memories.sorted { $0.createdAt > $1.createdAt }) { memory in
-                    if let image = repository.image(for: memory) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .aspectRatio(1, contentMode: .fit)
-                            .clipped()
-                            .overlay(alignment: .bottomLeading) {
-                                Text(memory.createdAt.formatted(.dateTime.day()))
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.white)
-                                    .padding(6)
-                                    .background(.black.opacity(0.35), in: Circle())
-                                    .padding(6)
+                ForEach(month.memories) { memory in
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(memory.createdAt.formatted(.dateTime.day()))
+                                .font(LockUDesign.Typography.microLabel)
+                                .foregroundStyle(LockUDesign.Color.textPrimary)
+                            Spacer()
+                            Text(memory.createdAt.formatted(.dateTime.weekday(.abbreviated)))
+                                .font(.system(size: 9))
+                                .foregroundStyle(LockUDesign.Color.textSecondary)
+                        }
+                        LockUPhotoCard {
+                            Group {
+                                if let image = repository.image(for: memory) {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                } else {
+                                    ZStack {
+                                        LockUDesign.Color.surfaceMuted
+                                        Image(systemName: "photo")
+                                            .foregroundStyle(LockUDesign.Color.textSecondary)
+                                    }
+                                }
                             }
+                            .aspectRatio(0.75, contentMode: .fit)
+                            .clipped()
+                        }
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(
+                        "Memory from \(memory.createdAt.formatted(date: .long, time: .omitted))"
+                    )
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
         }
-        .navigationTitle(month.startDate.formatted(.dateTime.month(.wide).year()))
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

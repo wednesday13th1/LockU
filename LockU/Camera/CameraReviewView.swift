@@ -21,11 +21,11 @@ struct CameraReviewView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                LockUDesign.Color.lockerBlueDark.ignoresSafeArea()
-                VStack(spacing: 10) {
+                LockUPageBackground()
+                VStack(spacing: 8) {
                     reviewHeader
                     preview
-                        .frame(maxHeight: max(180, proxy.size.height * 0.5))
+                        .frame(maxHeight: max(220, proxy.size.height * 0.58))
                     editingControls
                 }
                 .padding(.horizontal, 16)
@@ -41,25 +41,23 @@ struct CameraReviewView: View {
         HStack {
             Button(action: onClose) {
                 Image(systemName: "xmark")
-                    .frame(width: 44, height: 44)
-                    .background(.white.opacity(0.1), in: Circle())
             }
+            .buttonStyle(LockUIconButtonStyle())
             .accessibilityLabel("編集を閉じる")
-            VStack(alignment: .leading, spacing: 2) {
-                Text("TODAY'S MEMORY")
-                    .font(.caption.bold())
+            Spacer()
+            VStack(spacing: 2) {
+                Text("今日の思い出")
+                    .font(LockUDesign.Typography.bodyEmphasized)
                 Text(Date.now.formatted(date: .long, time: .shortened))
-                    .font(.caption2)
+                    .font(LockUDesign.Typography.microLabel)
             }
             Spacer()
-            Label(
-                captureMode == .camera ? "Camera" : "Library",
-                systemImage: captureMode == .camera ? "camera.fill" : "photo.fill"
-            )
-            .font(.caption)
+            Image(systemName: captureMode == .camera ? "camera.fill" : "photo.fill")
+                .frame(width: 44, height: 44)
+                .accessibilityLabel(captureMode == .camera ? "Camera" : "Library")
         }
-        .foregroundStyle(.white)
-        .frame(minHeight: 44)
+        .foregroundStyle(LockUDesign.Color.textPrimary)
+        .frame(minHeight: 52)
     }
 
     private var preview: some View {
@@ -67,22 +65,38 @@ struct CameraReviewView: View {
             if selectedStyle == .cutout {
                 CutoutCheckerboardBackground()
             } else {
-                Color.black.opacity(0.18)
+                Color.black.opacity(0.03)
             }
             Image(uiImage: displayedImage)
                 .resizable()
                 .scaledToFit()
-                .padding(selectedStyle == .cutout ? 22 : 0)
+                .padding(selectedStyle == .cutout ? 14 : 0)
+                .shadow(
+                    color: selectedStyle == .cutout ? .black.opacity(0.18) : .clear,
+                    radius: 7,
+                    y: 4
+                )
 
             if isExtracting {
                 Rectangle()
                     .fill(.ultraThinMaterial)
                 VStack(spacing: 9) {
-                    ProgressView().tint(.white)
+                    ZStack {
+                        Circle()
+                            .fill(.white.opacity(0.86))
+                            .frame(width: 68, height: 68)
+                            .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
+                        ProgressView()
+                            .tint(LockUDesign.Color.accentDark)
+                        Image(systemName: "wand.and.stars")
+                            .font(.caption)
+                            .foregroundStyle(LockUDesign.Color.accentDark)
+                            .offset(y: 19)
+                    }
                     Text("被写体を探しています…")
                         .font(.subheadline.weight(.medium))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(LockUDesign.Color.textPrimary)
                 .accessibilityElement(children: .combine)
                 .accessibilityValue("処理中")
             }
@@ -90,8 +104,10 @@ struct CameraReviewView: View {
         .clipShape(RoundedRectangle(cornerRadius: 22))
         .overlay {
             RoundedRectangle(cornerRadius: 22)
-                .stroke(.white.opacity(0.18), lineWidth: 1)
+                .stroke(.black.opacity(0.05), lineWidth: 0.8)
         }
+        .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+        .shadow(color: .black.opacity(0.06), radius: 14, y: 8)
     }
 
     private var editingControls: some View {
@@ -101,60 +117,59 @@ struct CameraReviewView: View {
                 styleButton(.cutout, title: "切り抜き")
             }
             .padding(3)
-            .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-
-            Button(action: onExtractSubject) {
-                HStack {
-                    if isExtracting {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "person.crop.rectangle")
-                    }
-                    Text(isExtracting ? "被写体を探しています…" : "被写体を自動切り抜き")
-                }
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
+            .frame(height: 44)
+            .background(LockUDesign.Color.surfaceMuted, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(.black.opacity(0.05), lineWidth: 0.5)
             }
-            .buttonStyle(.bordered)
-            .tint(LockUDesign.Color.cameraCream)
-            .disabled(isExtracting || isSaving)
-            .accessibilityLabel("被写体を自動切り抜き")
-            .accessibilityValue(isExtracting ? "処理中" : "")
 
             if let cutoutErrorMessage {
-                Label(
-                    "\(cutoutErrorMessage) 元の写真はそのまま保存できます。",
-                    systemImage: "info.circle"
+                LockUStatusCard(
+                    kind: .warning,
+                    text: "切り抜けませんでした。写真のまま保存できます。"
                 )
-                .font(.caption)
-                .foregroundStyle(LockUDesign.Color.softOrange)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel(cutoutErrorMessage)
+                .onTapGesture(perform: onExtractSubject)
+                .accessibilityLabel("\(cutoutErrorMessage) 写真のまま保存できます。")
             } else if cutoutImage != nil {
-                Label("透明背景のPNGとして保存できます。", systemImage: "checkmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.72))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                LockUStatusCard(
+                    kind: .success,
+                    text: "透明背景のPNGとしてロッカーに追加されます。"
+                )
             }
         }
     }
 
     private func styleButton(_ style: MemoryImageStyle, title: String) -> some View {
         Button {
-            selectedStyle = style
+            if style == .cutout, cutoutImage == nil {
+                onExtractSubject()
+            } else {
+                selectedStyle = style
+            }
         } label: {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(selectedStyle == style ? LockUDesign.Color.ink : .white)
+                .foregroundStyle(
+                    selectedStyle == style
+                        ? LockUDesign.Color.textPrimary
+                        : LockUDesign.Color.textSecondary
+                )
                 .frame(maxWidth: .infinity, minHeight: 38)
                 .background(
                     selectedStyle == style
-                        ? LockUDesign.Color.cameraCream
+                        ? LockUDesign.Color.surface
                         : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8)
                 )
+                .shadow(
+                    color: selectedStyle == style ? .black.opacity(0.06) : .clear,
+                    radius: 4,
+                    y: 2
+                )
         }
-        .disabled(isExtracting || isSaving || (style == .cutout && cutoutImage == nil))
+        .disabled(isExtracting || isSaving)
+        .opacity(style == .cutout && cutoutImage == nil ? 0.72 : 1)
         .accessibilityLabel(style == .original ? "元の写真を表示" : "切り抜き画像を表示")
     }
 
@@ -171,12 +186,15 @@ struct CameraReviewView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(LockUDesign.Color.paperCream.opacity(0.96))
+        .background(.regularMaterial)
+        .overlay(alignment: .top) {
+            Divider()
+        }
     }
 
     private var retakeButton: some View {
         Button("撮り直す", action: onRetake)
-            .buttonStyle(ReviewSecondaryButtonStyle())
+            .buttonStyle(LockUSecondaryButtonStyle())
             .disabled(isSaving || isExtracting)
             .accessibilityLabel("撮り直す")
     }
@@ -188,38 +206,15 @@ struct CameraReviewView: View {
                     ProgressView().tint(.white)
                 } else {
                     Label(
-                        selectedStyle == .cutout ? "切り抜きを保存" : "写真を保存",
+                        selectedStyle == .cutout ? "ロッカーに追加" : "写真を保存",
                         systemImage: "checkmark"
                     )
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 52)
         }
-        .buttonStyle(ReviewPrimaryButtonStyle())
+        .buttonStyle(LockUPrimaryButtonStyle())
         .disabled(isSaving || isExtracting)
-        .accessibilityLabel(selectedStyle == .cutout ? "切り抜きを保存" : "元の写真を保存")
-    }
-}
-
-private struct ReviewPrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.headline)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .background(LockUDesign.Color.dustBlue, in: RoundedRectangle(cornerRadius: 14))
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-    }
-}
-
-private struct ReviewSecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.headline)
-            .foregroundStyle(LockUDesign.Color.ink)
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .padding(.horizontal, 16)
-            .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+        .accessibilityLabel(selectedStyle == .cutout ? "ロッカーに追加" : "元の写真を保存")
     }
 }

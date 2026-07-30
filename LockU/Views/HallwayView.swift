@@ -49,7 +49,7 @@ private struct ShareLockerSheet: View {
     var body: some View {
         VStack(spacing: 24) {
             Image(systemName: "paperplane.fill").font(.largeTitle)
-            Text("Share your locker").font(.title2.bold())
+            Text("Share your locker").font(LockUDesign.Typography.screenTitle)
             ShareLink(item: "My LockU Locker Code: \(code)") {
                 Label("Share Locker Code", systemImage: "square.and.arrow.up")
             }.buttonStyle(.borderedProminent)

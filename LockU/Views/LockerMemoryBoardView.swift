@@ -159,7 +159,7 @@ struct LockerWeatherNoteView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("TODAY'S MEMORY")
+            Text("Today’s memory")
                 .font(.system(size: 8, weight: .bold, design: .rounded))
             if let weather = memory.weather {
                 Label(temperature(weather), systemImage: weatherSymbol(weather.summary))

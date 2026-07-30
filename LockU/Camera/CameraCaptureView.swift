@@ -105,7 +105,7 @@ struct CameraCaptureView: View {
 
     private var liveCamera: some View {
         ZStack {
-            CameraPreviewView(session: camera.session, position: camera.currentPosition)
+            CameraPreviewView(session: camera.session)
                 .ignoresSafeArea(edges: .top)
 
             if !camera.isSessionRunning {
@@ -142,17 +142,30 @@ struct CameraCaptureView: View {
             .accessibilityLabel("内カメラと外カメラを切り替える")
         }
         .padding(.horizontal, 18)
-        .padding(.top, 10)
+        .padding(.top, 8)
     }
 
     private var bottomControls: some View {
-        HStack {
-            PhotoLibraryPicker(
-                isDisabled: camera.isCapturing,
-                onImage: receiveLibraryImage,
-                onError: { appModel.report($0) }
-            )
-            .frame(maxWidth: .infinity)
+        ZStack {
+            HStack {
+                PhotoLibraryPicker(
+                    isDisabled: camera.isCapturing,
+                    onImage: receiveLibraryImage,
+                    onError: { appModel.report($0) }
+                )
+                Spacer()
+                if camera.currentPosition == .back {
+                    cameraCircleButton(
+                        icon: camera.isFlashEnabled ? "bolt.fill" : "bolt.slash.fill"
+                    ) {
+                        camera.isFlashEnabled.toggle()
+                    }
+                    .accessibilityLabel(camera.isFlashEnabled ? "フラッシュを切る" : "フラッシュを入れる")
+                } else {
+                    Color.clear.frame(width: 46, height: 46)
+                }
+            }
+            .padding(.horizontal, 22)
 
             Button {
                 flashOverlay = true
@@ -169,29 +182,14 @@ struct CameraCaptureView: View {
             }
             .buttonStyle(ShutterButtonStyle())
             .disabled(camera.isCapturing || !camera.isSessionRunning)
+            .opacity(camera.isSessionRunning ? 1 : 0.5)
             .accessibilityLabel("写真を撮影")
-            .frame(maxWidth: .infinity)
-
-            Group {
-                if camera.currentPosition == .back {
-                    cameraCircleButton(
-                        icon: camera.isFlashEnabled ? "bolt.fill" : "bolt.slash.fill"
-                    ) {
-                        camera.isFlashEnabled.toggle()
-                    }
-                    .accessibilityLabel(camera.isFlashEnabled ? "フラッシュを切る" : "フラッシュを入れる")
-                } else {
-                    Color.clear.frame(width: 52, height: 52)
-                }
-            }
-            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 12)
         .padding(.top, 18)
         .padding(.bottom, 24)
         .background(
             LinearGradient(
-                colors: [.clear, .black.opacity(0.72)],
+                colors: [.clear, .black.opacity(0.55)],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -199,23 +197,55 @@ struct CameraCaptureView: View {
     }
 
     private var alreadyCapturedView: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 48))
-            Text("今日の思い出は保存済みです")
-                .font(.title2.bold())
-            Text("明日また撮影できます。")
-                .foregroundStyle(.secondary)
+        VStack(spacing: 16) {
+            Circle()
+                .fill(LockUDesign.Color.accent)
+                .frame(width: 68, height: 68)
+                .overlay {
+                    Image(systemName: "checkmark")
+                        .font(.title.bold())
+                        .foregroundStyle(.white)
+                }
+                .shadow(color: LockUDesign.Color.accent.opacity(0.22), radius: 14, y: 7)
+            if let memory = memoryRepository.memories.first,
+               let image = memoryRepository.image(for: memory) {
+                VStack(spacing: 0) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 128, height: 145)
+                        .clipped()
+                    Color.clear.frame(height: 16)
+                }
+                .padding(6)
+                .background(LockUDesign.Color.surface)
+                .rotationEffect(.degrees(-1.5))
+                .shadow(color: .black.opacity(0.045), radius: 3, y: 1)
+                .shadow(color: .black.opacity(0.08), radius: 14, y: 7)
+            }
+            Text("今日の思い出")
+                .font(LockUDesign.Typography.screenTitle)
+            Text("ロッカーに追加されました！")
+                .font(LockUDesign.Typography.body)
+                .foregroundStyle(LockUDesign.Color.textSecondary)
             Button("ロッカーを見る") {
                 appModel.lockerDoorState = .open
                 appModel.selectedTab = .locker
             }
-            .buttonStyle(.borderedProminent)
-            .tint(LockUDesign.Color.lockerBlue)
+            .buttonStyle(LockUPrimaryButtonStyle())
+            Button("思い出を見る") {
+                appModel.selectedTab = .book
+            }
+            .buttonStyle(LockUSecondaryButtonStyle())
+            Text("明日もお楽しみに！")
+                .font(LockUDesign.Typography.caption)
+                .foregroundStyle(LockUDesign.Color.textSecondary)
         }
-        .foregroundStyle(LockUDesign.Color.ink)
+        .padding(24)
+        .frame(maxWidth: 380)
+        .foregroundStyle(LockUDesign.Color.textPrimary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(LockUDesign.Color.paperCream)
+        .background(SkyBackground())
     }
 
     private func cameraCircleButton(
@@ -224,11 +254,9 @@ struct CameraCaptureView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 52, height: 52)
-                .background(.black.opacity(0.48), in: Circle())
+                .font(.system(size: 18, weight: .semibold))
         }
+        .buttonStyle(LockUCameraControlStyle())
     }
 
     private func receiveLibraryImage(_ image: UIImage) {
@@ -304,6 +332,38 @@ private struct ShutterButtonStyle: ButtonStyle {
         isExtracting: false,
         isSaving: false,
         cutoutErrorMessage: nil,
+        onClose: {},
+        onExtractSubject: {},
+        onRetake: {},
+        onSave: {}
+    )
+}
+
+#Preview("Camera Review Extracting") {
+    CameraReviewView(
+        originalImage: UIImage(systemName: "photo") ?? UIImage(),
+        cutoutImage: nil,
+        selectedStyle: .constant(.original),
+        captureMode: .photoLibrary,
+        isExtracting: true,
+        isSaving: false,
+        cutoutErrorMessage: nil,
+        onClose: {},
+        onExtractSubject: {},
+        onRetake: {},
+        onSave: {}
+    )
+}
+
+#Preview("Camera Review Error") {
+    CameraReviewView(
+        originalImage: UIImage(systemName: "photo") ?? UIImage(),
+        cutoutImage: nil,
+        selectedStyle: .constant(.original),
+        captureMode: .camera,
+        isExtracting: false,
+        isSaving: false,
+        cutoutErrorMessage: "切り抜ける被写体を見つけられませんでした。",
         onClose: {},
         onExtractSubject: {},
         onRetake: {},

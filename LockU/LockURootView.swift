@@ -89,18 +89,25 @@ struct LockURootView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            if model.selectedTab == .locker {
-                LockerSceneBackground()
-            } else {
-                SkyBackground()
+            Group {
+                if model.selectedTab == .locker {
+                    LockerSceneBackground()
+                } else if model.selectedTab != .camera {
+                    SkyBackground()
+                }
             }
+            .transition(.opacity)
+
             content
+                .id(model.selectedTab)
+                .transition(.opacity.combined(with: .scale(scale: 0.992)))
 
             if model.selectedTab != .camera {
                 LockUBottomBar(selection: $model.selectedTab)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(.easeOut(duration: 0.2), value: model.selectedTab)
         .environmentObject(model)
         .environmentObject(model.memoryRepository)
         .environmentObject(model.decorationRepository)

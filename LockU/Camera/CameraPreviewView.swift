@@ -4,7 +4,6 @@ import UIKit
 
 struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
-    let position: AVCaptureDevice.Position
 
     func makeUIView(context: Context) -> CameraPreviewUIView {
         let view = CameraPreviewUIView()
@@ -15,7 +14,7 @@ struct CameraPreviewView: UIViewRepresentable {
 
     func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
         uiView.previewLayer.session = session
-        uiView.updateConnection(position: position)
+        uiView.updateConnection()
     }
 }
 
@@ -33,13 +32,10 @@ final class CameraPreviewUIView: UIView {
         updateConnection()
     }
 
-    func updateConnection(position: AVCaptureDevice.Position? = nil) {
+    func updateConnection() {
         guard let connection = previewLayer.connection else { return }
         if connection.isVideoRotationAngleSupported(90) {
             connection.videoRotationAngle = 90
-        }
-        if let position, connection.isVideoMirroringSupported {
-            connection.isVideoMirrored = position == .front
         }
     }
 }

@@ -230,9 +230,6 @@ private nonisolated final class CameraSessionController: NSObject, @unchecked Se
                 if connection.isVideoRotationAngleSupported(90) {
                     connection.videoRotationAngle = 90
                 }
-                if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = false
-                }
             }
             self.photoOutput.capturePhoto(with: settings, delegate: self)
         }

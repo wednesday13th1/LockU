@@ -12,7 +12,11 @@ struct LockerHomeView: View {
     var body: some View {
         GeometryReader { proxy in
             let horizontalInset = max(6.0, min(18.0, proxy.size.width * 0.035))
-            let lockerWidth = min(proxy.size.width - horizontalInset * 2, LockUDesign.contentMaxWidth)
+            let widthRatio = proxy.size.width < 370 ? 0.88 : 0.78
+            let lockerWidth = min(
+                proxy.size.width * widthRatio - horizontalInset,
+                LockUDesign.lockerMaxWidth
+            )
 
             VStack(spacing: 0) {
                 LockerUtilityBar(
@@ -126,7 +130,8 @@ struct LockerFrameView: View {
                 .position(x: frameWidth + min(66, proxy.size.width * 0.17), y: topHeight / 2)
             }
             .clipShape(RoundedRectangle(cornerRadius: 7))
-            .shadow(color: LockUDesign.Shadow.floating, radius: 18, y: 8)
+            .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+            .shadow(color: .black.opacity(0.10), radius: 18, y: 10)
         }
     }
 
