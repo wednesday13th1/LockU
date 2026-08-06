@@ -9,12 +9,15 @@ struct PeekView: View {
         ZStack {
             LockUPageBackground()
             ScrollView {
-                VStack(spacing: 24) {
-                    Text("Peek")
-                        .font(LockUDesign.Typography.screenTitle)
-                        .foregroundStyle(LockUDesign.Color.textPrimary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 18)
+                VStack(spacing: 20) {
+                    VStack(spacing: 6) {
+                        Label("Peek", systemImage: "eye.fill")
+                            .font(LockUDesign.Typography.screenTitle)
+                        Text("今日のロッカーをのぞいてみよう")
+                            .font(LockUDesign.Typography.body)
+                    }
+                    .foregroundStyle(LockUDesign.Color.schoolNavy)
+                    .padding(.top, 18)
 
                     if let submittedCode {
                         preview(code: submittedCode)
@@ -25,23 +28,23 @@ struct PeekView: View {
                     }
                 }
                 .padding(.horizontal, 20)
+                .padding(.bottom, 24)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 
     private var invitationCard: some View {
-        LockUSurface(cornerRadius: 22) {
+        SummerGlassCard {
             VStack(spacing: 18) {
-                Text("New!")
-                    .font(LockUDesign.Typography.microLabel)
-                    .foregroundStyle(LockUDesign.Color.accentDark)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(LockUDesign.Color.accentSoft, in: RoundedRectangle(cornerRadius: 10))
-                Text("ともだちのロッカーを\nのぞいてみよう")
+                Image(systemName: "envelope.open.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(LockUDesign.Color.ramuneBlue)
+                Text("誰かの青春を\n少しだけ覗いてみる")
                     .font(LockUDesign.Typography.screenTitle)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(LockUDesign.Color.textPrimary)
+                    .foregroundStyle(LockUDesign.Color.schoolNavy)
                 avatarStack
                 Button("はじめる") {
                     withAnimation(.easeInOut(duration: 0.22)) { hasStarted = true }
@@ -77,64 +80,85 @@ struct PeekView: View {
     }
 
     private var codeEntry: some View {
-        LockUSurface(cornerRadius: 22) {
+        SummerGlassCard {
             VStack(spacing: 16) {
-                Text("Locker Code")
+                Image(systemName: "eye.circle.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(LockUDesign.Color.ramuneBlue)
+                Text("友だちから届いたコードを入力してね")
                     .font(LockUDesign.Typography.sectionTitle)
-                TextField("コードを入力", text: $code)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(LockUDesign.Color.schoolNavy)
+                TextField("LOCK-24", text: $code)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .font(.title3.monospaced())
                     .multilineTextAlignment(.center)
                     .padding()
-                    .background(
-                        LockUDesign.Color.surfaceMuted,
-                        in: RoundedRectangle(cornerRadius: 12)
-                    )
+                    .background(.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.75)))
                     .accessibilityLabel("Locker Code")
                 Button("ロッカーをのぞく") {
                     submittedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
                 .buttonStyle(LockUPrimaryButtonStyle())
                 .disabled(code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Text("コードは友だちの共有画面に表示されています")
+                    .font(LockUDesign.Typography.caption)
+                    .foregroundStyle(LockUDesign.Color.softInkSecondary)
             }
             .padding(24)
         }
     }
 
     private func preview(code: String) -> some View {
-        VStack(spacing: 16) {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(
+        SummerGlassCard {
+            VStack(spacing: 15) {
+                Image(systemName: "eye.fill")
+                    .font(.title2)
+                    .foregroundStyle(LockUDesign.Color.ramuneBlue)
+                Text("TODAY’S PREVIEW")
+                    .font(LockUDesign.Typography.caption)
+                    .tracking(2)
+                Text("Locker \(code)")
+                    .font(LockUDesign.Typography.screenTitle)
+                Text("by Haru")
+                    .font(LockUDesign.Typography.body)
+                    .foregroundStyle(LockUDesign.Color.softInkSecondary)
+                VStack(spacing: 8) {
                     LinearGradient(
                         colors: [
-                            LockUDesign.Color.accentSoft,
-                            LockUDesign.Color.backgroundPrimary
+                            LockUDesign.Color.summerSkyTop,
+                            LockUDesign.Color.sunsetPeach.opacity(0.7)
                         ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                        startPoint: .top,
+                        endPoint: .bottom
                     )
-                )
-                .aspectRatio(4 / 5, contentMode: .fit)
-                .overlay {
-                    VStack(spacing: 10) {
-                        Image(systemName: "eye.fill").font(.title)
-                        Text("Today’s preview")
-                            .font(LockUDesign.Typography.screenTitle)
-                        Text("Locker \(code)")
-                            .font(.subheadline.monospaced())
+                    .overlay(alignment: .topTrailing) {
+                        Image(systemName: "cloud.fill")
+                            .font(.system(size: 68))
+                            .foregroundStyle(.white.opacity(0.78))
+                            .padding()
                     }
-                    .foregroundStyle(LockUDesign.Color.textPrimary)
+                    .aspectRatio(4 / 3, contentMode: .fit)
+                    Text("夏休みまであと3日")
+                        .font(LockUDesign.Typography.caption)
+                        .foregroundStyle(LockUDesign.Color.softInk)
                 }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(.black.opacity(0.05), lineWidth: 0.8)
+                .padding(10)
+                .background(LockUDesign.Color.notebookPaper)
+                .rotationEffect(.degrees(-1))
+                .shadow(color: LockUDesign.Color.schoolNavy.opacity(0.1), radius: 8, y: 4)
+                Button("このロッカーをのぞく") {}
+                    .buttonStyle(LockUPrimaryButtonStyle())
+                Button("別のコードを試す") {
+                    submittedCode = nil
+                    self.code = ""
                 }
-            Button("別のコードを試す") {
-                submittedCode = nil
-                self.code = ""
+                .buttonStyle(LockUSecondaryButtonStyle())
             }
-            .buttonStyle(LockUSecondaryButtonStyle())
+            .foregroundStyle(LockUDesign.Color.schoolNavy)
+            .padding(24)
         }
     }
 }

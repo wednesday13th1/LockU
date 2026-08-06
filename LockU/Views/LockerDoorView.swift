@@ -45,11 +45,13 @@ struct LockerDoorView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.caption.bold())
-                        .frame(width: 44, height: 44)
-                        .background(.black.opacity(0.45), in: Circle())
-                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(LockUDesign.Color.surface.opacity(0.9), in: Circle())
+                        .overlay(Circle().stroke(.black.opacity(0.06)))
+                        .foregroundStyle(LockUDesign.Color.textPrimary)
+                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
                 }
-                .position(x: proxy.size.width - 38, y: 38)
+                .position(x: proxy.size.width - 20, y: 20)
                 .accessibilityLabel("ロッカーを閉じる")
             }
         }
@@ -61,16 +63,16 @@ struct LockerDoorView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            lockerColor.opacity(0.84),
-                            lockerColor,
-                            lockerColor.opacity(0.68)
+                            LockUDesign.Color.lockerSummerBlueLight,
+                            LockUDesign.Color.lockerSummerBlue,
+                            LockUDesign.Color.lockerSummerBlueDark
                         ],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
             LinearGradient(
-                colors: [.white.opacity(0.2), .clear, .black.opacity(0.12)],
+                colors: [.white.opacity(0.26), .clear, .black.opacity(0.12)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -81,23 +83,15 @@ struct LockerDoorView: View {
                     number: settingsRepository.settings.lockerNumber,
                     ownerName: settingsRepository.settings.ownerName
                 )
-                .frame(width: min(154, size.width * 0.38))
+                .frame(width: min(124, size.width * 0.44), height: 64)
+                HandwrittenMemoView(text: "放課後、またね")
+                    .frame(width: min(142, size.width * 0.46))
+                    .rotationEffect(.degrees(-1.5))
                 Spacer()
                 HStack {
-                    VStack(spacing: 7) {
-                        Circle()
-                            .fill(LockUDesign.Color.ink.opacity(0.78))
-                            .frame(width: 47, height: 47)
-                            .overlay {
-                                Circle().stroke(.white.opacity(0.45), lineWidth: 2)
-                                Text("0")
-                                    .font(.caption2.monospacedDigit())
-                                    .foregroundStyle(.white)
-                            }
-                        Capsule()
-                            .fill(LockUDesign.Color.ink.opacity(0.75))
-                            .frame(width: 12, height: 54)
-                    }
+                    Capsule()
+                        .fill(LockUDesign.Color.lockerEdge)
+                        .frame(width: 10, height: 48)
                     Spacer()
                     VStack(spacing: 32) {
                         hinge
@@ -111,19 +105,18 @@ struct LockerDoorView: View {
             }
             .padding(.vertical, 24)
 
-            sticker(symbol: "star.fill", color: LockUDesign.Color.warmLight)
-                .position(x: size.width * 0.25, y: size.height * 0.7)
-            sticker(symbol: "heart.fill", color: LockUDesign.Color.softOrange)
-                .position(x: size.width * 0.72, y: size.height * 0.3)
         }
-        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.17)))
-        .shadow(color: LockUDesign.Shadow.deep, radius: 10, x: -3, y: 7)
+        .overlay(RoundedRectangle(cornerRadius: 5).stroke(LockUDesign.Color.lockerEdge.opacity(0.24)))
+        .overlay(alignment: .leading) {
+            Rectangle().fill(.white.opacity(0.22)).frame(width: 2).padding(.vertical, 8)
+        }
+        .shadow(color: LockUDesign.Color.schoolNavy.opacity(0.12), radius: 20, y: 10)
     }
 
     private var ventilationSlits: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<6, id: \.self) { _ in
-                Capsule().fill(.black.opacity(0.28)).frame(width: 25, height: 4)
+        HStack(spacing: 5) {
+            ForEach(0..<5, id: \.self) { _ in
+                Capsule().fill(LockUDesign.Color.lockerEdge.opacity(0.48)).frame(width: 18, height: 3)
             }
         }
     }
@@ -131,20 +124,9 @@ struct LockerDoorView: View {
     private var hinge: some View {
         Capsule()
             .fill(
-                LinearGradient(
-                    colors: [.white.opacity(0.45), .black.opacity(0.35)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
+                LockUDesign.Color.lockerEdge.opacity(0.7)
             )
             .frame(width: 10, height: 30)
-    }
-
-    private func sticker(symbol: String, color: Color) -> some View {
-        Image(systemName: symbol)
-            .font(.title3)
-            .foregroundStyle(color)
-            .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
     }
 
     private func toggleDoor() {
@@ -162,6 +144,26 @@ struct LockerDoorView: View {
     }
 }
 
+private struct HandwrittenMemoView: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .medium, design: .rounded))
+            .foregroundStyle(LockUDesign.Color.softInk)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(LockUDesign.Color.notebookPaper)
+            .overlay(alignment: .top) {
+                Capsule()
+                    .fill(LockUDesign.Color.sunlight.opacity(0.52))
+                    .frame(width: 48, height: 10)
+                    .offset(y: -5)
+            }
+            .shadow(color: LockUDesign.Color.schoolNavy.opacity(0.08), radius: 4, y: 2)
+    }
+}
+
 struct LockerDoorInteriorView: View {
     let color: Color
 
@@ -170,7 +172,7 @@ struct LockerDoorInteriorView: View {
             RoundedRectangle(cornerRadius: 5)
                 .fill(
                     LinearGradient(
-                        colors: [color.opacity(0.72), color.opacity(0.52)],
+                        colors: [LockUDesign.Color.lockerBodyLight, LockUDesign.Color.lockerBody],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
@@ -180,7 +182,7 @@ struct LockerDoorInteriorView: View {
                     .fill(.white.opacity(0.75))
                     .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 4))
                     .frame(width: 86, height: 86)
-                    .shadow(color: .black.opacity(0.2), radius: 4, y: 3)
+                    .shadow(color: .black.opacity(0.06), radius: 4, y: 3)
                 VStack(spacing: 5) {
                     Text("MON  TUE  WED  THU  FRI")
                     Text(" 1    2    3    4    5")
@@ -189,7 +191,7 @@ struct LockerDoorInteriorView: View {
                 .padding(9)
                 .background(LockUDesign.Color.paperCream, in: RoundedRectangle(cornerRadius: 3))
                 HStack(spacing: 5) {
-                    ForEach(["person.crop.square", "heart.fill", "star.fill"], id: \.self) { symbol in
+                    ForEach(["person.crop.square", "photo"], id: \.self) { symbol in
                         Image(systemName: symbol)
                             .frame(width: 34, height: 44)
                             .background(.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 2))
@@ -204,11 +206,11 @@ struct LockerDoorInteriorView: View {
                 }
                 .font(.title2)
                 .padding()
-                .background(.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+                .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 5))
             }
             .foregroundStyle(LockUDesign.Color.ink)
             .padding(30)
         }
-        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.black.opacity(0.22), lineWidth: 2))
+        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.black.opacity(0.08), lineWidth: 1))
     }
 }

@@ -11,18 +11,18 @@ struct LockUBottomBar: View {
             cameraButton
             tabButton(.peek, title: "Peek", icon: "eye.fill")
         }
-        .padding(.horizontal, LockUDesign.Spacing.small)
+        .padding(.horizontal, 12)
         .frame(maxWidth: 520)
         .frame(height: LockUDesign.bottomBarHeight)
-        .background(LockUDesign.Color.surfaceTranslucent, in: RoundedRectangle(cornerRadius: 24))
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
-        .overlay(alignment: .top) {
-            RoundedRectangle(cornerRadius: 24)
-                .stroke(.white.opacity(0.55), lineWidth: 1)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26))
+        .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 26))
+        .overlay {
+            RoundedRectangle(cornerRadius: 26)
+                .stroke(.white.opacity(0.65), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.1), radius: 12, y: -2)
-        .padding(.horizontal, LockUDesign.Spacing.medium)
-        .padding(.bottom, LockUDesign.Spacing.small)
+        .shadow(color: LockUDesign.Color.schoolNavy.opacity(0.08), radius: 24, y: 10)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 
     private func tabButton(_ tab: LockUTab, title: String, icon: String) -> some View {
@@ -30,20 +30,20 @@ struct LockUBottomBar: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             selection = tab
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 3) {
                 Image(systemName: icon)
-                    .font(.system(size: 20, weight: .medium))
+                    .font(.system(size: 19, weight: .medium))
                 Text(title)
                     .font(LockUDesign.Typography.microLabel)
                 Circle()
-                    .fill(LockUDesign.Color.textPrimary)
-                    .frame(width: 3, height: 3)
+                    .fill(LockUDesign.Color.ramuneBlue)
+                    .frame(width: 4, height: 4)
                     .opacity(selection == tab ? 1 : 0)
             }
             .foregroundStyle(
                 selection == tab
-                    ? LockUDesign.Color.textPrimary
-                    : LockUDesign.Color.textSecondary
+                    ? LockUDesign.Color.schoolNavy
+                    : LockUDesign.Color.softInkSecondary.opacity(0.75)
             )
             .scaleEffect(selection == tab ? 1.03 : 1)
             .frame(maxWidth: .infinity)
@@ -56,12 +56,20 @@ struct LockUBottomBar: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             selection = .camera
         } label: {
-            Image(systemName: "camera.fill")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(LockUDesign.Color.cream)
-                .frame(width: 58, height: 58)
-                .background(LockUDesign.Color.accent, in: Circle())
-                .overlay(Circle().stroke(LockUDesign.Color.cameraCream, lineWidth: 3))
+            ZStack {
+                Circle()
+                    .fill(LockUDesign.Color.ramuneBlue.opacity(0.2))
+                    .frame(width: 66, height: 66)
+                    .blur(radius: 8)
+                Circle()
+                    .fill(LockUDesign.Color.ramuneBlue)
+                    .frame(width: 62, height: 62)
+                    .overlay(Circle().stroke(.white.opacity(0.86), lineWidth: 2))
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 23, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+                .shadow(color: LockUDesign.Color.ramuneBlue.opacity(0.22), radius: 10, y: 4)
                 .scaleEffect(selection == .camera ? 1.04 : 1)
                 .animation(LockUDesign.Motion.quick, value: selection)
         }

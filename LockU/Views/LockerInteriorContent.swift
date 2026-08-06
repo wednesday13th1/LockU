@@ -8,8 +8,8 @@ struct LockerInteriorContent: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let topShelfHeight = max(72.0, proxy.size.height * 0.17)
-            let bottomShelfHeight = max(104.0, proxy.size.height * 0.22)
+            let topShelfHeight = max(54.0, proxy.size.height * 0.15)
+            let bottomShelfHeight = max(82.0, proxy.size.height * 0.19)
 
             VStack(spacing: 0) {
                 LockerTopShelfView()
@@ -63,18 +63,18 @@ private struct LockerLightView: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [.white, LockUDesign.Color.warmLight, .black.opacity(0.25)],
+                        colors: [.white, LockUDesign.Color.warmLight.opacity(0.7)],
                         center: .center,
                         startRadius: 1,
                         endRadius: 10
                     )
                 )
                 .frame(width: 20, height: 20)
-                .shadow(color: LockUDesign.Color.warmLight.opacity(isOn ? 0.8 : 0), radius: 10)
+                .shadow(color: LockUDesign.Color.warmLight.opacity(isOn ? 0.18 : 0), radius: 6)
             RadialGradient(
                 colors: [
-                    LockUDesign.Color.warmLight.opacity(isOn ? 0.28 : 0),
-                    LockUDesign.Color.warmLight.opacity(isOn ? 0.08 : 0),
+                    LockUDesign.Color.warmLight.opacity(isOn ? 0.18 : 0),
+                    LockUDesign.Color.warmLight.opacity(isOn ? 0.04 : 0),
                     .clear
                 ],
                 center: .top,
@@ -90,8 +90,8 @@ struct LockerTopShelfView: View {
     var body: some View {
         GeometryReader { proxy in
             HStack(alignment: .bottom, spacing: max(5, proxy.size.width * 0.018)) {
-                miniBook("MEMORY", color: LockUDesign.Color.mutedLavender)
-                miniBook("NOTES", color: LockUDesign.Color.paperCream)
+                miniBook("MEMORY", color: LockUDesign.Color.mutedLavender.opacity(0.8))
+                miniBook("NOTES", color: LockUDesign.Color.paper)
                 Spacer(minLength: 4)
                 Image(systemName: "photo")
                     .font(.title3)
@@ -99,10 +99,6 @@ struct LockerTopShelfView: View {
                     .padding(7)
                     .background(LockUDesign.Color.paperCream, in: RoundedRectangle(cornerRadius: 2))
                     .rotationEffect(.degrees(2))
-                Image(systemName: "leaf.fill")
-                    .foregroundStyle(.green.opacity(0.65))
-                    .frame(width: 34, height: 35)
-                    .background(LockUDesign.Color.shelfCream.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -125,12 +121,12 @@ struct LockerTopShelfView: View {
         Rectangle()
             .fill(
                 LinearGradient(
-                    colors: [LockUDesign.Color.shelfCream, .black.opacity(0.32)],
+                    colors: [LockUDesign.Color.paper, LockUDesign.Color.shelfWarm],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
             .frame(height: 8)
-            .shadow(color: .black.opacity(0.35), radius: 5, y: 4)
+            .shadow(color: .black.opacity(0.06), radius: 4, y: 3)
     }
 }

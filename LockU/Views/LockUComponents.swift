@@ -2,27 +2,7 @@ import SwiftUI
 
 struct LockUPageBackground: View {
     var body: some View {
-        ZStack {
-            LockUDesign.Color.backgroundPrimary
-            RadialGradient(
-                colors: [.white.opacity(0.72), .clear],
-                center: .topLeading,
-                startRadius: 20,
-                endRadius: 420
-            )
-            LinearGradient(
-                colors: [.clear, LockUDesign.Color.warmAccent.opacity(0.035)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            RadialGradient(
-                colors: [LockUDesign.Color.accent.opacity(0.08), .clear],
-                center: .topTrailing,
-                startRadius: 10,
-                endRadius: 320
-            )
-        }
-        .ignoresSafeArea()
+        SummerSkyBackground()
     }
 }
 
@@ -40,16 +20,14 @@ struct LockUSurface<Content: View>: View {
 
     var body: some View {
         content
-            .background(
-                LockUDesign.Color.surface,
-                in: RoundedRectangle(cornerRadius: cornerRadius)
-            )
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+            .background(LockUDesign.Color.glassWhite, in: RoundedRectangle(cornerRadius: cornerRadius))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(.black.opacity(0.055), lineWidth: 0.8)
+                    .stroke(.white.opacity(0.58), lineWidth: 0.8)
             }
             .shadow(color: .black.opacity(0.045), radius: 3, y: 1)
-            .shadow(color: .black.opacity(0.08), radius: 14, y: 7)
+            .shadow(color: LockUDesign.Color.schoolNavy.opacity(0.08), radius: 20, y: 9)
     }
 }
 

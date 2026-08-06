@@ -19,6 +19,7 @@ struct HallwayView: View {
             case .share:
                 ShareLockerSheet(code: settingsRepository.settings.lockerNumber)
             }
+            .presentationBackground(.ultraThinMaterial)
         }
     }
 
@@ -33,13 +34,24 @@ private struct LockerCodeSheet: View {
     @Environment(\.dismiss) private var dismiss
     let code: String
     var body: some View {
-        VStack(spacing: 24) {
-            Text("Locker Code").font(.title.bold())
-            Text(code).font(.system(.largeTitle, design: .rounded).weight(.bold))
+        VStack(spacing: 20) {
+            Image(systemName: "number.circle.fill")
+                .font(.system(size: 38))
+                .foregroundStyle(LockUDesign.Color.ramuneBlue)
+            Text("Locker Code").font(LockUDesign.Typography.screenTitle)
+            Text(code)
+                .font(.system(size: 38, weight: .bold, design: .rounded))
+                .tracking(3)
             Text("このコードを友達に伝えると、今日の思い出をPeekできます。")
-                .multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Button("Done") { dismiss() }.buttonStyle(.borderedProminent)
-        }.padding(32).presentationDetents([.medium])
+                .font(LockUDesign.Typography.body)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(LockUDesign.Color.softInkSecondary)
+            Button("Close") { dismiss() }.buttonStyle(LockUPrimaryButtonStyle())
+        }
+        .foregroundStyle(LockUDesign.Color.schoolNavy)
+        .padding(32)
+        .presentationDetents([.medium])
+        .presentationCornerRadius(32)
     }
 }
 
@@ -47,14 +59,45 @@ private struct ShareLockerSheet: View {
     @Environment(\.dismiss) private var dismiss
     let code: String
     var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "paperplane.fill").font(.largeTitle)
+        VStack(spacing: 18) {
+            Capsule().fill(LockUDesign.Color.ramuneBlue.opacity(0.35))
+                .frame(width: 52, height: 5)
+            Image(systemName: "paperplane.fill")
+                .font(.system(size: 36))
+                .foregroundStyle(LockUDesign.Color.ramuneBlue)
             Text("Share your locker").font(LockUDesign.Typography.screenTitle)
+            Text("LOCKER CODE")
+                .font(LockUDesign.Typography.caption)
+                .tracking(2)
+                .foregroundStyle(LockUDesign.Color.softInkSecondary)
+            HStack(spacing: 18) {
+                Text(code)
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .tracking(3)
+                Image(systemName: "qrcode")
+                    .font(.system(size: 48))
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity)
+            .background(LockUDesign.Color.notebookPaper, in: RoundedRectangle(cornerRadius: 18))
             ShareLink(item: "My LockU Locker Code: \(code)") {
-                Label("Share Locker Code", systemImage: "square.and.arrow.up")
-            }.buttonStyle(.borderedProminent)
-            Button("Close") { dismiss() }
-        }.padding(32).presentationDetents([.medium])
+                Label("Share", systemImage: "square.and.arrow.up")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(LockUPrimaryButtonStyle())
+            Button("Close") { dismiss() }.buttonStyle(LockUSecondaryButtonStyle())
+        }
+        .foregroundStyle(LockUDesign.Color.schoolNavy)
+        .padding(28)
+        .background(
+            LinearGradient(
+                colors: [LockUDesign.Color.summerSkyMiddle.opacity(0.28), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+        )
+        .presentationDetents([.medium])
+        .presentationCornerRadius(32)
     }
 }
 

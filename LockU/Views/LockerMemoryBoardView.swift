@@ -8,7 +8,7 @@ struct LockerMemoryBoardView: View {
     @State private var appeared = false
 
     private var recentMemories: [MemoryRecord] {
-        Array(memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }.prefix(3))
+        Array(memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }.prefix(1))
     }
 
     var body: some View {
@@ -16,16 +16,16 @@ struct LockerMemoryBoardView: View {
             ZStack {
                 boardSurface
 
-                LockerMemoCardView(text: "Be yourself", tint: LockUDesign.Color.mutedLavender)
-                    .frame(width: proxy.size.width * 0.25)
-                    .position(x: proxy.size.width * 0.16, y: proxy.size.height * 0.19)
-                    .rotationEffect(.degrees(-3))
+                LockerMemoCardView(text: "a day to remember", tint: LockUDesign.Color.paper)
+                    .frame(width: proxy.size.width * 0.3)
+                    .position(x: proxy.size.width * 0.2, y: proxy.size.height * 0.18)
+                    .rotationEffect(.degrees(-1))
 
                 if let newest = recentMemories.first {
                     LockerWeatherNoteView(memory: newest)
-                        .frame(width: proxy.size.width * 0.28)
-                        .position(x: proxy.size.width * 0.83, y: proxy.size.height * 0.19)
-                        .rotationEffect(.degrees(2))
+                        .frame(width: proxy.size.width * 0.3)
+                        .position(x: proxy.size.width * 0.8, y: proxy.size.height * 0.18)
+                        .rotationEffect(.degrees(1))
                 }
 
                 if recentMemories.isEmpty {
@@ -68,10 +68,10 @@ struct LockerMemoryBoardView: View {
 
     private var boardSurface: some View {
         RoundedRectangle(cornerRadius: 3)
-            .fill(.black.opacity(0.07))
+            .fill(.white.opacity(0.08))
             .overlay {
                 LinearGradient(
-                    colors: [.white.opacity(0.035), .clear, .black.opacity(0.07)],
+                    colors: [.white.opacity(0.04), .clear],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -81,13 +81,13 @@ struct LockerMemoryBoardView: View {
 
     private func photoWidth(for index: Int, in size: CGSize) -> CGFloat {
         let base = min(size.width, 470)
-        return index == 0 ? base * 0.39 : base * 0.28
+        return index == 0 ? min(base * 0.48, 190) : base * 0.28
     }
 
     private func position(for index: Int, in size: CGSize) -> CGPoint {
         switch index {
         case 0:
-            return CGPoint(x: size.width * 0.51, y: size.height * 0.46)
+            return CGPoint(x: size.width * 0.5, y: size.height * 0.57)
         case 1:
             return CGPoint(x: size.width * 0.25, y: size.height * 0.71)
         default:
@@ -99,7 +99,7 @@ struct LockerMemoryBoardView: View {
         let checksum = id.uuidString.unicodeScalars.reduce(0) {
             ($0 + Int($1.value)) % 7
         }
-        let magnitude = 1.0 + Double(checksum % 4) * 0.7
+        let magnitude = 0.5 + Double(checksum % 3) * 0.5
         return index == 1 || checksum.isMultiple(of: 2) ? -magnitude : magnitude
     }
 }
@@ -146,7 +146,7 @@ struct PolaroidMemoryView: View {
                     .offset(y: -8)
                     .rotationEffect(.degrees(1))
             }
-            .shadow(color: .black.opacity(0.3), radius: 5, x: 2, y: 4)
+            .shadow(color: .black.opacity(0.07), radius: 7, y: 4)
         }
         .buttonStyle(LockerPressStyle())
         .accessibilityLabel("Memory from \(memory.createdAt.formatted(date: .long, time: .omitted))")
@@ -179,7 +179,7 @@ struct LockerWeatherNoteView: View {
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LockUDesign.Color.paperCream.opacity(0.94), in: RoundedRectangle(cornerRadius: 3))
-        .shadow(color: .black.opacity(0.16), radius: 3, y: 2)
+        .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
         .accessibilityElement(children: .combine)
     }
 
@@ -209,7 +209,7 @@ struct LockerMemoCardView: View {
             .padding(8)
             .frame(maxWidth: .infinity)
             .background(tint.opacity(0.92), in: RoundedRectangle(cornerRadius: 3))
-            .shadow(color: .black.opacity(0.15), radius: 3, y: 2)
+            .shadow(color: .black.opacity(0.05), radius: 3, y: 2)
     }
 }
 
@@ -240,7 +240,7 @@ struct LockerEmptyStateView: View {
                     .offset(y: -8)
             }
             .rotationEffect(.degrees(2))
-            .shadow(color: .black.opacity(0.22), radius: 5, y: 3)
+            .shadow(color: .black.opacity(0.07), radius: 6, y: 3)
         }
         .buttonStyle(LockerPressStyle())
         .accessibilityLabel("今日の思い出を撮影")

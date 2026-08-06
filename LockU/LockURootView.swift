@@ -132,7 +132,7 @@ struct LockURootView: View {
         case .locker:
             HallwayView()
                 .frame(maxWidth: LockUDesign.contentMaxWidth)
-                .padding(.bottom, LockUDesign.bottomBarHeight + LockUDesign.Spacing.medium)
+                .padding(.bottom, LockUDesign.bottomBarHeight + 16)
         case .book:
             MemoryBookshelfView()
                 .frame(maxWidth: LockUDesign.contentMaxWidth)

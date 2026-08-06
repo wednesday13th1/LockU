@@ -57,6 +57,7 @@ struct MemoryBookshelfView: View {
         HStack {
             Text("Memories")
                 .font(LockUDesign.Typography.screenTitle)
+                .foregroundStyle(LockUDesign.Color.schoolNavy)
             Spacer()
             Menu {
                 ForEach(months) { month in
@@ -72,10 +73,11 @@ struct MemoryBookshelfView: View {
                 .font(LockUDesign.Typography.caption)
                 .foregroundStyle(LockUDesign.Color.textPrimary)
                 .frame(minWidth: 78, minHeight: 44)
-                .background(LockUDesign.Color.surface, in: RoundedRectangle(cornerRadius: 10))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .background(LockUDesign.Color.glassWhite, in: RoundedRectangle(cornerRadius: 14))
                 .overlay {
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(.black.opacity(0.05), lineWidth: 0.8)
+                        .stroke(.white.opacity(0.62), lineWidth: 0.8)
                 }
             }
             .accessibilityLabel("月を選択")
@@ -122,6 +124,10 @@ struct MemoryBookshelfView: View {
                             .clipped()
                         }
                     }
+                    .padding(7)
+                    .background(LockUDesign.Color.notebookPaper.opacity(0.94))
+                    .rotationEffect(.degrees(rotation(for: memory.id)))
+                    .shadow(color: LockUDesign.Color.schoolNavy.opacity(0.08), radius: 8, y: 4)
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(
                         "Memory from \(memory.createdAt.formatted(date: .long, time: .omitted))"
@@ -131,5 +137,10 @@ struct MemoryBookshelfView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
         }
+    }
+
+    private func rotation(for id: UUID) -> Double {
+        let checksum = id.uuidString.unicodeScalars.reduce(0) { $0 + Int($1.value) }
+        return Double(checksum % 5 - 2) * 0.45
     }
 }

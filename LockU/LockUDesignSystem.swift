@@ -2,6 +2,22 @@ import SwiftUI
 
 enum LockUDesign {
     enum Color {
+        static let summerSkyTop = SwiftUI.Color(red: 0.42, green: 0.77, blue: 0.96)
+        static let summerSkyMiddle = SwiftUI.Color(red: 0.65, green: 0.86, blue: 0.98)
+        static let summerSkyBottom = SwiftUI.Color(red: 0.93, green: 0.98, blue: 1.00)
+        static let cloudWhite = SwiftUI.Color(red: 1.00, green: 0.99, blue: 0.96)
+        static let sunlight = SwiftUI.Color(red: 1.00, green: 0.88, blue: 0.60)
+        static let sunsetPeach = SwiftUI.Color(red: 1.00, green: 0.72, blue: 0.55)
+        static let ramuneBlue = SwiftUI.Color(red: 0.35, green: 0.72, blue: 0.92)
+        static let schoolNavy = SwiftUI.Color(red: 0.18, green: 0.31, blue: 0.44)
+        static let lockerSummerBlue = SwiftUI.Color(red: 0.28, green: 0.55, blue: 0.72)
+        static let lockerSummerBlueLight = SwiftUI.Color(red: 0.52, green: 0.73, blue: 0.84)
+        static let lockerSummerBlueDark = SwiftUI.Color(red: 0.16, green: 0.34, blue: 0.45)
+        static let notebookPaper = SwiftUI.Color(red: 1.00, green: 0.98, blue: 0.91)
+        static let fadedPaper = SwiftUI.Color(red: 0.96, green: 0.93, blue: 0.83)
+        static let softInk = SwiftUI.Color(red: 0.12, green: 0.20, blue: 0.26)
+        static let softInkSecondary = SwiftUI.Color(red: 0.38, green: 0.48, blue: 0.54)
+        static let glassWhite = SwiftUI.Color.white.opacity(0.72)
         static let cream = SwiftUI.Color(red: 0.96, green: 0.93, blue: 0.86)
         static let dustBlue = SwiftUI.Color(red: 0.48, green: 0.60, blue: 0.68)
         static let lavender = SwiftUI.Color(red: 0.75, green: 0.72, blue: 0.82)
@@ -36,16 +52,24 @@ enum LockUDesign {
         static let warning = SwiftUI.Color(red: 0.73, green: 0.48, blue: 0.32)
         static let cameraOverlay = SwiftUI.Color.black.opacity(0.32)
         static let cameraBlack = SwiftUI.Color(red: 17 / 255, green: 19 / 255, blue: 21 / 255)
+        static let pageBackground = SwiftUI.Color(red: 242 / 255, green: 246 / 255, blue: 247 / 255)
+        static let lockerBody = lockerSummerBlue
+        static let lockerBodyLight = lockerSummerBlueLight
+        static let lockerEdge = lockerSummerBlueDark
+        static let lockerInteriorSoft = SwiftUI.Color(red: 0.28, green: 0.46, blue: 0.56)
+        static let lockerInteriorBack = SwiftUI.Color(red: 0.13, green: 0.28, blue: 0.36)
+        static let shelfWarm = SwiftUI.Color(red: 225 / 255, green: 217 / 255, blue: 193 / 255)
+        static let paper = SwiftUI.Color(red: 248 / 255, green: 244 / 255, blue: 232 / 255)
     }
 
     enum Typography {
-        static let largeTitle = Font.system(size: 28, weight: .bold)
-        static let screenTitle = Font.system(size: 22, weight: .bold)
-        static let sectionTitle = Font.system(size: 17, weight: .semibold)
-        static let body = Font.system(size: 15)
-        static let bodyEmphasized = Font.system(size: 15, weight: .semibold)
-        static let caption = Font.system(size: 12)
-        static let microLabel = Font.system(size: 10, weight: .medium)
+        static let largeTitle = Font.system(size: 30, weight: .bold, design: .rounded)
+        static let screenTitle = Font.system(size: 24, weight: .bold, design: .rounded)
+        static let sectionTitle = Font.system(size: 18, weight: .semibold, design: .rounded)
+        static let body = Font.system(size: 15, weight: .regular, design: .rounded)
+        static let bodyEmphasized = Font.system(size: 15, weight: .semibold, design: .rounded)
+        static let caption = Font.system(size: 12, weight: .medium, design: .rounded)
+        static let microLabel = Font.system(size: 10, weight: .medium, design: .rounded)
     }
 
     enum Spacing {
@@ -91,8 +115,8 @@ enum LockUDesign {
     }
 
     static let contentMaxWidth: CGFloat = 760
-    static let lockerMaxWidth: CGFloat = 560
-    static let bottomBarHeight: CGFloat = 72
+    static let lockerMaxWidth: CGFloat = 430
+    static let bottomBarHeight: CGFloat = 76
     static let shadow = SwiftUI.Color.black.opacity(0.12)
 }
 
@@ -111,67 +135,102 @@ extension SwiftUI.Color {
     }
 }
 
-struct SkyBackground: View {
+struct SummerSkyBackground: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var drifting = false
+
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    LockUDesign.Color.backgroundSecondary,
-                    LockUDesign.Color.skyTop.opacity(0.72),
-                    LockUDesign.Color.backgroundPrimary
+                    LockUDesign.Color.summerSkyTop,
+                    LockUDesign.Color.summerSkyMiddle,
+                    LockUDesign.Color.summerSkyBottom
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            RadialGradient(
-                colors: [.white.opacity(0.38), .clear],
-                center: .top,
-                startRadius: 10,
-                endRadius: 320
-            )
-            skyCloud(width: 210).offset(x: -105, y: -190)
-            skyCloud(width: 170).offset(x: 125, y: -50)
-            SkyNoiseOverlay().opacity(0.12)
+            SummerCloudLayer(scale: 1.2, opacity: 0.72)
+                .offset(x: drifting ? 12 : -12, y: -150)
+            SummerCloudLayer(scale: 0.78, opacity: 0.42)
+                .offset(x: drifting ? -18 : 8, y: 100)
+            SunlightOverlay()
+            FloatingLightParticles()
         }
         .ignoresSafeArea()
-    }
-
-    private func skyCloud(width: CGFloat) -> some View {
-        HStack(spacing: -28) {
-            Circle().frame(width: width * 0.48)
-            Circle().frame(width: width * 0.62)
-            Circle().frame(width: width * 0.42)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 24).repeatForever(autoreverses: true)) {
+                drifting = true
+            }
         }
-        .foregroundStyle(.white.opacity(0.2))
-        .blur(radius: 22)
-        .accessibilityHidden(true)
     }
+}
+
+struct SkyBackground: View {
+    var body: some View { SummerSkyBackground() }
 }
 
 struct LockerSceneBackground: View {
     var body: some View {
-        LinearGradient(
-            colors: [
-                LockUDesign.Color.backgroundSecondary,
-                LockUDesign.Color.skyTop.opacity(0.68),
-                LockUDesign.Color.backgroundPrimary
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
+        SummerSkyBackground()
     }
 }
 
-private struct SkyNoiseOverlay: View {
+struct SummerCloudLayer: View {
+    let scale: CGFloat
+    let opacity: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Ellipse().fill(LockUDesign.Color.cloudWhite.opacity(opacity * 0.42))
+                    .frame(width: 340, height: 100).blur(radius: 18)
+                    .position(x: proxy.size.width * 0.14, y: proxy.size.height * 0.38)
+                Ellipse().fill(LockUDesign.Color.cloudWhite.opacity(opacity))
+                    .frame(width: 220, height: 125).blur(radius: 7)
+                    .position(x: proxy.size.width * 0.22, y: proxy.size.height * 0.33)
+                Ellipse().fill(LockUDesign.Color.cloudWhite.opacity(opacity * 0.85))
+                    .frame(width: 180, height: 150).blur(radius: 9)
+                    .position(x: proxy.size.width * 0.05, y: proxy.size.height * 0.29)
+                Ellipse().fill(LockUDesign.Color.summerSkyMiddle.opacity(opacity * 0.28))
+                    .frame(width: 360, height: 70).blur(radius: 18)
+                    .position(x: proxy.size.width * 0.15, y: proxy.size.height * 0.42)
+            }
+            .scaleEffect(scale)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+struct SunlightOverlay: View {
+    var body: some View {
+        RadialGradient(
+            colors: [
+                LockUDesign.Color.sunlight.opacity(0.46),
+                LockUDesign.Color.cloudWhite.opacity(0.18),
+                .clear
+            ],
+            center: .topLeading,
+            startRadius: 4,
+            endRadius: 390
+        )
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+struct FloatingLightParticles: View {
     var body: some View {
         Canvas { context, size in
-            for index in 0..<90 {
+            for index in 0..<21 {
                 let x = CGFloat((index * 47) % 101) / 101 * size.width
                 let y = CGFloat((index * 83) % 97) / 97 * size.height
+                let diameter = CGFloat(1 + index % 3)
                 context.fill(
-                    Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)),
-                    with: .color(.white.opacity(0.25))
+                    Path(ellipseIn: CGRect(x: x, y: y, width: diameter, height: diameter)),
+                    with: .color(.white.opacity(0.28))
                 )
             }
         }
@@ -180,18 +239,34 @@ private struct SkyNoiseOverlay: View {
     }
 }
 
+struct SummerGlassCard<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        content = content()
+    }
+
+    var body: some View {
+        content
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
+            .background(LockUDesign.Color.glassWhite, in: RoundedRectangle(cornerRadius: 28))
+            .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.62)))
+            .shadow(color: LockUDesign.Color.schoolNavy.opacity(0.08), radius: 24, y: 11)
+    }
+}
+
 struct LockUPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(LockUDesign.Typography.bodyEmphasized)
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 52)
+            .frame(maxWidth: .infinity, minHeight: 56)
             .padding(.horizontal, 16)
             .background(
                 configuration.isPressed
-                    ? LockUDesign.Color.accentPressed
-                    : LockUDesign.Color.accent,
-                in: RoundedRectangle(cornerRadius: LockUDesign.Radius.medium)
+                    ? LockUDesign.Color.lockerSummerBlue
+                    : LockUDesign.Color.ramuneBlue,
+                in: RoundedRectangle(cornerRadius: 18)
             )
             .opacity(configuration.isPressed ? 0.9 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -203,16 +278,16 @@ struct LockUSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(LockUDesign.Typography.bodyEmphasized)
-            .foregroundStyle(LockUDesign.Color.textPrimary)
+            .foregroundStyle(LockUDesign.Color.schoolNavy)
             .frame(maxWidth: .infinity, minHeight: 52)
             .padding(.horizontal, 16)
             .background(
-                LockUDesign.Color.surface,
-                in: RoundedRectangle(cornerRadius: LockUDesign.Radius.medium)
+                LockUDesign.Color.glassWhite,
+                in: RoundedRectangle(cornerRadius: 18)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: LockUDesign.Radius.medium)
-                    .stroke(.black.opacity(0.07))
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(.white.opacity(0.65))
             }
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
