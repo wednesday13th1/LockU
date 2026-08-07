@@ -14,10 +14,9 @@ struct LockerHomeView: View {
             let isOpen = appModel.lockerDoorState.isOpenOrOpening
             let widthRatio = isOpen ? 0.88 : 0.86
             let maxWidth: CGFloat = LockUDesign.lockerMaxWidth
-            let heightRatio = isOpen ? 0.62 : 0.59
             let maxHeight: CGFloat = isOpen ? 680 : 640
             let lockerWidth = min(proxy.size.width * widthRatio, maxWidth)
-            let lockerHeight = min(proxy.size.height * heightRatio, maxHeight, proxy.size.height - 116)
+            let lockerHeight = min(lockerWidth / 0.58, maxHeight, proxy.size.height - 116)
 
             VStack(spacing: 20) {
                 LockerUtilityBar(
@@ -106,7 +105,7 @@ struct LockerFrameView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let frameWidth = max(8.0, min(13.0, proxy.size.width * 0.035))
+            let frameWidth = max(14.0, min(18.0, proxy.size.width * 0.045))
             let topHeight = max(38.0, min(50.0, proxy.size.height * 0.09))
 
             ZStack {
@@ -114,6 +113,7 @@ struct LockerFrameView: View {
                     .padding(.horizontal, frameWidth)
                     .padding(.top, topHeight)
                     .padding(.bottom, frameWidth)
+                    .shadow(color: .black.opacity(0.34), radius: 5, x: 0, y: 5)
 
                 VStack(spacing: 0) {
                     topFrame(height: topHeight)
@@ -136,8 +136,23 @@ struct LockerFrameView: View {
                 .position(x: frameWidth + min(66, proxy.size.width * 0.17), y: topHeight / 2)
             }
             .clipShape(RoundedRectangle(cornerRadius: 7))
-            .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
-            .shadow(color: .black.opacity(0.07), radius: 18, y: 9)
+            .overlay {
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                LockUDesign.Color.lockerEdgeHighlight.opacity(0.72),
+                                .white.opacity(0.12),
+                                LockUDesign.Color.lockerSummerBlueDark.opacity(0.74)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            }
+            .shadow(color: .black.opacity(0.18), radius: 4, y: 3)
+            .shadow(color: LockUDesign.Color.summerShadow.opacity(0.18), radius: 18, y: 9)
         }
     }
 
@@ -151,6 +166,17 @@ struct LockerFrameView: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+        .overlay {
+            LinearGradient(
+                colors: [
+                    LockUDesign.Color.lockerEdgeHighlight.opacity(0.34),
+                    .clear,
+                    LockUDesign.Color.sunlight.opacity(0.11)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
     }
 
     private func topFrame(height: CGFloat) -> some View {
@@ -175,15 +201,41 @@ private struct LockerInteriorSurface: View {
                     endPoint: .bottomTrailing
                 )
                 LinearGradient(
+                    colors: [
+                        .white.opacity(0.12),
+                        .clear,
+                        LockUDesign.Color.lockerInteriorBack.opacity(0.34)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .clipShape(InteriorPerspectiveShape())
+                .padding(6)
+                LinearGradient(
                     colors: [.white.opacity(0.06), .clear],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
                 LockerInteriorContent()
+                    .shadow(color: .black.opacity(0.16), radius: 2)
                 RoundedRectangle(cornerRadius: 2)
-                    .strokeBorder(LockUDesign.Color.lockerEdge.opacity(0.18), lineWidth: 2)
+                    .strokeBorder(.black.opacity(0.35), lineWidth: 3)
             }
+            .shadow(color: .black.opacity(0.32), radius: 3, y: 2)
+            .shadow(color: LockUDesign.Color.summerShadow.opacity(0.22), radius: 16, y: 8)
         }
+    }
+}
+
+private struct InteriorPerspectiveShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - 9, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + 9, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 

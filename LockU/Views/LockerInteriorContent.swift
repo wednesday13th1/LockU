@@ -63,18 +63,25 @@ private struct LockerLightView: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [.white, LockUDesign.Color.warmLight.opacity(0.7)],
+                        colors: [
+                            .white,
+                            LockUDesign.Color.sunlight,
+                            LockUDesign.Color.warmLight.opacity(0.72),
+                            LockUDesign.Color.schoolNavy.opacity(0.55)
+                        ],
                         center: .center,
                         startRadius: 1,
-                        endRadius: 10
+                        endRadius: 13
                     )
                 )
-                .frame(width: 20, height: 20)
-                .shadow(color: LockUDesign.Color.warmLight.opacity(isOn ? 0.18 : 0), radius: 6)
+                .frame(width: 24, height: 18)
+                .overlay(Ellipse().stroke(.white.opacity(0.46), lineWidth: 1))
+                .shadow(color: .black.opacity(0.34), radius: 3, y: 2)
+                .shadow(color: LockUDesign.Color.sunlight.opacity(isOn ? 0.30 : 0), radius: 10)
             RadialGradient(
                 colors: [
-                    LockUDesign.Color.warmLight.opacity(isOn ? 0.18 : 0),
-                    LockUDesign.Color.warmLight.opacity(isOn ? 0.04 : 0),
+                    LockUDesign.Color.sunlight.opacity(isOn ? 0.24 : 0),
+                    LockUDesign.Color.warmLight.opacity(isOn ? 0.07 : 0),
                     .clear
                 ],
                 center: .top,
@@ -127,6 +134,12 @@ struct LockerTopShelfView: View {
                 )
             )
             .frame(height: 8)
-            .shadow(color: .black.opacity(0.06), radius: 4, y: 3)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(LockUDesign.Color.summerShadow.opacity(0.34))
+                    .frame(height: 2)
+            }
+            .shadow(color: .black.opacity(0.42), radius: 3, y: 3)
+            .shadow(color: LockUDesign.Color.summerShadow.opacity(0.28), radius: 18, y: 12)
     }
 }

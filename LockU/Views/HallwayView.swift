@@ -11,13 +11,15 @@ struct HallwayView: View {
             onSettings: { sheet = .settings }
         )
         .sheet(item: $sheet) { item in
-            switch item {
-            case .code:
-                LockerCodeSheet(code: settingsRepository.settings.lockerNumber)
-            case .settings:
-                LockerSettingsSheet()
-            case .share:
-                ShareLockerSheet(code: settingsRepository.settings.lockerNumber)
+            Group {
+                switch item {
+                case .code:
+                    LockerCodeSheet(code: settingsRepository.settings.lockerNumber)
+                case .settings:
+                    LockerSettingsSheet()
+                case .share:
+                    ShareLockerSheet(code: settingsRepository.settings.lockerNumber)
+                }
             }
             .presentationBackground(.ultraThinMaterial)
         }

@@ -76,6 +76,29 @@ struct LockerDoorView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+            LockerMetalTexture()
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.28), .clear, LockUDesign.Color.lockerWornEdge.opacity(0.58)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 3
+                )
+                .padding(5)
+            VStack {
+                pressedSeam
+                Spacer()
+                pressedSeam
+            }
+            .padding(.vertical, 15)
+            HStack {
+                screwColumn
+                Spacer()
+                screwColumn
+            }
+            .padding(.horizontal, 9)
             VStack {
                 ventilationSlits
                 Spacer()
@@ -127,6 +150,59 @@ struct LockerDoorView: View {
                 LockUDesign.Color.lockerEdge.opacity(0.7)
             )
             .frame(width: 10, height: 30)
+            .overlay(alignment: .bottom) {
+                Ellipse()
+                    .fill(SwiftUI.Color(red: 0.34, green: 0.29, blue: 0.26).opacity(0.07))
+                    .frame(width: 8, height: 4)
+            }
+    }
+
+    private var pressedSeam: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        LockUDesign.Color.lockerWornEdge.opacity(0.38),
+                        .white.opacity(0.2),
+                        .clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(height: 2)
+            .padding(.horizontal, 12)
+    }
+
+    private var screwColumn: some View {
+        VStack {
+            metalScrew
+            Spacer()
+            metalScrew
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var metalScrew: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [.white.opacity(0.78), LockUDesign.Color.lockerWornEdge],
+                    center: .topLeading,
+                    startRadius: 0,
+                    endRadius: 4
+                )
+            )
+            .frame(width: 6, height: 6)
+            .overlay(Rectangle().fill(.black.opacity(0.38)).frame(width: 4, height: 0.7))
+            .overlay {
+                Circle()
+                    .stroke(
+                        SwiftUI.Color(red: 0.34, green: 0.29, blue: 0.26).opacity(0.06),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: .black.opacity(0.28), radius: 1, y: 1)
     }
 
     private func toggleDoor() {
@@ -141,6 +217,62 @@ struct LockerDoorView: View {
             guard !Task.isCancelled else { return }
             appModel.lockerDoorState = opening ? .open : .closed
         }
+    }
+}
+
+private struct LockerMetalTexture: View {
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<32 {
+                let y = CGFloat((index * 41) % 97) / 97 * size.height
+                let width = CGFloat(10 + (index * 17) % 42)
+                let x = CGFloat((index * 61) % 100) / 100 * max(size.width - width, 1)
+                var stroke = Path()
+                stroke.move(to: CGPoint(x: x, y: y))
+                stroke.addLine(to: CGPoint(x: x + width, y: y + CGFloat(index % 3 - 1)))
+                context.stroke(
+                    stroke,
+                    with: .color(index.isMultiple(of: 3) ? .white.opacity(0.055) : .black.opacity(0.035)),
+                    lineWidth: 0.6
+                )
+            }
+            for index in 0..<18 {
+                let x = CGFloat((index * 37) % 93) / 93 * size.width
+                let y = CGFloat((index * 59) % 91) / 91 * size.height
+                var handScratch = Path()
+                handScratch.move(to: CGPoint(x: x, y: y))
+                handScratch.addLine(
+                    to: CGPoint(
+                        x: x + CGFloat(index.isMultiple(of: 4) ? 9 : 2),
+                        y: y + CGFloat(index.isMultiple(of: 4) ? 1 : 14)
+                    )
+                )
+                context.stroke(
+                    handScratch,
+                    with: .color(LockUDesign.Color.lockerEdgeHighlight.opacity(0.075)),
+                    lineWidth: 0.65
+                )
+            }
+            for index in 0..<7 {
+                let x = CGFloat((index * 67) % 91) / 91 * size.width
+                let y = CGFloat((index * 43) % 89) / 89 * size.height
+                context.fill(
+                    Path(ellipseIn: CGRect(x: x, y: y, width: 2.2, height: 1.2)),
+                    with: .color(.black.opacity(0.045))
+                )
+            }
+            for index in 0..<8 {
+                let onRightEdge = index.isMultiple(of: 2)
+                let x = onRightEdge ? size.width - 3 : 2
+                let y = 18 + CGFloat(index) * max((size.height - 36) / 8, 1)
+                context.fill(
+                    Path(ellipseIn: CGRect(x: x, y: y, width: 1.8, height: 1.2)),
+                    with: .color(LockUDesign.Color.lockerEdgeHighlight.opacity(0.38))
+                )
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

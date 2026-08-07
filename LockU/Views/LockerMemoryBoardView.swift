@@ -8,7 +8,7 @@ struct LockerMemoryBoardView: View {
     @State private var appeared = false
 
     private var recentMemories: [MemoryRecord] {
-        Array(memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }.prefix(1))
+        Array(memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }.prefix(5))
     }
 
     var body: some View {
@@ -16,19 +16,11 @@ struct LockerMemoryBoardView: View {
             ZStack {
                 boardSurface
 
-                LockerMemoCardView(text: "a day to remember", tint: LockUDesign.Color.paper)
-                    .frame(width: proxy.size.width * 0.3)
-                    .position(x: proxy.size.width * 0.2, y: proxy.size.height * 0.18)
-                    .rotationEffect(.degrees(-1))
-
-                if let newest = recentMemories.first {
-                    LockerWeatherNoteView(memory: newest)
-                        .frame(width: proxy.size.width * 0.3)
-                        .position(x: proxy.size.width * 0.8, y: proxy.size.height * 0.18)
-                        .rotationEffect(.degrees(1))
-                }
-
                 if recentMemories.isEmpty {
+                    LockerMemoCardView(text: "a day to remember", tint: LockUDesign.Color.notebookPaper)
+                        .frame(width: proxy.size.width * 0.38)
+                        .position(x: proxy.size.width * 0.28, y: proxy.size.height * 0.2)
+                        .rotationEffect(.degrees(2))
                     LockerEmptyStateView {
                         appModel.selectedTab = .camera
                     }
@@ -68,7 +60,16 @@ struct LockerMemoryBoardView: View {
 
     private var boardSurface: some View {
         RoundedRectangle(cornerRadius: 3)
-            .fill(.white.opacity(0.08))
+            .fill(
+                LinearGradient(
+                    colors: [
+                        LockUDesign.Color.lockerInteriorSoft.opacity(0.92),
+                        LockUDesign.Color.lockerInteriorBack
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .overlay {
                 LinearGradient(
                     colors: [.white.opacity(0.04), .clear],
@@ -81,17 +82,25 @@ struct LockerMemoryBoardView: View {
 
     private func photoWidth(for index: Int, in size: CGSize) -> CGFloat {
         let base = min(size.width, 470)
-        return index == 0 ? min(base * 0.48, 190) : base * 0.28
+        switch index {
+        case 0: return min(base * 0.44, 184)
+        case 1, 2: return base * 0.31
+        default: return base * 0.27
+        }
     }
 
     private func position(for index: Int, in size: CGSize) -> CGPoint {
         switch index {
         case 0:
-            return CGPoint(x: size.width * 0.5, y: size.height * 0.57)
+            return CGPoint(x: size.width * 0.49, y: size.height * 0.46)
         case 1:
-            return CGPoint(x: size.width * 0.25, y: size.height * 0.71)
+            return CGPoint(x: size.width * 0.22, y: size.height * 0.28)
+        case 2:
+            return CGPoint(x: size.width * 0.78, y: size.height * 0.30)
+        case 3:
+            return CGPoint(x: size.width * 0.25, y: size.height * 0.75)
         default:
-            return CGPoint(x: size.width * 0.78, y: size.height * 0.72)
+            return CGPoint(x: size.width * 0.76, y: size.height * 0.73)
         }
     }
 
@@ -99,8 +108,9 @@ struct LockerMemoryBoardView: View {
         let checksum = id.uuidString.unicodeScalars.reduce(0) {
             ($0 + Int($1.value)) % 7
         }
-        let magnitude = 0.5 + Double(checksum % 3) * 0.5
-        return index == 1 || checksum.isMultiple(of: 2) ? -magnitude : magnitude
+        let prescribedRotations = [-2.0, -4.0, 3.0, -2.0, 2.5]
+        let magnitude = prescribedRotations[index % prescribedRotations.count]
+        return checksum.isMultiple(of: 2) ? magnitude : -magnitude * 0.72
     }
 }
 
@@ -138,19 +148,26 @@ struct PolaroidMemoryView: View {
                     .padding(.vertical, 6)
             }
             .padding(6)
-            .background(LockUDesign.Color.paperCream)
+            .background(LockUDesign.Color.notebookPaper)
             .overlay(alignment: .top) {
                 Capsule()
-                    .fill(LockUDesign.Color.paperCream.opacity(0.72))
-                    .frame(width: 42, height: 12)
+                    .fill(indexedTapeColor)
+                    .frame(width: 46, height: 13)
                     .offset(y: -8)
                     .rotationEffect(.degrees(1))
             }
-            .shadow(color: .black.opacity(0.07), radius: 7, y: 4)
+            .shadow(color: .black.opacity(0.34), radius: 3, y: 2)
+            .shadow(color: LockUDesign.Color.summerShadow.opacity(0.22), radius: 15, y: 8)
         }
         .buttonStyle(LockerPressStyle())
         .accessibilityLabel("Memory from \(memory.createdAt.formatted(date: .long, time: .omitted))")
         .accessibilityHint("Opens Memory Book")
+    }
+
+    private var indexedTapeColor: Color {
+        memory.id.uuidString.unicodeScalars.reduce(0) { $0 + Int($1.value) }.isMultiple(of: 2)
+            ? LockUDesign.Color.lockerSummerBlueLight.opacity(0.58)
+            : LockUDesign.Color.notebookPaper.opacity(0.72)
     }
 }
 

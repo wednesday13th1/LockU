@@ -2,18 +2,22 @@ import SwiftUI
 
 enum LockUDesign {
     enum Color {
-        static let summerSkyTop = SwiftUI.Color(red: 0.42, green: 0.77, blue: 0.96)
+        static let summerSkyTop = SwiftUI.Color(red: 126 / 255, green: 207 / 255, blue: 1)
         static let summerSkyMiddle = SwiftUI.Color(red: 0.65, green: 0.86, blue: 0.98)
         static let summerSkyBottom = SwiftUI.Color(red: 0.93, green: 0.98, blue: 1.00)
         static let cloudWhite = SwiftUI.Color(red: 1.00, green: 0.99, blue: 0.96)
-        static let sunlight = SwiftUI.Color(red: 1.00, green: 0.88, blue: 0.60)
+        static let sunlight = SwiftUI.Color(red: 1, green: 216 / 255, blue: 144 / 255)
         static let sunsetPeach = SwiftUI.Color(red: 1.00, green: 0.72, blue: 0.55)
-        static let ramuneBlue = SwiftUI.Color(red: 0.35, green: 0.72, blue: 0.92)
+        static let ramuneBlue = SwiftUI.Color(red: 105 / 255, green: 183 / 255, blue: 217 / 255)
         static let schoolNavy = SwiftUI.Color(red: 0.18, green: 0.31, blue: 0.44)
-        static let lockerSummerBlue = SwiftUI.Color(red: 0.28, green: 0.55, blue: 0.72)
-        static let lockerSummerBlueLight = SwiftUI.Color(red: 0.52, green: 0.73, blue: 0.84)
-        static let lockerSummerBlueDark = SwiftUI.Color(red: 0.16, green: 0.34, blue: 0.45)
-        static let notebookPaper = SwiftUI.Color(red: 1.00, green: 0.98, blue: 0.91)
+        static let lockerSummerBlue = SwiftUI.Color(red: 111 / 255, green: 145 / 255, blue: 163 / 255)
+        static let lockerSummerBlueLight = SwiftUI.Color(red: 168 / 255, green: 199 / 255, blue: 213 / 255)
+        static let lockerSummerBlueDark = SwiftUI.Color(red: 79 / 255, green: 103 / 255, blue: 118 / 255)
+        static let lockerEdgeHighlight = SwiftUI.Color(red: 207 / 255, green: 228 / 255, blue: 237 / 255)
+        static let lockerWornEdge = SwiftUI.Color(red: 71 / 255, green: 95 / 255, blue: 111 / 255)
+        static let notebookPaper = SwiftUI.Color(red: 1, green: 248 / 255, blue: 237 / 255)
+        static let summerShadow = SwiftUI.Color(red: 90 / 255, green: 109 / 255, blue: 121 / 255)
+        static let warmWood = SwiftUI.Color(red: 212 / 255, green: 184 / 255, blue: 138 / 255)
         static let fadedPaper = SwiftUI.Color(red: 0.96, green: 0.93, blue: 0.83)
         static let softInk = SwiftUI.Color(red: 0.12, green: 0.20, blue: 0.26)
         static let softInkSecondary = SwiftUI.Color(red: 0.38, green: 0.48, blue: 0.54)
@@ -55,9 +59,9 @@ enum LockUDesign {
         static let pageBackground = SwiftUI.Color(red: 242 / 255, green: 246 / 255, blue: 247 / 255)
         static let lockerBody = lockerSummerBlue
         static let lockerBodyLight = lockerSummerBlueLight
-        static let lockerEdge = lockerSummerBlueDark
-        static let lockerInteriorSoft = SwiftUI.Color(red: 0.28, green: 0.46, blue: 0.56)
-        static let lockerInteriorBack = SwiftUI.Color(red: 0.13, green: 0.28, blue: 0.36)
+        static let lockerEdge = lockerWornEdge
+        static let lockerInteriorSoft = SwiftUI.Color(red: 0.29, green: 0.38, blue: 0.43)
+        static let lockerInteriorBack = SwiftUI.Color(red: 53 / 255, green: 72 / 255, blue: 83 / 255)
         static let shelfWarm = SwiftUI.Color(red: 225 / 255, green: 217 / 255, blue: 193 / 255)
         static let paper = SwiftUI.Color(red: 248 / 255, green: 244 / 255, blue: 232 / 255)
     }
@@ -243,7 +247,7 @@ struct SummerGlassCard<Content: View>: View {
     let content: Content
 
     init(@ViewBuilder content: () -> Content) {
-        content = content()
+        self.content = content()
     }
 
     var body: some View {
