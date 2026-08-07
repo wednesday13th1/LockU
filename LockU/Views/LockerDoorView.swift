@@ -5,6 +5,8 @@ struct LockerDoorView: View {
     @EnvironmentObject private var appModel: LockUAppModel
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var doorAngle = 0.0
+    @State private var doorForwardOffset = 0.0
 
     private var isOpen: Bool { appModel.lockerDoorState.isOpenOrOpening }
     private var lockerColor: Color {
@@ -22,22 +24,26 @@ struct LockerDoorView: View {
                 doorFront(size: proxy.size)
                     .opacity(isOpen ? 0 : 1)
             }
-            .padding(.horizontal, 11)
+            .padding(.horizontal, proxy.size.width * 0.03)
             .padding(.vertical, 9)
             .rotation3DEffect(
-                .degrees(reduceMotion ? 0 : (isOpen ? -92 : 0)),
+                .degrees(reduceMotion ? 0 : doorAngle),
                 axis: (x: 0, y: 1, z: 0),
                 anchor: .trailing,
-                anchorZ: 0,
+                anchorZ: doorForwardOffset,
                 perspective: 0.75
             )
+            .offset(x: doorForwardOffset)
             .opacity(reduceMotion && isOpen ? 0 : 1)
-            .animation(reduceMotion ? LockUDesign.Motion.soft : LockUDesign.Motion.door, value: isOpen)
             .allowsHitTesting(appModel.lockerDoorState.acceptsInput)
             .contentShape(Rectangle())
             .onTapGesture { toggleDoor() }
             .accessibilityLabel(isOpen ? "ロッカーを閉じる" : "ロッカーを開く")
             .accessibilityAddTraits(.isButton)
+            .onAppear { doorAngle = isOpen ? -96 : 0 }
+            .onChange(of: isOpen) { _, opening in
+                animateDoor(opening: opening)
+            }
 
             if appModel.lockerDoorState == .open {
                 Button {
@@ -216,6 +222,38 @@ struct LockerDoorView: View {
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
             appModel.lockerDoorState = opening ? .open : .closed
+        }
+    }
+
+    private func animateDoor(opening: Bool) {
+        guard !reduceMotion else {
+            doorAngle = opening ? -96 : 0
+            doorForwardOffset = 0
+            return
+        }
+        Task { @MainActor in
+            if opening {
+                withAnimation(.easeOut(duration: 0.08)) {
+                    doorForwardOffset = -6
+                    doorAngle = -3
+                }
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    doorAngle = -95
+                    doorForwardOffset = 0
+                }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                withAnimation(.easeOut(duration: 0.08)) { doorAngle = -100 }
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                withAnimation(.spring(response: 0.12, dampingFraction: 0.82)) {
+                    doorAngle = -96
+                }
+            } else {
+                withAnimation(.spring(response: 0.44, dampingFraction: 0.86)) {
+                    doorAngle = 0
+                    doorForwardOffset = 0
+                }
+            }
         }
     }
 }

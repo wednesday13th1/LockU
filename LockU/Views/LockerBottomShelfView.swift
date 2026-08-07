@@ -41,7 +41,7 @@ struct LockerBottomShelfView: View {
                             endPoint: .bottom
                         )
                     )
-                    .frame(height: 23)
+                    .frame(height: 24)
                     .overlay(alignment: .top) {
                         Rectangle()
                             .fill(LockUDesign.Color.lockerEdgeHighlight.opacity(0.42))
@@ -170,6 +170,16 @@ struct LockerCameraButton: View {
                     .overlay(Circle().stroke(.black.opacity(0.55), lineWidth: 1))
                 Circle()
                     .fill(
+                        LinearGradient(
+                            colors: [.black.opacity(0.92), LockUDesign.Color.summerShadow.opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 45, height: 45)
+                    .overlay(Circle().stroke(.white.opacity(0.14), lineWidth: 0.8))
+                Circle()
+                    .fill(
                         RadialGradient(
                             colors: [
                                 .white.opacity(0.62),
@@ -248,6 +258,10 @@ struct LockerCameraButton: View {
                         .frame(width: 2, height: 2)
                         .offset(x: direction * 35, y: 25)
                 }
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(LockUDesign.Color.schoolNavy.opacity(0.66), lineWidth: 1.5)
+                    .frame(width: 5, height: 11)
+                    .offset(x: 45, y: 8)
             }
             .shadow(color: .black.opacity(0.38), radius: 3, y: 3)
             .shadow(color: LockUDesign.Color.summerShadow.opacity(0.22), radius: 15, y: 9)

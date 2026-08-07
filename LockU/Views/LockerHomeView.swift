@@ -12,11 +12,13 @@ struct LockerHomeView: View {
     var body: some View {
         GeometryReader { proxy in
             let isOpen = appModel.lockerDoorState.isOpenOrOpening
-            let widthRatio = isOpen ? 0.88 : 0.86
-            let maxWidth: CGFloat = LockUDesign.lockerMaxWidth
             let maxHeight: CGFloat = isOpen ? 680 : 640
-            let lockerWidth = min(proxy.size.width * widthRatio, maxWidth)
-            let lockerHeight = min(lockerWidth / 0.58, maxHeight, proxy.size.height - 116)
+            let lockerHeight = min(maxHeight, proxy.size.height - 116)
+            let lockerWidth = min(
+                proxy.size.width * 0.94,
+                lockerHeight * 0.62,
+                LockUDesign.lockerMaxWidth * 1.08
+            )
 
             VStack(spacing: 20) {
                 LockerUtilityBar(
@@ -105,7 +107,7 @@ struct LockerFrameView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let frameWidth = max(14.0, min(18.0, proxy.size.width * 0.045))
+            let frameWidth = max(15.0, min(17.0, proxy.size.width * 0.03))
             let topHeight = max(38.0, min(50.0, proxy.size.height * 0.09))
 
             ZStack {
@@ -127,6 +129,30 @@ struct LockerFrameView: View {
                     metalBar.frame(width: frameWidth)
                 }
                 .padding(.top, topHeight - 1)
+                .overlay {
+                    HStack {
+                        LinearGradient(
+                            colors: [
+                                LockUDesign.Color.lockerEdgeHighlight.opacity(0.42),
+                                .clear,
+                                .black.opacity(0.18)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: frameWidth)
+                        .shadow(color: .black.opacity(0.18), radius: 8, x: 8)
+                        Spacer()
+                        LinearGradient(
+                            colors: [.black.opacity(0.2), .clear],
+                            startPoint: .trailing,
+                            endPoint: .leading
+                        )
+                        .frame(width: frameWidth)
+                        .shadow(color: .black.opacity(0.18), radius: 8, x: -8)
+                    }
+                    .padding(.top, topHeight - 1)
+                }
 
                 LockerNamePlateView(
                     number: settingsRepository.settings.lockerNumber,

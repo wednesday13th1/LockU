@@ -149,12 +149,26 @@ struct PolaroidMemoryView: View {
             }
             .padding(6)
             .background(LockUDesign.Color.notebookPaper)
+            .overlay {
+                PhotoPaperTexture()
+            }
             .overlay(alignment: .top) {
                 Capsule()
-                    .fill(indexedTapeColor)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.38), indexedTapeColor, .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .frame(width: 46, height: 13)
                     .offset(y: -8)
                     .rotationEffect(.degrees(1))
+                    .shadow(color: .black.opacity(0.16), radius: 2, y: 2)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                CurledPhotoCorner()
+                    .frame(width: 12, height: 12)
             }
             .shadow(color: .black.opacity(0.34), radius: 3, y: 2)
             .shadow(color: LockUDesign.Color.summerShadow.opacity(0.22), radius: 15, y: 8)
@@ -168,6 +182,52 @@ struct PolaroidMemoryView: View {
         memory.id.uuidString.unicodeScalars.reduce(0) { $0 + Int($1.value) }.isMultiple(of: 2)
             ? LockUDesign.Color.lockerSummerBlueLight.opacity(0.58)
             : LockUDesign.Color.notebookPaper.opacity(0.72)
+    }
+}
+
+private struct PhotoPaperTexture: View {
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<32 {
+                let x = CGFloat((index * 43) % 97) / 97 * size.width
+                let y = CGFloat((index * 67) % 89) / 89 * size.height
+                context.fill(
+                    Path(ellipseIn: CGRect(x: x, y: y, width: 0.65, height: 0.65)),
+                    with: .color(index.isMultiple(of: 2) ? .white.opacity(0.18) : .black.opacity(0.035))
+                )
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct CurledPhotoCorner: View {
+    var body: some View {
+        Triangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        LockUDesign.Color.fadedPaper,
+                        .white.opacity(0.92),
+                        LockUDesign.Color.summerShadow.opacity(0.16)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .shadow(color: .black.opacity(0.2), radius: 2, x: -1, y: -1)
+    }
+}
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
