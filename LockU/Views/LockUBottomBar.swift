@@ -15,12 +15,11 @@ struct LockUBottomBar: View {
         .frame(maxWidth: 520)
         .frame(height: LockUDesign.bottomBarHeight)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26))
-        .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 26))
+        .background(.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 28))
         .overlay {
-            RoundedRectangle(cornerRadius: 26)
-                .stroke(.white.opacity(0.65), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.38), lineWidth: 0.5)
         }
-        .shadow(color: LockUDesign.Color.schoolNavy.opacity(0.08), radius: 24, y: 10)
+        .shadow(color: .black.opacity(0.08), radius: 18, y: 7)
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }
@@ -36,7 +35,7 @@ struct LockUBottomBar: View {
                 Text(title)
                     .font(LockUDesign.Typography.microLabel)
                 Circle()
-                    .fill(LockUDesign.Color.ramuneBlue)
+                    .fill(LockUDesign.Color.textPrimary)
                     .frame(width: 4, height: 4)
                     .opacity(selection == tab ? 1 : 0)
             }
@@ -58,18 +57,14 @@ struct LockUBottomBar: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(LockUDesign.Color.ramuneBlue.opacity(0.2))
-                    .frame(width: 66, height: 66)
-                    .blur(radius: 8)
-                Circle()
-                    .fill(LockUDesign.Color.ramuneBlue)
+                    .fill(LockUDesign.Color.textPrimary)
                     .frame(width: 62, height: 62)
                     .overlay(Circle().stroke(.white.opacity(0.86), lineWidth: 2))
                 Image(systemName: "camera.fill")
                     .font(.system(size: 23, weight: .semibold))
                     .foregroundStyle(.white)
             }
-                .shadow(color: LockUDesign.Color.ramuneBlue.opacity(0.22), radius: 10, y: 4)
+                .shadow(color: .black.opacity(0.14), radius: 8, y: 4)
                 .scaleEffect(selection == .camera ? 1.04 : 1)
                 .animation(LockUDesign.Motion.quick, value: selection)
         }

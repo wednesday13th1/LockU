@@ -60,28 +60,11 @@ private struct LockerLightView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            .white,
-                            LockUDesign.Color.sunlight,
-                            LockUDesign.Color.warmLight.opacity(0.72),
-                            LockUDesign.Color.schoolNavy.opacity(0.55)
-                        ],
-                        center: .center,
-                        startRadius: 1,
-                        endRadius: 13
-                    )
-                )
-                .frame(width: 24, height: 18)
-                .overlay(Ellipse().stroke(.white.opacity(0.46), lineWidth: 1))
-                .shadow(color: .black.opacity(0.34), radius: 3, y: 2)
-                .shadow(color: LockUDesign.Color.sunlight.opacity(isOn ? 0.30 : 0), radius: 10)
+            Rectangle().fill(.clear).frame(height: 2)
             RadialGradient(
                 colors: [
-                    LockUDesign.Color.sunlight.opacity(isOn ? 0.24 : 0),
-                    LockUDesign.Color.warmLight.opacity(isOn ? 0.07 : 0),
+                    .white.opacity(isOn ? 0.15 : 0),
+                    LockUDesign.Color.sunlight.opacity(isOn ? 0.055 : 0),
                     .clear
                 ],
                 center: .top,
@@ -118,7 +101,7 @@ struct LockerTopShelfView: View {
 
     private func miniBook(_ title: String, color: Color) -> some View {
         Text(title)
-            .font(.system(size: 8, weight: .bold, design: .rounded))
+            .font(.system(size: 8, weight: .bold))
             .foregroundStyle(LockUDesign.Color.ink)
             .frame(width: 24, height: 45)
             .background(color, in: RoundedRectangle(cornerRadius: 2))
@@ -127,19 +110,13 @@ struct LockerTopShelfView: View {
     private var shelf: some View {
         Rectangle()
             .fill(
-                LinearGradient(
-                    colors: [LockUDesign.Color.paper, LockUDesign.Color.shelfWarm],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                LinearGradient(colors: [LockUDesign.Color.lockerBodyLight, LockUDesign.Color.midMetal, LockUDesign.Color.deepMetal], startPoint: .top, endPoint: .bottom)
             )
             .frame(height: 8)
             .overlay(alignment: .bottom) {
                 Rectangle()
-                    .fill(LockUDesign.Color.summerShadow.opacity(0.34))
-                    .frame(height: 2)
+                    .fill(LockUDesign.Color.darkCavity.opacity(0.72)).frame(height: 3)
             }
-            .shadow(color: .black.opacity(0.42), radius: 3, y: 3)
-            .shadow(color: LockUDesign.Color.summerShadow.opacity(0.28), radius: 18, y: 12)
+            .shadow(color: .black.opacity(0.30), radius: 7, y: 5)
     }
 }

@@ -20,4 +20,5 @@ struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
     var captureMode: CaptureMode
     var imageFormat: MemoryImageFormat?
     var isSubjectCutout: Bool?
+    var presentationStyle: MemoryPresentationStyle?
 }

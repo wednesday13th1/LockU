@@ -108,7 +108,8 @@ final class MemoryRepository: ObservableObject {
             weather: weather,
             captureMode: captureMode,
             imageFormat: imageFormat,
-            isSubjectCutout: imageStyle == .cutout
+            isSubjectCutout: imageStyle == .cutout,
+            presentationStyle: imageStyle == .cutout ? .cutout : nil
         )
         do {
             memories.append(record)

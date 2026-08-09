@@ -11,3 +11,7 @@ enum MemoryImageFormat: String, Codable, Sendable {
     case jpeg
     case png
 }
+
+enum MemoryPresentationStyle: String, Codable, CaseIterable, Sendable {
+    case digicam, cheki, cutout, photobooth
+}

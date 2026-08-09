@@ -17,8 +17,7 @@ struct LockerBottomShelfView: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityLabel("Open Memory Book")
 
-                RamuneBottleView()
-                    .frame(width: min(18, proxy.size.width * 0.06), height: 82)
+                Spacer(minLength: max(10, proxy.size.width * 0.05))
 
                 LockerCameraButton {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -27,49 +26,9 @@ struct LockerBottomShelfView: View {
                 .frame(width: min(96, proxy.size.width * 0.29))
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.bottom, 15)
             .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                LockUDesign.Color.notebookPaper,
-                                LockUDesign.Color.fadedPaper,
-                                LockUDesign.Color.warmWood.opacity(0.72)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(height: 24)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(LockUDesign.Color.lockerEdgeHighlight.opacity(0.42))
-                            .frame(height: 1.5)
-                    }
-                    .overlay(alignment: .bottom) {
-                        LinearGradient(
-                            colors: [.clear, LockUDesign.Color.summerShadow.opacity(0.44)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: 8)
-                    }
-                    .overlay(alignment: .bottomLeading) {
-                        HStack {
-                            Circle()
-                            Spacer()
-                            Circle()
-                        }
-                        .foregroundStyle(
-                            SwiftUI.Color(red: 0.34, green: 0.29, blue: 0.26).opacity(0.065)
-                        )
-                        .frame(height: 3)
-                        .padding(.horizontal, 7)
-                        .padding(.bottom, 1)
-                    }
-                    .shadow(color: .black.opacity(0.38), radius: 3, y: 3)
-                    .shadow(color: LockUDesign.Color.summerShadow.opacity(0.30), radius: 18, y: 12)
+                PhysicalMetalShelf()
             }
         }
     }
@@ -77,6 +36,30 @@ struct LockerBottomShelfView: View {
     private var monthTitle: String {
         Date.now.formatted(.dateTime.month(.wide).year()).uppercased()
     }
+}
+
+private struct PhysicalMetalShelf: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            TrapezoidShelfTop()
+                .fill(Color(red: 174/255, green: 180/255, blue: 181/255))
+                .frame(height: 7)
+                .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.40)).frame(height: 0.7).padding(.horizontal, 2) }
+            Rectangle()
+                .fill(LinearGradient(colors: [Color(red: 126/255, green: 134/255, blue: 136/255), Color(red: 116/255, green: 124/255, blue: 126/255)], startPoint: .top, endPoint: .bottom))
+                .frame(height: 11)
+            Rectangle().fill(Color(red: 86/255, green: 93/255, blue: 96/255)).frame(height: 5)
+        }
+        .overlay { HStack { Rectangle().fill(.black.opacity(0.25)).frame(width: 2); Spacer(); Rectangle().fill(.black.opacity(0.25)).frame(width: 2) } }
+        .shadow(color: .black.opacity(0.28), radius: 12, y: 9)
+    }
+}
+
+private struct TrapezoidShelfTop: Shape {
+    func path(in rect: CGRect) -> Path { Path { p in
+        p.move(to: CGPoint(x: 4, y: 0)); p.addLine(to: CGPoint(x: rect.width-4, y: 0))
+        p.addLine(to: CGPoint(x: rect.width, y: rect.height)); p.addLine(to: CGPoint(x: 0, y: rect.height)); p.closeSubpath()
+    } }
 }
 
 struct LockerBookSpineView: View {
@@ -87,7 +70,7 @@ struct LockerBookSpineView: View {
         HStack(spacing: 5) {
             Rectangle().fill(.black.opacity(0.14)).frame(width: 5)
             Text(title)
-                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .font(.system(size: 9, weight: .bold))
                 .tracking(0.7)
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
@@ -110,29 +93,11 @@ struct LockerCameraButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                SwiftUI.Color(red: 245 / 255, green: 240 / 255, blue: 228 / 255),
-                                LockUDesign.Color.fadedPaper
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(LinearGradient(colors: [Color(red: 0.82, green: 0.81, blue: 0.77), Color(red: 0.78, green: 0.77, blue: 0.74), Color(red: 0.55, green: 0.55, blue: 0.53)], startPoint: .topLeading, endPoint: .bottomTrailing))
                     .aspectRatio(1.18, contentMode: .fit)
                     .overlay(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(
-                                LinearGradient(
-                                    colors: [.black.opacity(0.13), .clear],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: 19)
-                            .padding(.vertical, 7)
+                        Rectangle().fill(.black.opacity(0.10)).frame(width: 12).padding(.vertical, 5)
                     }
                     .overlay(alignment: .top) {
                         RoundedRectangle(cornerRadius: 2)
@@ -148,109 +113,25 @@ struct LockerCameraButton: View {
                     }
                     .overlay {
                         CameraBodyMicroTexture()
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
                     }
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                LockUDesign.Color.lockerEdgeHighlight,
-                                LockUDesign.Color.summerShadow,
-                                .white.opacity(0.72)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 53, height: 53)
-                    .shadow(color: .black.opacity(0.38), radius: 3, x: 2, y: 3)
-                Circle()
-                    .fill(LockUDesign.Color.schoolNavy.opacity(0.94))
-                    .frame(width: 48, height: 48)
-                    .overlay(Circle().stroke(.black.opacity(0.55), lineWidth: 1))
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.black.opacity(0.92), LockUDesign.Color.summerShadow.opacity(0.7)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 45, height: 45)
-                    .overlay(Circle().stroke(.white.opacity(0.14), lineWidth: 0.8))
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                .white.opacity(0.62),
-                                SwiftUI.Color(red: 57 / 255, green: 75 / 255, blue: 92 / 255),
-                                .black
-                            ],
-                            center: .topLeading,
-                            startRadius: 2,
-                            endRadius: 24
-                        )
-                    )
-                    .frame(width: 42, height: 42)
-                    .overlay(Circle().stroke(LockUDesign.Color.schoolNavy.opacity(0.72), lineWidth: 5))
-                    .overlay(Circle().stroke(.white.opacity(0.38), lineWidth: 1))
-                    .overlay {
-                        Circle()
-                            .trim(from: 0.08, to: 0.38)
-                            .stroke(.white.opacity(0.72), lineWidth: 1.5)
-                            .rotationEffect(.degrees(-28))
-                            .padding(9)
-                    }
-                    .overlay {
-                        Circle()
-                            .fill(.black.opacity(0.72))
-                            .frame(width: 12, height: 12)
-                            .overlay(Circle().stroke(.white.opacity(0.16)))
-                    }
-                    .overlay {
-                        Circle()
-                            .trim(from: 0.57, to: 0.78)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [.green.opacity(0.54), .purple.opacity(0.42)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                ),
-                                lineWidth: 2
-                            )
-                            .padding(12)
-                    }
-                    .overlay {
-                        Canvas { context, size in
-                            for index in 0..<5 {
-                                let point = CGPoint(
-                                    x: size.width * (0.34 + CGFloat(index * 11 % 37) / 100),
-                                    y: size.height * (0.31 + CGFloat(index * 17 % 39) / 100)
-                                )
-                                context.fill(
-                                    Path(ellipseIn: CGRect(x: point.x, y: point.y, width: 0.8, height: 0.8)),
-                                    with: .color(.white.opacity(0.34))
-                                )
-                            }
-                        }
-                    }
-                Circle()
-                    .fill(LockUDesign.Color.sunsetPeach)
-                    .frame(width: 9, height: 9)
-                    .offset(x: 24, y: -20)
-                Capsule()
-                    .fill(LockUDesign.Color.ink.opacity(0.7))
-                    .frame(width: 18, height: 5)
-                    .offset(x: -22, y: -23)
+                ZStack {
+                    Circle().fill(LinearGradient(colors: [.white.opacity(0.75), Color(white: 0.55), Color(white: 0.78)], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 52, height: 52)
+                    Circle().fill(Color(red: 21/255, green: 23/255, blue: 25/255)).frame(width: 44, height: 44)
+                    Circle().fill(RadialGradient(colors: [Color(red: 36/255, green: 58/255, blue: 68/255), Color(red: 16/255, green: 24/255, blue: 32/255), .black], center: .topLeading, startRadius: 1, endRadius: 21)).frame(width: 35, height: 35)
+                    Circle().fill(.black.opacity(0.88)).frame(width: 15, height: 15)
+                    Circle().fill(.white.opacity(0.62)).frame(width: 4, height: 2).offset(x: -8, y: -9).blur(radius: 0.3)
+                }.shadow(color: .black.opacity(0.42), radius: 3, x: 2, y: 4)
+                RoundedRectangle(cornerRadius: 1).fill(Color(white: 0.82)).frame(width: 18, height: 7).offset(x: -25, y: -22).overlay(RoundedRectangle(cornerRadius: 1).stroke(.black.opacity(0.18))).offset(x: 0, y: 0)
                 HStack(spacing: 2) {
                     ForEach(0..<3, id: \.self) { _ in
                         Circle().fill(LockUDesign.Color.schoolNavy.opacity(0.62)).frame(width: 1.5, height: 1.5)
                     }
                 }
-                .offset(x: -22, y: -14)
+                    .offset(x: -25, y: -12)
                 Text("LU")
-                    .font(.system(size: 6, weight: .bold, design: .rounded))
-                    .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.62))
+                    .font(.system(size: 6, weight: .medium))
+                    .foregroundStyle(.black.opacity(0.48))
                     .offset(x: -25, y: 19)
                 ForEach([-1.0, 1.0], id: \.self) { direction in
                     Circle()
@@ -263,8 +144,8 @@ struct LockerCameraButton: View {
                     .frame(width: 5, height: 11)
                     .offset(x: 45, y: 8)
             }
-            .shadow(color: .black.opacity(0.38), radius: 3, y: 3)
-            .shadow(color: LockUDesign.Color.summerShadow.opacity(0.22), radius: 15, y: 9)
+            .shadow(color: .black.opacity(0.26), radius: 1, y: 1)
+            .shadow(color: .black.opacity(0.20), radius: 6, y: 5)
         }
         .buttonStyle(LockerPressStyle())
         .frame(minWidth: 44, minHeight: 44)

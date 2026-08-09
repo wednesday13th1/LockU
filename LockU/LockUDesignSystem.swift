@@ -1,10 +1,25 @@
 import SwiftUI
 
 enum LockUDesign {
+    enum LockerSurfaceAge: String, Codable, CaseIterable {
+        case initial, oneMonth, threeMonths, sixMonths, oneYear
+
+        var wearOpacity: Double {
+            switch self {
+            case .initial: 0.02
+            case .oneMonth: 0.03
+            case .threeMonths: 0.045
+            case .sixMonths: 0.055
+            case .oneYear: 0.07
+            }
+        }
+
+        var showsOxidation: Bool { self == .sixMonths || self == .oneYear }
+    }
     enum Color {
-        static let summerSkyTop = SwiftUI.Color(red: 126 / 255, green: 207 / 255, blue: 1)
-        static let summerSkyMiddle = SwiftUI.Color(red: 0.65, green: 0.86, blue: 0.98)
-        static let summerSkyBottom = SwiftUI.Color(red: 0.93, green: 0.98, blue: 1.00)
+        static let summerSkyTop = SwiftUI.Color(red: 112 / 255, green: 189 / 255, blue: 235 / 255)
+        static let summerSkyMiddle = SwiftUI.Color(red: 191 / 255, green: 230 / 255, blue: 247 / 255)
+        static let summerSkyBottom = SwiftUI.Color(red: 247 / 255, green: 235 / 255, blue: 213 / 255)
         static let cloudWhite = SwiftUI.Color(red: 1.00, green: 0.99, blue: 0.96)
         static let sunlight = SwiftUI.Color(red: 1, green: 216 / 255, blue: 144 / 255)
         static let sunsetPeach = SwiftUI.Color(red: 1.00, green: 0.72, blue: 0.55)
@@ -57,23 +72,27 @@ enum LockUDesign {
         static let cameraOverlay = SwiftUI.Color.black.opacity(0.32)
         static let cameraBlack = SwiftUI.Color(red: 17 / 255, green: 19 / 255, blue: 21 / 255)
         static let pageBackground = SwiftUI.Color(red: 242 / 255, green: 246 / 255, blue: 247 / 255)
-        static let lockerBody = lockerSummerBlue
-        static let lockerBodyLight = lockerSummerBlueLight
-        static let lockerEdge = lockerWornEdge
-        static let lockerInteriorSoft = SwiftUI.Color(red: 0.29, green: 0.38, blue: 0.43)
-        static let lockerInteriorBack = SwiftUI.Color(red: 53 / 255, green: 72 / 255, blue: 83 / 255)
+        static let lockerSilver = SwiftUI.Color(red: 174 / 255, green: 181 / 255, blue: 185 / 255)
+        static let midMetal = SwiftUI.Color(red: 143 / 255, green: 152 / 255, blue: 157 / 255)
+        static let deepMetal = SwiftUI.Color(red: 104 / 255, green: 113 / 255, blue: 120 / 255)
+        static let darkCavity = SwiftUI.Color(red: 68 / 255, green: 75 / 255, blue: 79 / 255)
+        static let lockerBody = lockerSilver
+        static let lockerBodyLight = SwiftUI.Color(red: 196 / 255, green: 201 / 255, blue: 203 / 255)
+        static let lockerEdge = deepMetal
+        static let lockerInteriorSoft = SwiftUI.Color(red: 137 / 255, green: 146 / 255, blue: 151 / 255)
+        static let lockerInteriorBack = SwiftUI.Color(red: 115 / 255, green: 124 / 255, blue: 128 / 255)
         static let shelfWarm = SwiftUI.Color(red: 225 / 255, green: 217 / 255, blue: 193 / 255)
         static let paper = SwiftUI.Color(red: 248 / 255, green: 244 / 255, blue: 232 / 255)
     }
 
     enum Typography {
-        static let largeTitle = Font.system(size: 30, weight: .bold, design: .rounded)
-        static let screenTitle = Font.system(size: 24, weight: .bold, design: .rounded)
-        static let sectionTitle = Font.system(size: 18, weight: .semibold, design: .rounded)
-        static let body = Font.system(size: 15, weight: .regular, design: .rounded)
-        static let bodyEmphasized = Font.system(size: 15, weight: .semibold, design: .rounded)
-        static let caption = Font.system(size: 12, weight: .medium, design: .rounded)
-        static let microLabel = Font.system(size: 10, weight: .medium, design: .rounded)
+        static let largeTitle = Font.system(size: 30, weight: .bold)
+        static let screenTitle = Font.system(size: 24, weight: .bold)
+        static let sectionTitle = Font.system(size: 18, weight: .semibold)
+        static let body = Font.system(size: 15, weight: .regular)
+        static let bodyEmphasized = Font.system(size: 15, weight: .semibold)
+        static let caption = Font.system(size: 12, weight: .medium)
+        static let microLabel = Font.system(size: 10, weight: .medium)
     }
 
     enum Spacing {
