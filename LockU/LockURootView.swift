@@ -75,14 +75,17 @@ struct LockURootView: View {
                 }
             }
             .transition(.opacity)
+            .zIndex(LockUSceneTokens.Layer.environment)
 
             content
                 .id(model.selectedTab)
                 .transition(.opacity.combined(with: .scale(scale: 0.992)))
+                .zIndex(LockUSceneTokens.Layer.physical)
 
             if model.selectedTab != .camera {
                 LockUBottomBar(selection: $model.selectedTab)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(LockUSceneTokens.Layer.interface)
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.selectedTab)

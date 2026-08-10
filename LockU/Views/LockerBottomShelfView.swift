@@ -42,17 +42,17 @@ private struct PhysicalMetalShelf: View {
     var body: some View {
         VStack(spacing: 0) {
             TrapezoidShelfTop()
-                .fill(Color(red: 166/255, green: 174/255, blue: 176/255))
+                .fill(LockUSceneTokens.Material.shelfTop)
                 .frame(height: 6)
                 .overlay(TrapezoidShelfTop().fill(LockUDesign.Color.worldSkyReflection.opacity(0.06)))
                 .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.40)).frame(height: 0.7).padding(.horizontal, 2) }
             Rectangle()
-                .fill(Color(red: 112/255, green: 122/255, blue: 125/255))
+                .fill(LockUSceneTokens.Material.shelfFront)
                 .frame(height: 9)
-            Rectangle().fill(Color(red: 80/255, green: 89/255, blue: 92/255)).frame(height: 6)
+            Rectangle().fill(LockUSceneTokens.Material.recess).frame(height: 6)
         }
         .overlay { HStack { Rectangle().fill(.black.opacity(0.25)).frame(width: 2); Spacer(); Rectangle().fill(.black.opacity(0.25)).frame(width: 2) } }
-        .shadow(color: .black.opacity(0.25), radius: 10, y: 8)
+        .shadow(color: LockUSceneTokens.Shadow.structural, radius: 12, y: 8)
     }
 }
 
@@ -80,7 +80,7 @@ struct LockerBookSpineView: View {
         .foregroundStyle(LockUDesign.Color.ink)
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 34)
-        .background(color, in: RoundedRectangle(cornerRadius: 1.5))
+        .background(BookCoverSilhouette().fill(color))
         .overlay(alignment: .top) {
             Rectangle().fill(Color(red: 235/255, green: 232/255, blue: 221/255)).frame(height: 4).padding(.horizontal, 7)
                 .overlay(Rectangle().fill(.black.opacity(0.08)).frame(height: 0.5).padding(.horizontal, 7), alignment: .bottom)
@@ -89,7 +89,8 @@ struct LockerBookSpineView: View {
             Rectangle().fill(.white.opacity(0.45)).frame(height: 2).padding(.horizontal, 5)
         }
         .overlay(alignment: .trailing) { Rectangle().fill(.black.opacity(0.15)).frame(width: 2) }
-        .shadow(color: .black.opacity(0.18), radius: 1, y: 1)
+        .overlay(alignment: .bottomLeading) { Rectangle().fill(.white.opacity(0.10)).frame(width: 16, height: 0.7).offset(x: 9, y: -1) }
+        .shadow(color: LockUSceneTokens.Shadow.contact.opacity(0.70), radius: 1, y: 1)
     }
 }
 
@@ -99,7 +100,7 @@ struct LockerCameraButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                RoundedRectangle(cornerRadius: 5)
+                CameraBodySilhouette()
                     .fill(LinearGradient(colors: [Color(red: 217/255, green: 215/255, blue: 207/255), Color(red: 200/255, green: 197/255, blue: 188/255), Color(red: 150/255, green: 148/255, blue: 142/255)], startPoint: .topLeading, endPoint: .bottomTrailing))
                     .aspectRatio(1.18, contentMode: .fit)
                     .overlay(alignment: .leading) {
@@ -118,17 +119,18 @@ struct LockerCameraButton: View {
                             .offset(x: 23, y: -3)
                     }
                     .overlay {
-                        CameraBodyMicroTexture()
-                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                        CameraBodyMicroTexture().clipShape(CameraBodySilhouette())
                     }
                     .overlay(alignment: .bottom) { Rectangle().fill(.black.opacity(0.20)).frame(height: 3).padding(.horizontal, 4) }
                     .overlay(alignment: .trailing) { Rectangle().fill(.black.opacity(0.16)).frame(width: 3).padding(.vertical, 5) }
                 ZStack {
-                    Circle().fill(Color(red: 130/255, green: 132/255, blue: 134/255)).frame(width: 46, height: 46).shadow(color: .black.opacity(0.26), radius: 3, y: 3)
-                    Circle().fill(Color(red: 51/255, green: 55/255, blue: 58/255)).frame(width: 40, height: 40).shadow(color: .black.opacity(0.22), radius: 2, y: 2)
-                    Circle().fill(RadialGradient(colors: [LockUDesign.Color.worldSkyReflection.opacity(0.18), Color(red: 16/255, green: 24/255, blue: 31/255), Color(red: 5/255, green: 6/255, blue: 7/255)], center: .topLeading, startRadius: 1, endRadius: 17)).frame(width: 33, height: 33)
-                    Circle().fill(Color(red: 5/255, green: 6/255, blue: 7/255)).frame(width: 12, height: 12)
-                    Circle().trim(from: 0.10, to: 0.27).stroke(.white.opacity(0.34), lineWidth: 1).frame(width: 23, height: 23).rotationEffect(.degrees(-22))
+                    Circle().fill(Color(red: 130/255, green: 132/255, blue: 134/255)).frame(width: 42, height: 42).shadow(color: .black.opacity(0.23), radius: 2.5, y: 3)
+                    Circle().fill(LinearGradient(colors: [Color(red: 155/255, green: 157/255, blue: 157/255), Color(red: 81/255, green: 84/255, blue: 86/255)], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 37, height: 37)
+                    Circle().fill(Color(red: 51/255, green: 55/255, blue: 58/255)).frame(width: 32, height: 32).shadow(color: .black.opacity(0.20), radius: 1.5, y: 1.5)
+                    Circle().fill(RadialGradient(colors: [Color(red: 45/255, green: 58/255, blue: 70/255), Color(red: 16/255, green: 24/255, blue: 31/255), Color(red: 7/255, green: 9/255, blue: 11/255)], center: UnitPoint(x: 0.38, y: 0.32), startRadius: 1, endRadius: 15)).frame(width: 27, height: 27)
+                    Ellipse().fill(LinearGradient(colors: [LockUDesign.Color.worldSkyReflection.opacity(0.22), Color.purple.opacity(0.07), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 14, height: 8).offset(x: -3, y: -4).rotationEffect(.degrees(-18))
+                    Circle().fill(Color(red: 5/255, green: 6/255, blue: 7/255)).frame(width: 10, height: 10)
+                    Circle().trim(from: 0.10, to: 0.25).stroke(.white.opacity(0.32), lineWidth: 0.8).frame(width: 20, height: 20).rotationEffect(.degrees(-24))
                 }
                 RoundedRectangle(cornerRadius: 1).fill(Color(white: 0.82)).frame(width: 18, height: 7).offset(x: -25, y: -22).overlay(RoundedRectangle(cornerRadius: 1).stroke(.black.opacity(0.18))).offset(x: 0, y: 0)
                 HStack(spacing: 2) {
@@ -165,17 +167,33 @@ struct LockerCameraButton: View {
 private struct CameraBodyMicroTexture: View {
     var body: some View {
         Canvas { context, size in
-            for index in 0..<26 {
+            for index in 0..<16 {
                 let x = CGFloat((index * 29) % 97) / 97 * size.width
                 let y = CGFloat((index * 53) % 89) / 89 * size.height
                 context.fill(
                     Path(ellipseIn: CGRect(x: x, y: y, width: 0.7, height: 0.7)),
-                    with: .color(index.isMultiple(of: 3) ? .white.opacity(0.15) : .black.opacity(0.055))
+                    with: .color(index.isMultiple(of: 3) ? .white.opacity(0.035) : .black.opacity(0.025))
                 )
             }
         }
         .allowsHitTesting(false)
     }
+}
+
+private struct CameraBodySilhouette: Shape {
+    func path(in r: CGRect) -> Path { Path { p in
+        p.move(to: CGPoint(x: 5, y: 1)); p.addQuadCurve(to: CGPoint(x: r.width - 4, y: 0), control: CGPoint(x: r.width * 0.55, y: -0.5))
+        p.addQuadCurve(to: CGPoint(x: r.width, y: 5), control: CGPoint(x: r.width, y: 1))
+        p.addLine(to: CGPoint(x: r.width - 1, y: r.height - 4)); p.addQuadCurve(to: CGPoint(x: r.width - 5, y: r.height), control: CGPoint(x: r.width, y: r.height))
+        p.addLine(to: CGPoint(x: 4, y: r.height - 1)); p.addQuadCurve(to: CGPoint(x: 0, y: r.height - 5), control: CGPoint(x: 0, y: r.height))
+        p.addLine(to: CGPoint(x: 1, y: 5)); p.addQuadCurve(to: CGPoint(x: 5, y: 1), control: CGPoint(x: 1, y: 1)); p.closeSubpath()
+    } }
+}
+
+private struct BookCoverSilhouette: Shape {
+    func path(in r: CGRect) -> Path { Path { p in
+        p.move(to: CGPoint(x: 1, y: 1)); p.addLine(to: CGPoint(x: r.width - 2, y: 0.5)); p.addLine(to: CGPoint(x: r.width, y: r.height - 1.5)); p.addLine(to: CGPoint(x: 2, y: r.height)); p.addQuadCurve(to: CGPoint(x: 1, y: 1), control: CGPoint(x: -0.5, y: r.height * 0.5)); p.closeSubpath()
+    } }
 }
 
 private struct RamuneBottleView: View {

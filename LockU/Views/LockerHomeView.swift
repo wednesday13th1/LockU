@@ -15,18 +15,19 @@ struct LockerHomeView: View {
             let maxHeight: CGFloat = isOpen ? 670 : 655
             let lockerHeight = min(maxHeight, proxy.size.height - 104)
             let lockerWidth = min(
-                proxy.size.width - 60,
-                lockerHeight / 1.90,
+                proxy.size.width - LockUSceneTokens.Home.lockerHorizontalMargin * 2,
+                lockerHeight / LockUSceneTokens.Home.lockerAspectRatio,
                 354
             )
 
-            VStack(spacing: 22) {
+            VStack(spacing: LockUSceneTokens.Home.headerToLocker) {
                 LockerUtilityBar(
                     onShare: onShare,
                     onCode: onCode,
                     onSettings: onSettings
                 )
-                .padding(.horizontal, 20)
+                .padding(.horizontal, LockUSceneTokens.Home.headerHorizontalMargin)
+                .zIndex(LockUSceneTokens.Layer.interface)
 
                 ZStack {
                     LockerFrameView(
@@ -48,6 +49,7 @@ struct LockerHomeView: View {
                 }
                 .frame(width: lockerWidth, height: lockerHeight)
                 .animation(.easeOut(duration: 0.22), value: isOpen)
+                .zIndex(LockUSceneTokens.Layer.physical)
 
                 Spacer(minLength: 24)
             }
@@ -74,34 +76,22 @@ private struct LockerUtilityBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(Date.now.formatted(.dateTime.month(.abbreviated).day()))
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(Color(red: 48/255, green: 69/255, blue: 87/255).opacity(0.88))
             Spacer()
-            utilityButton("Share", icon: "square.and.arrow.up", action: onShare)
-            utilityButton("Locker Code", icon: "number", action: onCode)
-            utilityButton("Settings", icon: "gearshape", action: onSettings)
+            Menu {
+                Button("Share", systemImage: "square.and.arrow.up", action: onShare)
+                Button("Locker Code", systemImage: "number", action: onCode)
+                Button("Settings", systemImage: "gearshape", action: onSettings)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .foregroundStyle(Color(red: 48/255, green: 69/255, blue: 87/255).opacity(0.84))
+            .accessibilityLabel("Locker menu")
         }
-        .frame(height: 59)
-        .padding(.horizontal, 18)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30))
-        .background(.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 30))
-        .overlay(RoundedRectangle(cornerRadius: 30).stroke(.white.opacity(0.38), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.07), radius: 14, y: 5)
-    }
-
-    private func utilityButton(
-        _ label: String,
-        icon: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 19, weight: .medium))
-                .frame(width: 44, height: 44)
-                .background(.clear, in: Circle())
-        }
-        .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.82))
-        .accessibilityLabel(label)
+        .frame(height: LockUSceneTokens.Home.headerHeight)
     }
 }
 
@@ -111,7 +101,7 @@ struct LockerFrameView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let frameWidth = max(12.0, min(14.0, proxy.size.width * 0.038))
+            let frameWidth = max(LockUSceneTokens.Home.frameThickness.lowerBound, min(LockUSceneTokens.Home.frameThickness.upperBound, proxy.size.width * 0.038))
             let topHeight: CGFloat = 16
 
             ZStack {
@@ -215,15 +205,15 @@ struct LockerFrameView: View {
 private struct LockerInteriorSurface: View {
     var body: some View {
         GeometryReader { proxy in
-            let side = proxy.size.width * 0.075
+            let side = proxy.size.width * LockUSceneTokens.Home.sideWallFraction
             let ceiling = max(16, min(22, proxy.size.height * 0.032))
             let floor = max(14, proxy.size.height * 0.045)
             ZStack {
-                Color(red: 149/255, green: 157/255, blue: 159/255)
+                LockUSceneTokens.Material.backWall
                     .clipShape(BackWallShape(side: side, ceiling: ceiling, floor: floor))
-                Color(red: 141/255, green: 149/255, blue: 151/255)
+                LockUSceneTokens.Material.leftWall
                     .clipShape(LeftInteriorWall(side: side, ceiling: ceiling, floor: floor))
-                Color(red: 135/255, green: 143/255, blue: 145/255)
+                LockUSceneTokens.Material.rightWall
                     .clipShape(RightInteriorWall(side: side, ceiling: ceiling, floor: floor))
                 LinearGradient(colors: [Color(red: 137/255, green: 147/255, blue: 151/255), Color(red: 105/255, green: 114/255, blue: 118/255)], startPoint: .top, endPoint: .bottom)
                     .clipShape(CeilingPlane(side: side, depth: ceiling))

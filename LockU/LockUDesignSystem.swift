@@ -1,5 +1,56 @@
 import SwiftUI
 
+enum LockUSceneTokens {
+    enum Layer {
+        static let environment = 0.0
+        static let physical = 10.0
+        static let memory = 20.0
+        static let interface = 30.0
+    }
+
+    enum Weight {
+        static let locker = 100.0
+        static let heroMemory = 75.0
+        static let object = 55.0
+        static let environment = 40.0
+        static let tabBar = 30.0
+        static let header = 25.0
+    }
+
+    enum Home {
+        static let referenceWidth: CGFloat = 414
+        static let lockerHorizontalMargin: CGFloat = 28
+        static let lockerAspectRatio: CGFloat = 1.90
+        static let headerHorizontalMargin: CGFloat = 20
+        static let headerHeight: CGFloat = 44
+        static let headerToLocker: CGFloat = 18
+        static let lockerToTabBar: CGFloat = 24
+        static let frameThickness: ClosedRange<CGFloat> = 12...14
+        static let sideWallFraction: CGFloat = 0.075
+        static let memoryZoneX: ClosedRange<CGFloat> = 0.15...0.85
+        static let memoryZoneY: ClosedRange<CGFloat> = 0.24...0.76
+    }
+
+    enum Material {
+        static let backWall = Color(red: 151/255, green: 166/255, blue: 170/255)
+        static let leftWall = Color(red: 177/255, green: 190/255, blue: 193/255)
+        static let rightWall = Color(red: 137/255, green: 152/255, blue: 157/255)
+        static let shelfTop = Color(red: 170/255, green: 183/255, blue: 186/255)
+        static let shelfFront = Color(red: 139/255, green: 152/255, blue: 156/255)
+        static let recess = Color(red: 113/255, green: 128/255, blue: 135/255)
+        static let paperBase = Color(red: 247/255, green: 244/255, blue: 236/255)
+        static let paperHighlight = Color(red: 1, green: 253/255, blue: 247/255)
+        static let paperShadow = Color(red: 216/255, green: 211/255, blue: 201/255)
+    }
+
+    enum Shadow {
+        static let structural = Color.black.opacity(0.18)
+        static let object = Color.black.opacity(0.20)
+        static let paper = Color.black.opacity(0.14)
+        static let contact = Color.black.opacity(0.26)
+    }
+}
+
 enum LockUDesign {
     enum LockerSurfaceAge: String, Codable, CaseIterable {
         case initial, oneMonth, threeMonths, sixMonths, oneYear

@@ -15,11 +15,11 @@ struct LockUBottomBar: View {
         .frame(maxWidth: 520)
         .frame(height: 74)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26))
-        .background(.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 28))
+        .background(.white.opacity(0.66), in: RoundedRectangle(cornerRadius: 28))
         .overlay {
-            RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.32), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.10), lineWidth: 0.5)
         }
-        .shadow(color: .black.opacity(0.08), radius: 18, y: 7)
+        .shadow(color: .black.opacity(0.055), radius: 12, y: 5)
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
     }
@@ -53,9 +53,9 @@ struct LockUBottomBar: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(Color(red: 37/255, green: 45/255, blue: 49/255))
+                    .fill(Color(red: 82/255, green: 105/255, blue: 115/255).opacity(0.72))
                     .frame(width: 64, height: 64)
-                    .overlay(Circle().stroke(.white.opacity(0.70), lineWidth: 1.5))
+                    .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1.5))
                 Image(systemName: "camera.fill")
                     .font(.system(size: 25, weight: .semibold))
                     .foregroundStyle(.white)

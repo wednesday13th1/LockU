@@ -39,7 +39,7 @@ struct LockerMemoryBoardView: View {
                             .frame(width: photoWidth(for: index, in: proxy.size))
                             .rotationEffect(.degrees(stableRotation(for: memory.id, index: index)))
                             .position(position(for: index, in: proxy.size))
-                            .zIndex(selectedMemoryID == memory.id ? 30 : (index == 0 ? 6 : 4 - Double(index)))
+                            .zIndex(selectedMemoryID == memory.id ? LockUSceneTokens.Layer.interface : (LockUSceneTokens.Layer.memory + (index == 0 ? 6 : 4 - Double(index))))
                             .opacity(appeared ? 1 : 0)
                             .offset(y: appeared ? 0 : 7)
                             .animation(
@@ -77,13 +77,13 @@ struct LockerMemoryBoardView: View {
         case 0:
             return CGPoint(x: size.width * 0.47, y: size.height * 0.47)
         case 1:
-            return CGPoint(x: size.width * 0.22, y: size.height * 0.28)
+            return CGPoint(x: size.width * 0.22, y: size.height * LockUSceneTokens.Home.memoryZoneY.lowerBound)
         case 2:
             return CGPoint(x: size.width * 0.78, y: size.height * 0.30)
         case 3:
-            return CGPoint(x: size.width * 0.25, y: size.height * 0.75)
+            return CGPoint(x: size.width * 0.25, y: size.height * 0.72)
         default:
-            return CGPoint(x: size.width * 0.76, y: size.height * 0.73)
+            return CGPoint(x: size.width * 0.76, y: size.height * LockUSceneTokens.Home.memoryZoneY.upperBound)
         }
     }
 
@@ -194,8 +194,8 @@ private struct MemoryPhysicalView: View {
     private var digicam: some View {
         image.aspectRatio(4/3, contentMode: .fit)
             .overlay(alignment: .bottomTrailing) { timestamp.padding(5) }
-            .clipShape(RoundedRectangle(cornerRadius: 1))
-            .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+            .clipShape(ImperfectPhotoShape())
+            .shadow(color: LockUSceneTokens.Shadow.paper, radius: 3, y: 1)
     }
 
     private var cheki: some View {
@@ -204,7 +204,7 @@ private struct MemoryPhysicalView: View {
             Text(handwriting).font(.system(size: 9, weight: .regular).italic()).foregroundStyle(Color(red: 45/255, green: 62/255, blue: 91/255)).rotationEffect(.degrees(-0.7)).frame(height: 23)
         }
         .padding(.horizontal, 8).padding(.top, 8).padding(.bottom, 3)
-        .background(Color(red: 247/255, green: 244/255, blue: 234/255), in: RoundedRectangle(cornerRadius: 2))
+        .background(ImperfectPhotoShape().fill(LockUSceneTokens.Material.paperBase))
         .overlay(PhotoPaperTexture()).shadow(color: .black.opacity(0.16), radius: 6, y: 3)
     }
 
@@ -228,8 +228,8 @@ private struct MemoryPhysicalView: View {
     @ViewBuilder private var attachmentView: some View {
         switch attachment {
         case .none: EmptyView()
-        case .clearTape: ImperfectTape().fill(.white.opacity(0.48)).frame(width: 42, height: 13).overlay(LinearGradient(colors: [.white.opacity(0.25), .clear], startPoint: .top, endPoint: .bottom)).offset(x: 11, y: -7).rotationEffect(.degrees(-2))
-        case .maskingTape: ImperfectTape().fill(Color(red: 224/255, green: 214/255, blue: 183/255).opacity(0.72)).frame(width: 46, height: 13).offset(x: -8, y: -7).rotationEffect(.degrees(2.4)).shadow(color: .black.opacity(0.12), radius: 1, y: 1)
+        case .clearTape: ImperfectTape().fill(.white.opacity(0.34)).frame(width: 42, height: 13).overlay(TapeSurface(isClear: true)).offset(x: 11, y: -7).rotationEffect(.degrees(-2))
+        case .maskingTape: ImperfectTape().fill(Color(red: 224/255, green: 214/255, blue: 183/255).opacity(0.68)).frame(width: 46, height: 13).overlay(TapeSurface(isClear: false)).offset(x: -8, y: -7).rotationEffect(.degrees(2.4)).shadow(color: .black.opacity(0.08), radius: 0.8, y: 0.7)
         case .magnet: PhysicalMagnet().frame(width: 20, height: 20).offset(x: 16, y: -5)
         }
     }
@@ -237,6 +237,23 @@ private struct MemoryPhysicalView: View {
     private var handwriting: String {
         let checksum = memory.id.uuidString.unicodeScalars.reduce(0) { ($0 + Int($1.value)) % 4 }
         return ["after school ♡", "また行こ", "summer", "8.9 best day!!"][checksum]
+    }
+}
+
+private struct ImperfectPhotoShape: Shape {
+    func path(in r: CGRect) -> Path { Path { p in
+        p.move(to: CGPoint(x: 0.7, y: 0)); p.addLine(to: CGPoint(x: r.width - 0.5, y: 0.8)); p.addLine(to: CGPoint(x: r.width, y: r.height - 1)); p.addLine(to: CGPoint(x: 1.2, y: r.height)); p.addQuadCurve(to: CGPoint(x: 0.7, y: 0), control: CGPoint(x: -0.3, y: r.height * 0.55)); p.closeSubpath()
+    } }
+}
+
+private struct TapeSurface: View {
+    let isClear: Bool
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [.white.opacity(isClear ? 0.30 : 0.10), .clear, .white.opacity(isClear ? 0.16 : 0.05)], startPoint: .top, endPoint: .bottom)
+            Ellipse().stroke(.white.opacity(isClear ? 0.16 : 0.07), lineWidth: 0.4).frame(width: 7, height: 3).offset(x: 9, y: 1)
+            Rectangle().fill(.black.opacity(0.025)).frame(width: 0.5).rotationEffect(.degrees(8)).offset(x: -6)
+        }.allowsHitTesting(false)
     }
 }
 
@@ -426,10 +443,14 @@ struct LockerMemoCardView: View {
             .foregroundStyle(LockUDesign.Color.ink)
             .minimumScaleFactor(0.75)
             .padding(8)
-            .frame(maxWidth: .infinity)
-            .background(Color(red: 243/255, green: 240/255, blue: 231/255), in: RoundedRectangle(cornerRadius: 2))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(MemoPaperShape().fill(Color(red: 243/255, green: 240/255, blue: 231/255)))
             .shadow(color: .black.opacity(0.12), radius: 2, x: 1, y: 1.5)
     }
+}
+
+private struct MemoPaperShape: Shape {
+    func path(in r: CGRect) -> Path { Path { p in p.move(to: CGPoint(x: 1, y: 0)); p.addLine(to: CGPoint(x: r.width, y: 1)); p.addLine(to: CGPoint(x: r.width-1, y: r.height-1)); p.addLine(to: CGPoint(x: r.width*0.72, y: r.height)); p.addLine(to: CGPoint(x: r.width*0.45, y: r.height-0.6)); p.addLine(to: CGPoint(x: 0, y: r.height)); p.closeSubpath() } }
 }
 
 struct LockerEmptyStateView: View {

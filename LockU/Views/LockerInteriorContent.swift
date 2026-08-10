@@ -101,7 +101,7 @@ struct LockerTopShelfView: View {
             .font(.system(size: 8, weight: .bold))
             .foregroundStyle(.white.opacity(0.78))
             .frame(width: 20, height: 46)
-            .background(color, in: RoundedRectangle(cornerRadius: 1))
+            .background(NotebookSilhouette().fill(color))
             .overlay(alignment: .trailing) {
                 Rectangle().fill(Color(red: 229/255, green: 226/255, blue: 216/255)).frame(width: 3).padding(.vertical, 3)
             }
@@ -117,6 +117,10 @@ struct LockerTopShelfView: View {
         }
         .padding(.horizontal, 1.5)
     }
+}
+
+private struct NotebookSilhouette: Shape {
+    func path(in r: CGRect) -> Path { Path { p in p.move(to: CGPoint(x: 1, y: 0)); p.addLine(to: CGPoint(x: r.width-1, y: 1)); p.addLine(to: CGPoint(x: r.width, y: r.height-2)); p.addLine(to: CGPoint(x: 1.5, y: r.height)); p.addQuadCurve(to: CGPoint(x: 1, y: 0), control: CGPoint(x: -0.4, y: r.height/2)); p.closeSubpath() } }
 }
 
 private struct TrapezoidTopShelf: Shape {
