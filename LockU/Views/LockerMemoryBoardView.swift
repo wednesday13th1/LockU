@@ -9,7 +9,7 @@ struct LockerMemoryBoardView: View {
     @State private var selectedMemoryID: UUID?
 
     private var recentMemories: [MemoryRecord] {
-        Array(memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }.prefix(21))
+        Array(memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }.prefix(10))
     }
 
     var body: some View {
@@ -38,7 +38,7 @@ struct LockerMemoryBoardView: View {
                             .frame(width: placement.width)
                             .rotationEffect(.degrees(placement.rotation))
                             .position(placement.position)
-                            .zIndex(selectedMemoryID == placement.id ? LockUSceneTokens.Layer.interface : LockUSceneTokens.Layer.memory + placement.zIndex)
+                            .zIndex(selectedMemoryID == placement.id ? LockUSceneTokens.Layer.memory + 40 : LockUSceneTokens.Layer.memory + placement.zIndex)
                             .opacity(appeared ? 1 : 0)
                             .offset(y: appeared ? 0 : 5)
                             .animation(
@@ -107,48 +107,51 @@ private struct MemoryWallPlacement: Identifiable {
 
 private struct DeterministicMemoryWallPlacementEngine {
     private let anchors: [CGPoint] = [
-        CGPoint(x: 0.50, y: 0.48),
-        CGPoint(x: 0.18, y: 0.18), CGPoint(x: 0.82, y: 0.19),
-        CGPoint(x: 0.15, y: 0.40), CGPoint(x: 0.85, y: 0.40),
-        CGPoint(x: 0.19, y: 0.69), CGPoint(x: 0.81, y: 0.71),
-        CGPoint(x: 0.47, y: 0.14), CGPoint(x: 0.51, y: 0.84),
-        CGPoint(x: 0.11, y: 0.57), CGPoint(x: 0.89, y: 0.59),
-        CGPoint(x: 0.31, y: 0.29), CGPoint(x: 0.69, y: 0.29),
-        CGPoint(x: 0.31, y: 0.84), CGPoint(x: 0.70, y: 0.84),
-        CGPoint(x: 0.10, y: 0.27), CGPoint(x: 0.90, y: 0.27),
-        CGPoint(x: 0.10, y: 0.80), CGPoint(x: 0.90, y: 0.80),
-        CGPoint(x: 0.28, y: 0.53), CGPoint(x: 0.73, y: 0.55)
+        CGPoint(x: 0.50, y: 0.49),
+        CGPoint(x: 0.18, y: 0.15), CGPoint(x: 0.49, y: 0.14), CGPoint(x: 0.81, y: 0.17),
+        CGPoint(x: 0.13, y: 0.43), CGPoint(x: 0.87, y: 0.43),
+        CGPoint(x: 0.18, y: 0.77), CGPoint(x: 0.50, y: 0.82), CGPoint(x: 0.82, y: 0.77),
+        CGPoint(x: 0.88, y: 0.67)
     ]
-    private let widthFractions: [CGFloat] = [0.54, 0.25, 0.29, 0.22, 0.31, 0.27, 0.23, 0.20, 0.28, 0.21, 0.26, 0.24, 0.22, 0.28, 0.24, 0.20, 0.22, 0.23, 0.21, 0.20, 0.20]
+    private let widthFractions: [CGFloat] = [0.40, 0.22, 0.22, 0.18, 0.22, 0.26, 0.22, 0.18, 0.22, 0.22]
+    private let rotationPresets: [Double] = [-0.4, -2.0, 1.2, 2.8, -1.4, 0.6, -3.0, 1.8, -0.8, 2.1]
+    private let looseOffsets: [CGSize] = [
+        .zero, CGSize(width: -5, height: 5), CGSize(width: 4, height: -4), CGSize(width: 6, height: 8),
+        CGSize(width: -4, height: -7), CGSize(width: 5, height: 4), CGSize(width: -7, height: -5),
+        CGSize(width: 4, height: 7), CGSize(width: 7, height: -4), CGSize(width: -5, height: 6)
+    ]
 
     func layout(memories: [MemoryRecord], containerSize: CGSize) -> [MemoryWallPlacement] {
         let density = MemoryDensity(count: memories.count)
         guard density != .empty, containerSize.width > 0, containerSize.height > 0 else { return [] }
 
         return memories.enumerated().map { index, memory in
-            let anchor = anchors[index % anchors.count]
-            let width = index == 0
-                ? min(max(containerSize.width * widthFractions[0], 154), 188)
-                : min(max(containerSize.width * widthFractions[index % widthFractions.count], 58), 124)
+            let presetIndex = index % anchors.count
+            let anchor = anchors[presetIndex]
+            let looseOffset = looseOffsets[presetIndex]
+            let width = containerSize.width * widthFractions[presetIndex]
             let halfX = width / containerSize.width / 2 + 0.012
-            let estimatedHeight = width * (index % 4 == 0 ? 1.05 : 0.80)
+            let estimatedHeight = width / 0.82
             let halfY = estimatedHeight / containerSize.height / 2 + 0.012
-            let checksum = memory.id.uuidString.unicodeScalars.reduce(0) { ($0 + Int($1.value)) % 997 }
-            let magnitude = Double(checksum % 31) / 10 + 0.7
-            let direction = anchor.x < 0.42 ? -1.0 : (anchor.x > 0.58 ? 1.0 : (checksum.isMultiple(of: 2) ? -1.0 : 1.0))
-            let tape: MemoryAttachment = checksum % 10 < 2 ? .clearTape : (checksum % 10 < 4 ? .maskingTape : .none)
+            let attachment: MemoryAttachment
+            switch index {
+            case 6, 8: attachment = .clearTape
+            case 7: attachment = .maskingTape
+            case 9: attachment = .magnet
+            default: attachment = .none
+            }
 
             return MemoryWallPlacement(
                 memory: memory,
                 index: index,
                 position: CGPoint(
-                    x: min(max(anchor.x, halfX), 1 - halfX) * containerSize.width,
-                    y: min(max(anchor.y, halfY), 1 - halfY) * containerSize.height
+                    x: min(max(anchor.x + looseOffset.width / containerSize.width, halfX), 1 - halfX) * containerSize.width,
+                    y: min(max(anchor.y + looseOffset.height / containerSize.height, halfY), 1 - halfY) * containerSize.height
                 ),
                 width: width,
-                rotation: index == 0 ? -0.4 : direction * min(magnitude, 4),
-                zIndex: index == 0 ? 40 : Double(memories.count - index),
-                tapeStyle: index == 0 ? .none : tape,
+                rotation: rotationPresets[presetIndex],
+                zIndex: index == 0 ? 30 : Double(20 + (index % 7)),
+                tapeStyle: index == 0 ? .none : attachment,
                 isLiving: index == 0
             )
         }
@@ -156,7 +159,6 @@ private struct DeterministicMemoryWallPlacementEngine {
 }
 
 private struct LivingMemoryView: View {
-    @EnvironmentObject private var repository: MemoryRepository
     @EnvironmentObject private var appModel: LockUAppModel
     let memory: MemoryRecord
 
@@ -165,24 +167,77 @@ private struct LivingMemoryView: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             appModel.selectedTab = .book
         } label: {
-            Group {
-                if let image = repository.image(for: memory) {
-                    Image(uiImage: image).resizable().scaledToFill()
-                } else {
-                    Color(white: 0.48)
-                        .overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.65)))
-                }
-            }
-            .aspectRatio(4 / 3, contentMode: .fit)
-            .clipped()
-            .padding(3)
-            .background(LockUSceneTokens.Material.paperBase)
-            .clipShape(ImperfectPhotoShape())
-            .overlay(ImperfectPhotoShape().stroke(.white.opacity(0.62), lineWidth: 0.8))
-            .shadow(color: .black.opacity(0.23), radius: 7, y: 4)
+            PolaroidPrint(memory: memory, bottomMarginFraction: 0.19, allowsAnnotation: false)
+                .shadow(color: .black.opacity(0.13), radius: 3, y: 1.5)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Latest memory from \(memory.createdAt.formatted(date: .abbreviated, time: .shortened))")
+    }
+}
+
+private struct PolaroidPrint: View {
+    @EnvironmentObject private var repository: MemoryRepository
+    let memory: MemoryRecord
+    let bottomMarginFraction: CGFloat
+    let allowsAnnotation: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let sideMargin = proxy.size.width * 0.055
+            let topMargin = proxy.size.height * 0.055
+            let bottomMargin = proxy.size.height * bottomMarginFraction
+            let photoHeight = max(0, proxy.size.height - topMargin - bottomMargin)
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 2.5)
+                    .fill(LockUSceneTokens.Material.paperBase)
+                    .overlay {
+                        LinearGradient(
+                            colors: [LockUSceneTokens.Material.paperHighlight.opacity(0.22), .clear, LockUSceneTokens.Material.paperShadow.opacity(0.07)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 2.5))
+                    }
+
+                Group {
+                    if let image = repository.image(for: memory) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Color(white: 0.52)
+                            .overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.65)))
+                    }
+                }
+                .frame(width: proxy.size.width - sideMargin * 2, height: photoHeight)
+                .clipped()
+                .offset(x: sideMargin, y: topMargin)
+
+                if showsAnnotation {
+                    Text(annotation)
+                        .font(.system(size: max(7, proxy.size.width * 0.09), weight: .regular).italic())
+                        .foregroundStyle(Color(red: 99/255, green: 135/255, blue: 160/255).opacity(0.86))
+                        .lineLimit(1)
+                        .rotationEffect(.degrees(-0.6))
+                        .frame(width: proxy.size.width - sideMargin * 2, alignment: .leading)
+                        .offset(x: sideMargin, y: proxy.size.height - bottomMargin * 0.68)
+                }
+            }
+        }
+        .aspectRatio(0.82, contentMode: .fit)
+    }
+
+    private var showsAnnotation: Bool {
+        allowsAnnotation && checksum.isMultiple(of: 3)
+    }
+
+    private var annotation: String {
+        ["8.10", "after school", ":)", "summer"][checksum % 4]
+    }
+
+    private var checksum: Int {
+        memory.id.uuidString.unicodeScalars.reduce(0) { ($0 + Int($1.value)) % 997 }
     }
 }
 
@@ -215,23 +270,15 @@ private struct MemoryPhysicalView: View {
     }
 
     var body: some View {
-        Group {
-            if role == .cutout {
-                CutoutMemoryStickerView(memory: memory)
-            } else {
-                physicalPhoto
-            }
-        }
+        PolaroidPrint(memory: memory, bottomMarginFraction: 0.17, allowsAnnotation: true)
         .overlay(alignment: .top) { attachmentView }
-        .overlay(alignment: .bottom) { if isSelected { metadata.offset(y: 28) } }
-        .scaleEffect(drag == .zero ? (isSelected ? 1.025 : 1) : 1.03)
+        .scaleEffect(drag == .zero ? 1 : 1.01)
         .offset(drag)
-        .shadow(color: .black.opacity(drag == .zero ? depth.shadow.opacity * 0.22 : 0.16), radius: drag == .zero ? depth.shadow.radius * 0.35 : 7, y: drag == .zero ? depth.shadow.y : 5)
+        .shadow(color: .black.opacity(drag == .zero ? 0.12 : 0.14), radius: drag == .zero ? 2.5 : 4, y: drag == .zero ? 1.25 : 1.5)
         .contentShape(Rectangle())
         .onTapGesture { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onSelect() }
         .onTapGesture(count: 2) { appModel.selectedTab = .book }
         .gesture(DragGesture(minimumDistance: 3).updating($drag) { value, state, _ in state = value.translation })
-        .animation(.easeOut(duration: 0.19), value: isSelected)
         .animation(.easeOut(duration: 0.20), value: drag)
     }
 
@@ -293,12 +340,37 @@ private struct MemoryPhysicalView: View {
     }
 
     @ViewBuilder private var attachmentView: some View {
-        switch attachment {
-        case .none: EmptyView()
-        case .clearTape: ImperfectTape().fill(.white.opacity(0.34)).frame(width: 42, height: 13).overlay(TapeSurface(isClear: true)).offset(x: 11, y: -7).rotationEffect(.degrees(-2))
-        case .maskingTape: ImperfectTape().fill(Color(red: 224/255, green: 214/255, blue: 183/255).opacity(0.68)).frame(width: 46, height: 13).overlay(TapeSurface(isClear: false)).offset(x: -8, y: -7).rotationEffect(.degrees(2.4)).shadow(color: .black.opacity(0.08), radius: 0.8, y: 0.7)
-        case .magnet: PhysicalMagnet().frame(width: 20, height: 20).offset(x: 16, y: -5)
+        GeometryReader { proxy in
+            switch attachment {
+            case .none:
+                Color.clear
+            case .clearTape:
+                ImperfectTape()
+                    .fill(.white.opacity(0.76))
+                    .overlay(TapeSurface(isClear: true))
+                    .frame(width: proxy.size.width * 0.34, height: min(11, proxy.size.width * 0.13))
+                    .position(tapePosition(in: proxy.size))
+                    .rotationEffect(.degrees(-1.6))
+            case .maskingTape:
+                ImperfectTape()
+                    .fill(Color(red: 216/255, green: 234/255, blue: 244/255).opacity(0.82))
+                    .overlay(TapeSurface(isClear: false))
+                    .frame(width: proxy.size.width * 0.38, height: min(12, proxy.size.width * 0.14))
+                    .position(tapePosition(in: proxy.size))
+                    .rotationEffect(.degrees(1.8))
+                    .shadow(color: .black.opacity(0.06), radius: 0.8, y: 0.6)
+            case .magnet:
+                PhysicalMagnet()
+                    .frame(width: 15, height: 15)
+                    .position(x: proxy.size.width * 0.74, y: 1)
+            }
         }
+    }
+
+    private func tapePosition(in size: CGSize) -> CGPoint {
+        let checksum = memory.id.uuidString.unicodeScalars.reduce(0) { ($0 + Int($1.value)) % 3 }
+        let x: CGFloat = checksum == 0 ? size.width * 0.30 : (checksum == 1 ? size.width * 0.50 : size.width * 0.70)
+        return CGPoint(x: x, y: 0)
     }
 
     private var handwriting: String {
@@ -336,7 +408,7 @@ private struct PhysicalMagnet: View {
     var body: some View {
         Circle().fill(RadialGradient(colors: [.white.opacity(0.62), Color(red: 111/255, green: 129/255, blue: 137/255), Color(red: 62/255, green: 72/255, blue: 76/255)], center: .topLeading, startRadius: 1, endRadius: 12))
             .overlay(Circle().stroke(.white.opacity(0.24), lineWidth: 0.7))
-            .shadow(color: .black.opacity(0.25), radius: 2, x: 1, y: 2)
+            .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
     }
 }
 

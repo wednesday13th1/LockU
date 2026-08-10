@@ -88,7 +88,21 @@ struct LockUThemeSelection: Codable, Equatable, Sendable {
 }
 
 enum LockUMicroDecoration: String, Codable, CaseIterable, Sendable {
-    case dateStamp, tinyRibbon, tinyFlower, handwrittenHeart, tinyStar, dust, scribble, rec, pixelMark
+    case dateStamp, tapeAccent, tinyHandwriting, tinyRibbon, tinyFlower, handwrittenHeart, tinyStar, dust, softGlow
+    case scribble, rec, pixelMark, tinyPixelHeart, roughUnderline, smallArrow, handwrittenLOL
+}
+
+struct LockUDecorationProfile: Equatable, Sendable {
+    let maximumCount: Int
+    let allowsStars: Bool
+    let allowsRibbon: Bool
+    let allowsFlower: Bool
+    let allowsHandwrittenHeart: Bool
+    let allowsDust: Bool
+    let allowsTimestamp: Bool
+    let allowsREC: Bool
+    let allowsScribble: Bool
+    let rotationRange: ClosedRange<Double>
 }
 
 struct LockUAtmosphereMotionProfile: Equatable, Sendable {
@@ -129,6 +143,119 @@ struct LockUThemeProfile: Equatable, Sendable {
     let motion: LockUAtmosphereMotionProfile
     let sunlightOpacity: Double
     let hazeOpacity: Double
+
+    var largeCloudOpacity: Double {
+        switch theme { case .aoharu: 0.52; case .sweet: 0.48; case .dreamy: 0.30; case .quiet: 0.56; case .chaotic: 0.42 }
+    }
+    var mediumCloudOpacity: Double {
+        switch theme { case .aoharu: 0.46; case .sweet: 0.40; case .dreamy: 0.26; case .quiet: 0.48; case .chaotic: 0.36 }
+    }
+    var distantCloudOpacity: Double {
+        switch theme { case .aoharu: 0.30; case .sweet: 0.24; case .dreamy: 0.18; case .quiet: 0.34; case .chaotic: 0.22 }
+    }
+    var sunlightColor: Color { lighting.directionalLight }
+    var hazeColor: Color {
+        switch theme {
+        case .aoharu: Color(red: 225/255, green: 241/255, blue: 250/255)
+        case .sweet: Color(red: 248/255, green: 221/255, blue: 210/255)
+        case .dreamy: Color(red: 202/255, green: 206/255, blue: 227/255)
+        case .quiet: Color(red: 225/255, green: 229/255, blue: 229/255)
+        case .chaotic: Color(red: 237/255, green: 240/255, blue: 232/255)
+        }
+    }
+    var lockerReflectionColor: Color { lighting.ambientReflection }
+    var lockerReflectionOpacity: Double {
+        switch theme { case .aoharu: 0.06; case .sweet: 0.065; case .dreamy: 0.07; case .quiet: 0.035; case .chaotic: 0.045 }
+    }
+    var interfacePressedTint: Color {
+        switch theme {
+        case .aoharu: Color(red: 86/255, green: 143/255, blue: 175/255)
+        case .sweet: Color(red: 191/255, green: 131/255, blue: 149/255)
+        case .dreamy: Color(red: 127/255, green: 130/255, blue: 170/255)
+        case .quiet: Color(red: 104/255, green: 125/255, blue: 134/255)
+        case .chaotic: Color(red: 86/255, green: 118/255, blue: 137/255)
+        }
+    }
+    var interfaceGlassTint: Color { glassTint.opacity(1) }
+    var interfaceGlassTintOpacity: Double {
+        switch theme { case .aoharu: 0.04; case .sweet: 0.08; case .dreamy: 0.06; case .quiet: 0.025; case .chaotic: 0.035 }
+    }
+    var paperColor: Color { memoryAccent.paper }
+    var tapePrimary: Color { memoryAccent.tape }
+    var tapeSecondary: Color {
+        switch theme {
+        case .aoharu: Color(red: 231/255, green: 241/255, blue: 245/255)
+        case .sweet: Color(red: 232/255, green: 214/255, blue: 223/255)
+        case .dreamy: Color(red: 221/255, green: 217/255, blue: 231/255)
+        case .quiet: Color(red: 233/255, green: 231/255, blue: 226/255)
+        case .chaotic: Color(red: 197/255, green: 219/255, blue: 226/255)
+        }
+    }
+    var annotationColor: Color {
+        switch theme {
+        case .aoharu: Color(red: 99/255, green: 135/255, blue: 160/255)
+        case .sweet: Color(red: 173/255, green: 121/255, blue: 134/255)
+        case .dreamy: Color(red: 118/255, green: 122/255, blue: 152/255)
+        case .quiet: Color(red: 123/255, green: 133/255, blue: 137/255)
+        case .chaotic: Color(red: 47/255, green: 53/255, blue: 55/255)
+        }
+    }
+    var decorationProfile: LockUDecorationProfile {
+        switch theme {
+        case .aoharu: .init(maximumCount: 5, allowsStars: true, allowsRibbon: false, allowsFlower: false, allowsHandwrittenHeart: false, allowsDust: false, allowsTimestamp: true, allowsREC: false, allowsScribble: false, rotationRange: 0...0)
+        case .sweet: .init(maximumCount: 4, allowsStars: true, allowsRibbon: true, allowsFlower: true, allowsHandwrittenHeart: true, allowsDust: false, allowsTimestamp: false, allowsREC: false, allowsScribble: false, rotationRange: 0...0)
+        case .dreamy: .init(maximumCount: 6, allowsStars: true, allowsRibbon: false, allowsFlower: false, allowsHandwrittenHeart: false, allowsDust: true, allowsTimestamp: false, allowsREC: false, allowsScribble: false, rotationRange: 0...0)
+        case .quiet: .init(maximumCount: 1, allowsStars: false, allowsRibbon: false, allowsFlower: false, allowsHandwrittenHeart: false, allowsDust: false, allowsTimestamp: false, allowsREC: false, allowsScribble: false, rotationRange: 0...0)
+        case .chaotic: .init(maximumCount: 4, allowsStars: true, allowsRibbon: false, allowsFlower: false, allowsHandwrittenHeart: true, allowsDust: false, allowsTimestamp: true, allowsREC: true, allowsScribble: true, rotationRange: -3...3)
+        }
+    }
+    var largeCloudDuration: Double { motion.largeCloudDuration }
+    var mediumCloudDuration: Double { motion.mediumCloudDuration }
+    var distantCloudDuration: Double { motion.distantCloudDuration }
+    var ambientBreathingDuration: Double? { motion.glowDuration > 0 ? motion.glowDuration : nil }
+}
+
+enum LockUThemeTransitionTokens {
+    static let sky = (delay: 0.0, duration: 0.38)
+    static let ambient = (delay: 0.08, duration: 0.40)
+    static let interface = (delay: 0.14, duration: 0.28)
+    static let memoryMaterial = (delay: 0.20, duration: 0.32)
+    static let oldDecoration = (delay: 0.30, duration: 0.28, endScale: 0.96)
+    static let newDecoration = (delay: 0.38, duration: 0.34, startScale: 0.96)
+    static let totalDuration = 0.72
+    static let reduceMotionCrossfadeDuration = 0.22
+}
+
+enum LockUThemePickerTokens {
+    static let buttonTapSize: CGFloat = 44
+    static let buttonVisualSize: CGFloat = 20
+    static let sheetHeightFraction: CGFloat = 0.46
+    static let sheetCornerRadius: CGFloat = 28
+    static let sheetHorizontalPadding: CGFloat = 18
+    static let sheetTopPadding: CGFloat = 16
+    static let cardGap: CGFloat = 12
+    static let cardCornerRadius: CGFloat = 20
+    static let cardHeight: CGFloat = 142
+    static let cardPreviewHeight: CGFloat = 96
+    static let selectedOutlineWidth: CGFloat = 1
+    static let selectedOutlineOpacity = 0.85
+    static let selectedShadowOpacity = 0.10
+    static let unselectedOpacity = 0.82
+    static let checkmarkMaximumSize: CGFloat = 16
+    static let segmentedHeight: CGFloat = 36
+    static let segmentedBackgroundOpacity = 0.34
+    static let segmentedSelectedBackgroundOpacity = 0.72
+}
+
+enum LockUThemeApplicationScope: String, Codable, CaseIterable, Sendable {
+    case today, preferredDefault
+    static let initial: Self = .today
+}
+
+enum LockUChaoticAccentTokens {
+    static let markerBlue = Color(red: 82/255, green: 127/255, blue: 154/255)
+    static let markerRed = Color(red: 185/255, green: 100/255, blue: 100/255)
+    static let timestampCream = Color(red: 231/255, green: 215/255, blue: 183/255)
 }
 
 enum LockUThemeCatalog {
@@ -141,63 +268,63 @@ enum LockUThemeCatalog {
                 theme: theme, title: "Aoharu", reflectionCopy: "keep the air of today",
                 skyStops: WorldProfile.afterSchool.skyStops,
                 cloudTint: LockUDesign.Color.cloudWhite,
-                interfaceTint: LockUDesign.Color.schoolNavy,
-                glassTint: Color.white.opacity(0.12),
+                interfaceTint: Color(red: 105/255, green: 183/255, blue: 217/255),
+                glassTint: .white,
                 lighting: LockULightingProfile(ambientReflection: LockUDesign.Color.worldSkyReflection, directionalLight: LockUDesign.Color.sunlight, directionalOpacity: 0.18, rightShadeOpacity: 0.06, isDiffuse: false),
-                memoryAccent: LockUMemoryAccentProfile(paper: LockUSceneTokens.Material.paperBase, tape: Color(red: 190/255, green: 220/255, blue: 232/255), borderOpacity: 0.62, livingMemoryBloom: 0, maximumDecorationCount: 2),
-                microDecorations: [.dateStamp],
-                motion: LockUAtmosphereMotionProfile(largeCloudDuration: 58, mediumCloudDuration: 49, distantCloudDuration: 82, glowDuration: 23, driftDistance: 18),
+                memoryAccent: LockUMemoryAccentProfile(paper: LockUSceneTokens.Material.paperBase, tape: Color(red: 216/255, green: 234/255, blue: 244/255), borderOpacity: 0.62, livingMemoryBloom: 0, maximumDecorationCount: 5),
+                microDecorations: [.tinyStar, .tapeAccent, .tinyHandwriting],
+                motion: LockUAtmosphereMotionProfile(largeCloudDuration: 58, mediumCloudDuration: 48, distantCloudDuration: 82, glowDuration: 23, driftDistance: 18),
                 sunlightOpacity: 0.18, hazeOpacity: 0.045
             )
         case .sweet:
             return LockUThemeProfile(
                 theme: theme, title: "Sweet", reflectionCopy: "keep it softly",
-                skyStops: [Color(red: 0.72, green: 0.83, blue: 0.90), Color(red: 0.83, green: 0.89, blue: 0.91), Color(red: 0.94, green: 0.91, blue: 0.87), Color(red: 0.98, green: 0.91, blue: 0.87), Color(red: 0.99, green: 0.96, blue: 0.90)],
-                cloudTint: Color(red: 1, green: 0.98, blue: 0.94),
-                interfaceTint: Color(red: 0.42, green: 0.34, blue: 0.34),
-                glassTint: Color(red: 1, green: 0.85, blue: 0.80).opacity(0.09),
-                lighting: LockULightingProfile(ambientReflection: Color(red: 1, green: 0.73, blue: 0.61), directionalLight: Color(red: 1, green: 0.88, blue: 0.75), directionalOpacity: 0.13, rightShadeOpacity: 0.045, isDiffuse: false),
-                memoryAccent: LockUMemoryAccentProfile(paper: Color(red: 0.98, green: 0.95, blue: 0.88), tape: Color(red: 0.94, green: 0.78, blue: 0.76), borderOpacity: 0.55, livingMemoryBloom: 0.01, maximumDecorationCount: 4),
+                skyStops: [Color(red: 215/255, green: 199/255, blue: 213/255), Color(red: 229/255, green: 213/255, blue: 222/255), Color(red: 242/255, green: 223/255, blue: 223/255), Color(red: 247/255, green: 231/255, blue: 219/255), Color(red: 250/255, green: 241/255, blue: 230/255)],
+                cloudTint: Color(red: 1, green: 249/255, blue: 243/255),
+                interfaceTint: Color(red: 213/255, green: 154/255, blue: 170/255),
+                glassTint: Color(red: 247/255, green: 216/255, blue: 223/255),
+                lighting: LockULightingProfile(ambientReflection: Color(red: 244/255, green: 189/255, blue: 170/255), directionalLight: Color(red: 1, green: 215/255, blue: 186/255), directionalOpacity: 0.15, rightShadeOpacity: 0.045, isDiffuse: false),
+                memoryAccent: LockUMemoryAccentProfile(paper: Color(red: 250/255, green: 243/255, blue: 233/255), tape: Color(red: 243/255, green: 206/255, blue: 212/255), borderOpacity: 0.55, livingMemoryBloom: 0.01, maximumDecorationCount: 4),
                 microDecorations: [.tinyRibbon, .tinyFlower, .handwrittenHeart],
                 motion: LockUAtmosphereMotionProfile(largeCloudDuration: 66, mediumCloudDuration: 54, distantCloudDuration: 88, glowDuration: 25, driftDistance: 14),
-                sunlightOpacity: 0.13, hazeOpacity: 0.06
+                sunlightOpacity: 0.15, hazeOpacity: 0.06
             )
         case .dreamy:
             return LockUThemeProfile(
                 theme: theme, title: "Dreamy", reflectionCopy: "let it feel a little distant",
-                skyStops: [Color(red: 0.34, green: 0.47, blue: 0.64), Color(red: 0.45, green: 0.56, blue: 0.70), Color(red: 0.58, green: 0.64, blue: 0.75), Color(red: 0.70, green: 0.72, blue: 0.80), Color(red: 0.82, green: 0.81, blue: 0.84)],
-                cloudTint: Color(red: 0.88, green: 0.89, blue: 0.95),
-                interfaceTint: Color(red: 0.22, green: 0.27, blue: 0.42),
-                glassTint: Color(red: 0.68, green: 0.66, blue: 0.90).opacity(0.09),
-                lighting: LockULightingProfile(ambientReflection: Color(red: 0.55, green: 0.65, blue: 0.88), directionalLight: Color(red: 0.76, green: 0.82, blue: 1), directionalOpacity: 0.09, rightShadeOpacity: 0.08, isDiffuse: true),
-                memoryAccent: LockUMemoryAccentProfile(paper: LockUSceneTokens.Material.paperBase, tape: Color(red: 0.72, green: 0.75, blue: 0.88), borderOpacity: 0.52, livingMemoryBloom: 0.05, maximumDecorationCount: 3),
-                microDecorations: [.tinyStar, .dust],
-                motion: LockUAtmosphereMotionProfile(largeCloudDuration: 78, mediumCloudDuration: 68, distantCloudDuration: 92, glowDuration: 28, driftDistance: 10),
-                sunlightOpacity: 0.08, hazeOpacity: 0.075
+                skyStops: [Color(red: 102/255, green: 115/255, blue: 142/255), Color(red: 120/255, green: 135/255, blue: 165/255), Color(red: 150/255, green: 163/255, blue: 190/255), Color(red: 183/255, green: 189/255, blue: 209/255), Color(red: 216/255, green: 214/255, blue: 223/255)],
+                cloudTint: Color(red: 220/255, green: 226/255, blue: 236/255),
+                interfaceTint: Color(red: 151/255, green: 153/255, blue: 190/255),
+                glassTint: Color(red: 169/255, green: 174/255, blue: 208/255),
+                lighting: LockULightingProfile(ambientReflection: Color(red: 167/255, green: 169/255, blue: 210/255), directionalLight: Color(red: 199/255, green: 209/255, blue: 229/255), directionalOpacity: 0.05, rightShadeOpacity: 0.08, isDiffuse: true),
+                memoryAccent: LockUMemoryAccentProfile(paper: Color(red: 242/255, green: 240/255, blue: 237/255), tape: Color(red: 200/255, green: 200/255, blue: 219/255), borderOpacity: 0.52, livingMemoryBloom: 0.08, maximumDecorationCount: 6),
+                microDecorations: [.tinyStar, .dust, .softGlow],
+                motion: LockUAtmosphereMotionProfile(largeCloudDuration: 76, mediumCloudDuration: 66, distantCloudDuration: 92, glowDuration: 26, driftDistance: 10),
+                sunlightOpacity: 0.05, hazeOpacity: 0.065
             )
         case .quiet:
             return LockUThemeProfile(
                 theme: theme, title: "Quiet", reflectionCopy: "just keep it as it was",
-                skyStops: [Color(red: 0.61, green: 0.68, blue: 0.72), Color(red: 0.68, green: 0.74, blue: 0.77), Color(red: 0.76, green: 0.80, blue: 0.81), Color(red: 0.84, green: 0.86, blue: 0.85), Color(red: 0.91, green: 0.91, blue: 0.88)],
-                cloudTint: Color(red: 0.91, green: 0.92, blue: 0.91),
-                interfaceTint: Color(red: 0.29, green: 0.34, blue: 0.36),
-                glassTint: Color.white.opacity(0.055),
-                lighting: LockULightingProfile(ambientReflection: Color(red: 0.78, green: 0.82, blue: 0.83), directionalLight: .white, directionalOpacity: 0.035, rightShadeOpacity: 0.035, isDiffuse: true),
-                memoryAccent: LockUMemoryAccentProfile(paper: LockUSceneTokens.Material.paperBase, tape: Color(red: 0.83, green: 0.84, blue: 0.82), borderOpacity: 0.34, livingMemoryBloom: 0, maximumDecorationCount: 0),
+                skyStops: [Color(red: 174/255, green: 187/255, blue: 195/255), Color(red: 190/255, green: 200/255, blue: 206/255), Color(red: 206/255, green: 213/255, blue: 217/255), Color(red: 219/255, green: 223/255, blue: 223/255), Color(red: 230/255, green: 231/255, blue: 228/255)],
+                cloudTint: Color(red: 233/255, green: 236/255, blue: 236/255),
+                interfaceTint: Color(red: 127/255, green: 150/255, blue: 159/255),
+                glassTint: .white,
+                lighting: LockULightingProfile(ambientReflection: Color(red: 243/255, green: 244/255, blue: 242/255), directionalLight: Color(red: 242/255, green: 243/255, blue: 241/255), directionalOpacity: 0.025, rightShadeOpacity: 0.035, isDiffuse: true),
+                memoryAccent: LockUMemoryAccentProfile(paper: Color(red: 244/255, green: 242/255, blue: 237/255), tape: Color(red: 221/255, green: 220/255, blue: 215/255), borderOpacity: 0.34, livingMemoryBloom: 0, maximumDecorationCount: 1),
                 microDecorations: [],
-                motion: LockUAtmosphereMotionProfile(largeCloudDuration: 110, mediumCloudDuration: 96, distantCloudDuration: 130, glowDuration: 45, driftDistance: 6),
+                motion: LockUAtmosphereMotionProfile(largeCloudDuration: 94, mediumCloudDuration: 84, distantCloudDuration: 110, glowDuration: 0, driftDistance: 6),
                 sunlightOpacity: 0.025, hazeOpacity: 0.035
             )
         case .chaotic:
             return LockUThemeProfile(
                 theme: theme, title: "Chaotic", reflectionCopy: "keep the mess too",
-                skyStops: [Color(red: 0.42, green: 0.69, blue: 0.85), Color(red: 0.58, green: 0.78, blue: 0.88), Color(red: 0.71, green: 0.84, blue: 0.89), Color(red: 0.86, green: 0.88, blue: 0.83), Color(red: 0.95, green: 0.88, blue: 0.76)],
-                cloudTint: LockUDesign.Color.cloudWhite,
-                interfaceTint: Color(red: 0.16, green: 0.27, blue: 0.32),
-                glassTint: Color(red: 0.45, green: 0.77, blue: 0.83).opacity(0.08),
-                lighting: LockULightingProfile(ambientReflection: Color(red: 0.42, green: 0.78, blue: 0.85), directionalLight: Color(red: 1, green: 0.79, blue: 0.51), directionalOpacity: 0.14, rightShadeOpacity: 0.065, isDiffuse: false),
-                memoryAccent: LockUMemoryAccentProfile(paper: LockUSceneTokens.Material.paperBase, tape: Color(red: 0.75, green: 0.84, blue: 0.54), borderOpacity: 0.58, livingMemoryBloom: 0.01, maximumDecorationCount: 4),
-                microDecorations: [.dateStamp, .scribble, .rec, .pixelMark],
+                skyStops: [Color(red: 129/255, green: 180/255, blue: 215/255), Color(red: 161/255, green: 200/255, blue: 224/255), Color(red: 192/255, green: 217/255, blue: 232/255), Color(red: 219/255, green: 232/255, blue: 237/255), Color(red: 238/255, green: 236/255, blue: 230/255)],
+                cloudTint: Color(red: 247/255, green: 245/255, blue: 238/255),
+                interfaceTint: Color(red: 104/255, green: 141/255, blue: 162/255),
+                glassTint: .white,
+                lighting: LockULightingProfile(ambientReflection: Color(red: 169/255, green: 209/255, blue: 224/255), directionalLight: Color(red: 1, green: 241/255, blue: 215/255), directionalOpacity: 0.12, rightShadeOpacity: 0.065, isDiffuse: false),
+                memoryAccent: LockUMemoryAccentProfile(paper: Color(red: 244/255, green: 240/255, blue: 230/255), tape: Color(red: 214/255, green: 210/255, blue: 199/255), borderOpacity: 0.58, livingMemoryBloom: 0.01, maximumDecorationCount: 4),
+                microDecorations: [.rec, .dateStamp, .tinyPixelHeart, .scribble, .roughUnderline, .smallArrow, .tinyStar, .handwrittenLOL],
                 motion: LockUAtmosphereMotionProfile(largeCloudDuration: 49, mediumCloudDuration: 43, distantCloudDuration: 72, glowDuration: 20, driftDistance: 16),
                 sunlightOpacity: 0.14, hazeOpacity: 0.04
             )
@@ -224,19 +351,19 @@ struct LockUThemeAtmospherePreview: View {
     }
 }
 
-struct LockerThemeLightingOverlay: View {
+struct LockerAmbientReflection: View {
     let theme: LockUTheme
 
     var body: some View {
-        let lighting = LockUThemeCatalog.profile(for: theme).lighting
+        let profile = LockUThemeCatalog.profile(for: theme)
         ZStack {
             LinearGradient(
-                colors: [lighting.ambientReflection.opacity(lighting.isDiffuse ? 0.055 : 0.085), .clear],
+                colors: [profile.lockerReflectionColor.opacity(profile.lockerReflectionOpacity), .clear],
                 startPoint: .topLeading,
                 endPoint: .center
             )
             LinearGradient(
-                colors: [.clear, .black.opacity(lighting.rightShadeOpacity)],
+                colors: [.clear, .black.opacity(profile.lighting.rightShadeOpacity)],
                 startPoint: .center,
                 endPoint: .trailing
             )
@@ -246,6 +373,8 @@ struct LockerThemeLightingOverlay: View {
         .accessibilityHidden(true)
     }
 }
+
+typealias LockerThemeLightingOverlay = LockerAmbientReflection
 
 enum LockUMemoryStyle: String, Codable, CaseIterable, Sendable {
     case rawPhoto, polaroid, cutout, tinyMemory, livingMemory
@@ -505,6 +634,24 @@ struct WorldProfile: Sendable {
     )
 }
 
+struct LockUWorldThemeCompositor {
+    func compose(theme: LockUThemeProfile, world: WorldProfile) -> WorldProfile {
+        let reference = WorldProfile.afterSchool
+        let sunlightFactor = reference.sunlightOpacity > 0 ? world.sunlightOpacity / reference.sunlightOpacity : 1
+        let hazeDelta = world.hazeOpacity - reference.hazeOpacity
+        return WorldProfile(
+            time: world.time,
+            weather: world.weather,
+            skyStops: theme.skyStops,
+            sunlight: theme.sunlightColor,
+            sunlightOpacity: max(0, min(0.24, theme.sunlightOpacity * sunlightFactor)),
+            hazeOpacity: max(0, min(0.12, theme.hazeOpacity + hazeDelta)),
+            cloudTint: theme.cloudTint,
+            ambientReflection: theme.lockerReflectionColor
+        )
+    }
+}
+
 struct SummerSkyBackground: View {
     let profile: WorldProfile
     let themeProfile: LockUThemeProfile
@@ -517,16 +664,7 @@ struct SummerSkyBackground: View {
     init(profile: WorldProfile = .afterSchool, theme: LockUTheme = .aoharu) {
         let themeProfile = LockUThemeCatalog.profile(for: theme)
         self.themeProfile = themeProfile
-        self.profile = WorldProfile(
-            time: profile.time,
-            weather: profile.weather,
-            skyStops: themeProfile.skyStops,
-            sunlight: themeProfile.lighting.directionalLight,
-            sunlightOpacity: themeProfile.sunlightOpacity,
-            hazeOpacity: themeProfile.hazeOpacity,
-            cloudTint: themeProfile.cloudTint,
-            ambientReflection: themeProfile.lighting.ambientReflection
-        )
+        self.profile = LockUWorldThemeCompositor().compose(theme: themeProfile, world: profile)
     }
 
     var body: some View {
@@ -537,10 +675,13 @@ struct SummerSkyBackground: View {
                 largeDrifting: largeCloudDrifting,
                 mediumDrifting: mediumCloudDrifting,
                 distantDrifting: distantCloudDrifting,
-                driftDistance: themeProfile.motion.driftDistance
+                driftDistance: themeProfile.motion.driftDistance,
+                largeOpacity: themeProfile.largeCloudOpacity,
+                mediumOpacity: themeProfile.mediumCloudOpacity,
+                distantOpacity: themeProfile.distantCloudOpacity
             )
             WorldSunlightLayer(profile: profile, breathing: breathing)
-            WorldAtmosphericHaze(profile: profile, breathing: breathing)
+            WorldAtmosphericHaze(profile: profile, hazeColor: themeProfile.hazeColor, breathing: breathing)
             WorldAmbientReflection(profile: profile)
         }
         .ignoresSafeArea()
@@ -549,7 +690,9 @@ struct SummerSkyBackground: View {
             withAnimation(.linear(duration: themeProfile.motion.largeCloudDuration).repeatForever(autoreverses: true)) { largeCloudDrifting = true }
             withAnimation(.linear(duration: themeProfile.motion.mediumCloudDuration).repeatForever(autoreverses: true)) { mediumCloudDrifting = true }
             withAnimation(.linear(duration: themeProfile.motion.distantCloudDuration).repeatForever(autoreverses: true)) { distantCloudDrifting = true }
-            withAnimation(.easeInOut(duration: themeProfile.motion.glowDuration).repeatForever(autoreverses: true)) { breathing = true }
+            if themeProfile.motion.glowDuration > 0 {
+                withAnimation(.easeInOut(duration: themeProfile.motion.glowDuration).repeatForever(autoreverses: true)) { breathing = true }
+            }
         }
     }
 }
@@ -586,15 +729,18 @@ private struct WorldCloudLayer: View {
     let mediumDrifting: Bool
     let distantDrifting: Bool
     let driftDistance: CGFloat
+    let largeOpacity: Double
+    let mediumOpacity: Double
+    let distantOpacity: Double
     var body: some View {
         GeometryReader { p in
             ZStack {
-                NaturalCloud().fill(profile.cloudTint.opacity(0.52)).frame(width: 260, height: 92)
+                NaturalCloud().fill(profile.cloudTint.opacity(largeOpacity)).frame(width: 260, height: 92)
                     .overlay(NaturalCloud().fill(Color(red: 187/255, green: 214/255, blue: 232/255).opacity(0.10)))
                     .blur(radius: 3.5).position(x: -14 + (largeDrifting ? driftDistance : 0), y: p.size.height * 0.20)
-                NaturalCloud().fill(.white.opacity(0.46)).frame(width: 190, height: 66).blur(radius: 4)
+                NaturalCloud().fill(profile.cloudTint.opacity(mediumOpacity)).frame(width: 190, height: 66).blur(radius: 4)
                     .scaleEffect(x: -1, y: 1).position(x: p.size.width + 12 + (mediumDrifting ? -driftDistance * 0.78 : 0), y: p.size.height * 0.36)
-                NaturalCloud().fill(profile.cloudTint.opacity(0.30)).frame(width: 145, height: 45).blur(radius: 5)
+                NaturalCloud().fill(profile.cloudTint.opacity(distantOpacity)).frame(width: 145, height: 45).blur(radius: 5)
                     .position(x: p.size.width * 0.12 + (distantDrifting ? driftDistance * 0.60 : 0), y: p.size.height * 0.74)
             }
         }.allowsHitTesting(false).accessibilityHidden(true)
@@ -620,9 +766,11 @@ private struct WorldSunlightLayer: View {
 }
 
 private struct WorldAtmosphericHaze: View {
-    let profile: WorldProfile; let breathing: Bool
+    let profile: WorldProfile
+    let hazeColor: Color
+    let breathing: Bool
     var body: some View {
-        LinearGradient(colors: [.white.opacity(0.01), Color(red: 225/255, green: 241/255, blue: 250/255).opacity(breathing ? profile.hazeOpacity + 0.01 : profile.hazeOpacity)], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: [.white.opacity(0.01), hazeColor.opacity(breathing ? profile.hazeOpacity + 0.01 : profile.hazeOpacity)], startPoint: .top, endPoint: .bottom)
             .blendMode(.screen).allowsHitTesting(false)
     }
 }
