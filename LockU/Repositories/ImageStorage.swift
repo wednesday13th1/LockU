@@ -21,7 +21,11 @@ final class MemoryImageStorage: MemoryImageStoring {
         guard let data = image.pngData() else { throw LockUStorageError.invalidImage }
         return try save(data, fileName: LockUFileNaming.memory(id: id, extension: "png"))
     }
-    func load(fileName: String) -> UIImage? { UIImage(contentsOfFile: directory.appendingPathComponent(fileName).path) }
+    func load(fileName: String) -> UIImage? {
+        let url = directory.appendingPathComponent(fileName)
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return UIImage(contentsOfFile: url.path)
+    }
     func delete(fileName: String) throws { let url = directory.appendingPathComponent(fileName); if fileManager.fileExists(atPath: url.path) { try fileManager.removeItem(at: url) } }
     func exists(fileName: String) -> Bool { fileManager.fileExists(atPath: directory.appendingPathComponent(fileName).path) }
     private func save(_ data: Data, fileName: String) throws -> String { try data.write(to: directory.appendingPathComponent(fileName), options: [.atomic]); return fileName }
@@ -42,7 +46,11 @@ final class DecorationImageStorage: DecorationImageStoring {
         guard let data = image.pngData() else { throw LockUStorageError.invalidImage }
         let name = LockUFileNaming.decoration(id: id); try data.write(to: directory.appendingPathComponent(name), options: [.atomic]); return name
     }
-    func load(fileName: String) -> UIImage? { UIImage(contentsOfFile: directory.appendingPathComponent(fileName).path) }
+    func load(fileName: String) -> UIImage? {
+        let url = directory.appendingPathComponent(fileName)
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return UIImage(contentsOfFile: url.path)
+    }
     func delete(fileName: String) throws { let url = directory.appendingPathComponent(fileName); if fileManager.fileExists(atPath: url.path) { try fileManager.removeItem(at: url) } }
     func exists(fileName: String) -> Bool { fileManager.fileExists(atPath: directory.appendingPathComponent(fileName).path) }
 }
@@ -73,7 +81,10 @@ final class BackgroundImageStorage: BackgroundImageStoring {
             else { try fileManager.moveItem(at: temporaryURL, to: currentURL) }
         } catch { try? fileManager.removeItem(at: temporaryURL); throw error }
     }
-    func load() -> UIImage? { UIImage(contentsOfFile: currentURL.path) }
+    func load() -> UIImage? {
+        guard fileManager.fileExists(atPath: currentURL.path) else { return nil }
+        return UIImage(contentsOfFile: currentURL.path)
+    }
     func exists() -> Bool { fileManager.fileExists(atPath: currentURL.path) }
     func delete() throws { if exists() { try fileManager.removeItem(at: currentURL) } }
 }

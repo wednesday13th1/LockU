@@ -40,14 +40,15 @@ final class MemoryRepository: ObservableObject {
         filterID: String? = nil,
         weather: WeatherSnapshot? = nil,
         captureMode: CaptureMode = .photoLibrary,
-        imageStyle: MemoryImageStyle = .original
+        imageStyle: MemoryImageStyle = .original,
+        dailyFilm: DailyFilm? = nil
     ) throws -> MemoryRecord {
-        try captureWorkflow.execute(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle)).memory
+        try captureWorkflow.execute(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm)).memory
     }
 
     @discardableResult
     func importLegacyImage(_ image: UIImage, createdAt: Date) throws -> MemoryRecord {
-        try createImageRecord(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: nil, weather: nil, captureMode: .legacy, imageStyle: .original), enforceDailyLimit: false)
+        try createImageRecord(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: nil, weather: nil, captureMode: .legacy, imageStyle: .original, dailyFilm: nil), enforceDailyLimit: false)
     }
 
     func createImageRecord(

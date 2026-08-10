@@ -6,35 +6,8 @@ struct LockerBottomShelfView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            HStack(alignment: .bottom, spacing: max(7, proxy.size.width * 0.02)) {
-                LockerBookSpineView(title: monthTitle, color: LockUDesign.Color.notebookPaper)
-                    .frame(width: min(102, proxy.size.width * 0.32), height: 34)
-                    .rotationEffect(.degrees(-1.2))
-                .onTapGesture {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    appModel.selectedTab = .book
-                }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityLabel("Open Memory Book")
-
-                Spacer(minLength: max(10, proxy.size.width * 0.05))
-
-                LockerCameraButton {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    appModel.selectedTab = .camera
-                }
-                .frame(width: min(88, proxy.size.width * 0.27))
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 17)
-            .overlay(alignment: .bottom) {
-                PhysicalMetalShelf()
-            }
+            PhysicalMetalShelf().frame(maxHeight: .infinity, alignment: .bottom)
         }
-    }
-
-    private var monthTitle: String {
-        Date.now.formatted(.dateTime.month(.wide).year()).uppercased()
     }
 }
 

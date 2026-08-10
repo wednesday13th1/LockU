@@ -15,9 +15,9 @@ struct LockUBottomBar: View {
         .frame(maxWidth: 520)
         .frame(height: 74)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26))
-        .background(.white.opacity(0.66), in: RoundedRectangle(cornerRadius: 28))
+        .background(.white.opacity(0.84), in: RoundedRectangle(cornerRadius: 28))
         .overlay {
-            RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.10), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.35), lineWidth: 0.5)
         }
         .shadow(color: .black.opacity(0.055), radius: 12, y: 5)
         .padding(.horizontal, 20)
@@ -53,18 +53,18 @@ struct LockUBottomBar: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(Color(red: 82/255, green: 105/255, blue: 115/255).opacity(0.72))
-                    .frame(width: 64, height: 64)
-                    .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1.5))
+                    .fill(Color(red: 34/255, green: 137/255, blue: 232/255))
+                    .frame(width: 62, height: 62)
                 Image(systemName: "camera.fill")
                     .font(.system(size: 25, weight: .semibold))
                     .foregroundStyle(.white)
             }
-                .shadow(color: .black.opacity(0.14), radius: 8, y: 4)
+                .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
                 .scaleEffect(selection == .camera ? 1.04 : 1)
                 .animation(LockUDesign.Motion.quick, value: selection)
         }
         .frame(maxWidth: .infinity)
+        .offset(y: -12)
         .accessibilityLabel("Camera")
     }
 }

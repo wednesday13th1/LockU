@@ -132,6 +132,12 @@ struct MemoryBookshelfView: View {
                     .accessibilityLabel(
                         "Memory from \(memory.createdAt.formatted(date: .long, time: .omitted))"
                     )
+                    .contextMenu {
+                        Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        if let filmName = memory.dailyFilmName {
+                            Label(filmName, systemImage: "camera.filters")
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 16)

@@ -15,9 +15,8 @@ struct LockerHomeView: View {
             let maxHeight: CGFloat = isOpen ? 670 : 655
             let lockerHeight = min(maxHeight, proxy.size.height - 104)
             let lockerWidth = min(
-                proxy.size.width - LockUSceneTokens.Home.lockerHorizontalMargin * 2,
-                lockerHeight / LockUSceneTokens.Home.lockerAspectRatio,
-                354
+                proxy.size.width * 0.94,
+                lockerHeight / LockUSceneTokens.Home.lockerAspectRatio
             )
 
             VStack(spacing: LockUSceneTokens.Home.headerToLocker) {
@@ -75,10 +74,13 @@ private struct LockerUtilityBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            Text("LockU")
+                .font(.system(size: 29, weight: .semibold))
+                .tracking(-0.5)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text(Date.now.formatted(.dateTime.month(.abbreviated).day()))
                 .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(Color(red: 48/255, green: 69/255, blue: 87/255).opacity(0.88))
-            Spacer()
+                .frame(maxWidth: .infinity)
             Menu {
                 Button("Share", systemImage: "square.and.arrow.up", action: onShare)
                 Button("Locker Code", systemImage: "number", action: onCode)
@@ -90,7 +92,10 @@ private struct LockerUtilityBar: View {
             }
             .foregroundStyle(Color(red: 48/255, green: 69/255, blue: 87/255).opacity(0.84))
             .accessibilityLabel("Locker menu")
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
+        .foregroundStyle(.white.opacity(0.94))
+        .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
         .frame(height: LockUSceneTokens.Home.headerHeight)
     }
 }

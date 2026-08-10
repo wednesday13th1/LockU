@@ -78,35 +78,8 @@ private struct LockerLightView: View {
 
 struct LockerTopShelfView: View {
     var body: some View {
-        GeometryReader { proxy in
-            HStack(alignment: .bottom, spacing: max(5, proxy.size.width * 0.018)) {
-                miniBook("MEMORY", color: Color(red: 104/255, green: 112/255, blue: 116/255))
-                    .rotationEffect(.degrees(-1.2))
-                miniBook("NOTES", color: Color(red: 129/255, green: 137/255, blue: 139/255))
-                    .frame(height: 41, alignment: .bottom)
-                    .rotationEffect(.degrees(1.6))
-                Spacer(minLength: 4)
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
-            .overlay(alignment: .bottom) {
-                shelf
-            }
-        }
+        VStack { Spacer(minLength: 0); shelf }
         .accessibilityHidden(true)
-    }
-
-    private func miniBook(_ title: String, color: Color) -> some View {
-        Text(title)
-            .font(.system(size: 8, weight: .bold))
-            .foregroundStyle(.white.opacity(0.78))
-            .frame(width: 20, height: 46)
-            .background(NotebookSilhouette().fill(color))
-            .overlay(alignment: .trailing) {
-                Rectangle().fill(Color(red: 229/255, green: 226/255, blue: 216/255)).frame(width: 3).padding(.vertical, 3)
-            }
-            .overlay(alignment: .leading) { Rectangle().fill(.black.opacity(0.18)).frame(width: 2) }
-            .shadow(color: .black.opacity(0.18), radius: 1, y: 1)
     }
 
     private var shelf: some View {
@@ -117,10 +90,6 @@ struct LockerTopShelfView: View {
         }
         .padding(.horizontal, 1.5)
     }
-}
-
-private struct NotebookSilhouette: Shape {
-    func path(in r: CGRect) -> Path { Path { p in p.move(to: CGPoint(x: 1, y: 0)); p.addLine(to: CGPoint(x: r.width-1, y: 1)); p.addLine(to: CGPoint(x: r.width, y: r.height-2)); p.addLine(to: CGPoint(x: 1.5, y: r.height)); p.addQuadCurve(to: CGPoint(x: 1, y: 0), control: CGPoint(x: -0.4, y: r.height/2)); p.closeSubpath() } }
 }
 
 private struct TrapezoidTopShelf: Shape {

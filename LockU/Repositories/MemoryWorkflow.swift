@@ -24,6 +24,7 @@ struct CaptureMemoryRequest {
     let weather: WeatherSnapshot?
     let captureMode: CaptureMode
     let imageStyle: MemoryImageStyle
+    let dailyFilm: DailyFilm?
 }
 
 struct CaptureMemoryResult { let memory: MemoryRecord }

@@ -9,44 +9,43 @@ struct LockerMemoryBoardView: View {
     @State private var selectedMemoryID: UUID?
 
     private var recentMemories: [MemoryRecord] {
-        Array(memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }.prefix(5))
+        Array(memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }.prefix(21))
     }
 
     var body: some View {
         GeometryReader { proxy in
+            let placements = DeterministicMemoryWallPlacementEngine().layout(memories: recentMemories, containerSize: proxy.size)
             ZStack {
                 boardSurface
 
                 if recentMemories.isEmpty {
-                    LockerMemoCardView(text: "a day to remember", tint: LockUDesign.Color.notebookPaper)
-                        .frame(width: min(120, proxy.size.width * 0.39), height: 56)
-                        .position(x: proxy.size.width * 0.25, y: proxy.size.height * 0.18)
-                        .rotationEffect(.degrees(-1.6))
-                    LockerEmptyStateView {
-                        appModel.selectedTab = .camera
-                    }
-                    .frame(width: min(proxy.size.width * 0.43, 158), height: 190)
-                    .position(x: proxy.size.width * 0.53, y: proxy.size.height * 0.47)
+                    Color.clear
                 } else {
-                    ForEach(Array(recentMemories.enumerated()), id: \.element.id) { index, memory in
-                        MemoryPhysicalView(
-                            memory: memory,
-                            role: memoryRole(for: memory, index: index),
-                            attachment: attachment(for: memory, index: index),
-                            isSelected: selectedMemoryID == memory.id,
-                            onSelect: { selectedMemoryID = selectedMemoryID == memory.id ? nil : memory.id }
-                        )
-                            .frame(width: photoWidth(for: index, in: proxy.size))
-                            .rotationEffect(.degrees(stableRotation(for: memory.id, index: index)))
-                            .position(position(for: index, in: proxy.size))
-                            .zIndex(selectedMemoryID == memory.id ? LockUSceneTokens.Layer.interface : (LockUSceneTokens.Layer.memory + (index == 0 ? 6 : 4 - Double(index))))
+                    ForEach(placements) { placement in
+                        Group {
+                            if placement.isLiving {
+                                LivingMemoryView(memory: placement.memory)
+                            } else {
+                                MemoryPhysicalView(
+                                    memory: placement.memory,
+                                    role: memoryRole(for: placement.memory, index: placement.index),
+                                    attachment: placement.tapeStyle,
+                                    isSelected: selectedMemoryID == placement.id,
+                                    onSelect: { selectedMemoryID = selectedMemoryID == placement.id ? nil : placement.id }
+                                )
+                            }
+                        }
+                            .frame(width: placement.width)
+                            .rotationEffect(.degrees(placement.rotation))
+                            .position(placement.position)
+                            .zIndex(selectedMemoryID == placement.id ? LockUSceneTokens.Layer.interface : LockUSceneTokens.Layer.memory + placement.zIndex)
                             .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 7)
+                            .offset(y: appeared ? 0 : 5)
                             .animation(
-                                reduceMotion ? nil : .easeOut(duration: 0.38).delay(Double(index) * 0.08),
+                                reduceMotion ? nil : .easeOut(duration: 0.35).delay(Double(min(placement.index, 8)) * 0.035),
                                 value: appeared
                             )
-                            .transition(.scale(scale: 0.85).combined(with: .opacity))
+                            .transition(.scale(scale: 0.98).combined(with: .opacity))
                     }
                 }
 
@@ -63,39 +62,6 @@ struct LockerMemoryBoardView: View {
         Color.clear
     }
 
-    private func photoWidth(for index: Int, in size: CGSize) -> CGFloat {
-        let base = min(size.width, 470)
-        switch index {
-        case 0: return min(base * 0.50, 196)
-        case 1, 2: return base * 0.29
-        default: return base * 0.22
-        }
-    }
-
-    private func position(for index: Int, in size: CGSize) -> CGPoint {
-        switch index {
-        case 0:
-            return CGPoint(x: size.width * 0.47, y: size.height * 0.47)
-        case 1:
-            return CGPoint(x: size.width * 0.22, y: size.height * LockUSceneTokens.Home.memoryZoneY.lowerBound)
-        case 2:
-            return CGPoint(x: size.width * 0.78, y: size.height * 0.30)
-        case 3:
-            return CGPoint(x: size.width * 0.25, y: size.height * 0.72)
-        default:
-            return CGPoint(x: size.width * 0.76, y: size.height * LockUSceneTokens.Home.memoryZoneY.upperBound)
-        }
-    }
-
-    private func stableRotation(for id: UUID, index: Int) -> Double {
-        let checksum = id.uuidString.unicodeScalars.reduce(0) {
-            ($0 + Int($1.value)) % 7
-        }
-        let prescribedRotations = [0.6, -1.7, 1.2, -3.2, 2.4]
-        let magnitude = prescribedRotations[index % prescribedRotations.count]
-        return checksum.isMultiple(of: 2) ? magnitude : -magnitude * 0.72
-    }
-
     private func memoryRole(for memory: MemoryRecord, index: Int) -> MemoryVisualRole {
         if memory.isSubjectCutout ?? false { return .cutout }
         if index == 0 { return .hero }
@@ -107,17 +73,118 @@ struct LockerMemoryBoardView: View {
         }
     }
 
-    private func attachment(for memory: MemoryRecord, index: Int) -> MemoryAttachment {
-        let value = memory.id.uuidString.unicodeScalars.reduce(0) { $0 + Int($1.value) } % 20
-        if value < 8 { return .none }
-        if value < 13 { return .maskingTape }
-        if value < 17 { return .clearTape }
-        return .magnet
-    }
 }
 
 enum MemoryVisualRole { case hero, cheki, digicam, cutout, mini }
 enum MemoryAttachment { case none, clearTape, maskingTape, magnet }
+
+private enum MemoryDensity: Equatable {
+    case empty, early, growing, full, dense
+
+    init(count: Int) {
+        switch count {
+        case 0: self = .empty
+        case 1...4: self = .early
+        case 5...9: self = .growing
+        case 10...15: self = .full
+        default: self = .dense
+        }
+    }
+}
+
+private struct MemoryWallPlacement: Identifiable {
+    let memory: MemoryRecord
+    let index: Int
+    let position: CGPoint
+    let width: CGFloat
+    let rotation: Double
+    let zIndex: Double
+    let tapeStyle: MemoryAttachment
+    let isLiving: Bool
+
+    var id: UUID { memory.id }
+}
+
+private struct DeterministicMemoryWallPlacementEngine {
+    private let anchors: [CGPoint] = [
+        CGPoint(x: 0.50, y: 0.48),
+        CGPoint(x: 0.18, y: 0.18), CGPoint(x: 0.82, y: 0.19),
+        CGPoint(x: 0.15, y: 0.40), CGPoint(x: 0.85, y: 0.40),
+        CGPoint(x: 0.19, y: 0.69), CGPoint(x: 0.81, y: 0.71),
+        CGPoint(x: 0.47, y: 0.14), CGPoint(x: 0.51, y: 0.84),
+        CGPoint(x: 0.11, y: 0.57), CGPoint(x: 0.89, y: 0.59),
+        CGPoint(x: 0.31, y: 0.29), CGPoint(x: 0.69, y: 0.29),
+        CGPoint(x: 0.31, y: 0.84), CGPoint(x: 0.70, y: 0.84),
+        CGPoint(x: 0.10, y: 0.27), CGPoint(x: 0.90, y: 0.27),
+        CGPoint(x: 0.10, y: 0.80), CGPoint(x: 0.90, y: 0.80),
+        CGPoint(x: 0.28, y: 0.53), CGPoint(x: 0.73, y: 0.55)
+    ]
+    private let widthFractions: [CGFloat] = [0.54, 0.25, 0.29, 0.22, 0.31, 0.27, 0.23, 0.20, 0.28, 0.21, 0.26, 0.24, 0.22, 0.28, 0.24, 0.20, 0.22, 0.23, 0.21, 0.20, 0.20]
+
+    func layout(memories: [MemoryRecord], containerSize: CGSize) -> [MemoryWallPlacement] {
+        let density = MemoryDensity(count: memories.count)
+        guard density != .empty, containerSize.width > 0, containerSize.height > 0 else { return [] }
+
+        return memories.enumerated().map { index, memory in
+            let anchor = anchors[index % anchors.count]
+            let width = index == 0
+                ? min(max(containerSize.width * widthFractions[0], 154), 188)
+                : min(max(containerSize.width * widthFractions[index % widthFractions.count], 58), 124)
+            let halfX = width / containerSize.width / 2 + 0.012
+            let estimatedHeight = width * (index % 4 == 0 ? 1.05 : 0.80)
+            let halfY = estimatedHeight / containerSize.height / 2 + 0.012
+            let checksum = memory.id.uuidString.unicodeScalars.reduce(0) { ($0 + Int($1.value)) % 997 }
+            let magnitude = Double(checksum % 31) / 10 + 0.7
+            let direction = anchor.x < 0.42 ? -1.0 : (anchor.x > 0.58 ? 1.0 : (checksum.isMultiple(of: 2) ? -1.0 : 1.0))
+            let tape: MemoryAttachment = checksum % 10 < 2 ? .clearTape : (checksum % 10 < 4 ? .maskingTape : .none)
+
+            return MemoryWallPlacement(
+                memory: memory,
+                index: index,
+                position: CGPoint(
+                    x: min(max(anchor.x, halfX), 1 - halfX) * containerSize.width,
+                    y: min(max(anchor.y, halfY), 1 - halfY) * containerSize.height
+                ),
+                width: width,
+                rotation: index == 0 ? -0.4 : direction * min(magnitude, 4),
+                zIndex: index == 0 ? 40 : Double(memories.count - index),
+                tapeStyle: index == 0 ? .none : tape,
+                isLiving: index == 0
+            )
+        }
+    }
+}
+
+private struct LivingMemoryView: View {
+    @EnvironmentObject private var repository: MemoryRepository
+    @EnvironmentObject private var appModel: LockUAppModel
+    let memory: MemoryRecord
+
+    var body: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            appModel.selectedTab = .book
+        } label: {
+            Group {
+                if let image = repository.image(for: memory) {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    Color(white: 0.48)
+                        .overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.65)))
+                }
+            }
+            .aspectRatio(4 / 3, contentMode: .fit)
+            .clipped()
+            .padding(3)
+            .background(LockUSceneTokens.Material.paperBase)
+            .clipShape(ImperfectPhotoShape())
+            .overlay(ImperfectPhotoShape().stroke(.white.opacity(0.62), lineWidth: 0.8))
+            .shadow(color: .black.opacity(0.23), radius: 7, y: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Latest memory from \(memory.createdAt.formatted(date: .abbreviated, time: .shortened))")
+    }
+}
 
 private enum MemoryDepthLevel {
     case wall, flatPhoto, paper, raisedSticker, shelfObject, camera

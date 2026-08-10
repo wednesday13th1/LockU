@@ -13,6 +13,12 @@ struct CameraCaptureView: View {
     @State private var reviewMode: CaptureMode = .camera
     @State private var isSaving = false
     @State private var flashOverlay = false
+    @State private var dailyFilm = DailyFilmService().film(for: .now)
+    @State private var showFilmReveal = false
+    @State private var captureHasDailyFilm = false
+
+    private let dailyFilmService = DailyFilmService()
+    private let revealStore = DailyFilmRevealStore()
 
     private var capturedToday: Bool {
         memoryRepository.hasMemory(on: .now)
@@ -43,6 +49,7 @@ struct CameraCaptureView: View {
         }
         .onAppear {
             appModel.isCameraPresented = true
+            refreshDailyFilm(allowReveal: true)
             if !capturedToday { camera.prepare() }
         }
         .onDisappear {
@@ -53,7 +60,13 @@ struct CameraCaptureView: View {
         .onChange(of: camera.capturedImage) { _, image in
             guard let image else { return }
             reviewMode = .camera
-            editor.reset(with: image)
+            let film = dailyFilm
+            Task {
+                let processed = await DailyFilmRenderer.shared.renderAsync(image, film: film) ?? image
+                guard camera.capturedImage != nil else { return }
+                captureHasDailyFilm = true
+                editor.reset(with: processed)
+            }
         }
         .onChange(of: camera.permissionStatus) { _, status in
             appModel.cameraPermissionDenied = status == .denied || status == .restricted
@@ -61,12 +74,19 @@ struct CameraCaptureView: View {
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
+                refreshDailyFilm(allowReveal: false)
                 if editor.originalImage == nil, !capturedToday { camera.startSession() }
             case .inactive, .background:
                 camera.stopSession()
             @unknown default:
                 camera.stopSession()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            refreshDailyFilm(allowReveal: false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            refreshDailyFilm(allowReveal: false)
         }
         .alert(
             "Camera",
@@ -107,6 +127,7 @@ struct CameraCaptureView: View {
         ZStack {
             CameraPreviewView(session: camera.session)
                 .ignoresSafeArea(edges: .top)
+                .dailyFilmPreview(dailyFilm)
 
             if !camera.isSessionRunning {
                 ProgressView().tint(.white)
@@ -118,6 +139,11 @@ struct CameraCaptureView: View {
                 bottomControls
             }
 
+            if showFilmReveal {
+                filmReveal
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+
             Color.white
                 .opacity(flashOverlay ? 0.8 : 0)
                 .ignoresSafeArea()
@@ -127,19 +153,33 @@ struct CameraCaptureView: View {
     }
 
     private var topControls: some View {
-        HStack {
-            cameraCircleButton(icon: "xmark") {
-                appModel.selectedTab = .locker
+        VStack(spacing: 8) {
+            HStack {
+                cameraCircleButton(icon: "xmark") {
+                    appModel.selectedTab = .locker
+                }
+                .accessibilityLabel("撮影を閉じる")
+                Spacer()
+                cameraCircleButton(icon: "camera.rotate") {
+                    camera.switchCamera()
+                }
+                .rotationEffect(.degrees(camera.isSwitching ? 180 : 0))
+                .animation(LockUDesign.Motion.soft, value: camera.isSwitching)
+                .disabled(camera.isSwitching || camera.isCapturing)
+                .accessibilityLabel("内カメラと外カメラを切り替える")
             }
-            .accessibilityLabel("撮影を閉じる")
-            Spacer()
-            cameraCircleButton(icon: "camera.rotate") {
-                camera.switchCamera()
+
+            VStack(spacing: 1) {
+                Text("TODAY'S FILM")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(1.6)
+                Text(dailyFilm.name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(0.8)
             }
-            .rotationEffect(.degrees(camera.isSwitching ? 180 : 0))
-            .animation(LockUDesign.Motion.soft, value: camera.isSwitching)
-            .disabled(camera.isSwitching || camera.isCapturing)
-            .accessibilityLabel("内カメラと外カメラを切り替える")
+            .foregroundStyle(.white.opacity(0.88))
+            .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+            .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, 18)
         .padding(.top, 8)
@@ -262,12 +302,14 @@ struct CameraCaptureView: View {
     private func receiveLibraryImage(_ image: UIImage) {
         camera.stopSession()
         reviewMode = .photoLibrary
+        captureHasDailyFilm = false
         editor.reset(with: image)
     }
 
     private func retake() {
         editor.clear()
         camera.capturedImage = nil
+        captureHasDailyFilm = false
         camera.startSession()
     }
 
@@ -288,7 +330,8 @@ struct CameraCaptureView: View {
                 filterID: nil,
                 weather: nil,
                 captureMode: reviewMode,
-                imageStyle: imageStyle
+                imageStyle: imageStyle,
+                dailyFilm: captureHasDailyFilm && reviewMode == .camera ? dailyFilm : nil
             )
             if imageStyle == .cutout {
                 do {
@@ -311,6 +354,40 @@ struct CameraCaptureView: View {
         } catch {
             isSaving = false
             appModel.report(error)
+        }
+    }
+
+    private var filmReveal: some View {
+        VStack(spacing: 8) {
+            Text("TODAY'S FILM")
+                .font(.system(size: 10, weight: .medium))
+                .tracking(2.2)
+            Text(dailyFilm.name)
+                .font(.system(size: 24, weight: .semibold))
+                .tracking(1.2)
+            if let subtitle = dailyFilm.subtitle {
+                Text(subtitle)
+                    .font(.system(size: 11, weight: .regular))
+                    .opacity(0.72)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .background(.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.22), radius: 12, y: 5)
+        .allowsHitTesting(false)
+    }
+
+    private func refreshDailyFilm(allowReveal: Bool) {
+        let now = Date.now
+        dailyFilm = dailyFilmService.film(for: now)
+        guard allowReveal, revealStore.shouldReveal(on: now, service: dailyFilmService) else { return }
+        revealStore.markRevealed(on: now, service: dailyFilmService)
+        withAnimation(.easeOut(duration: 0.24)) { showFilmReveal = true }
+        Task {
+            try? await Task.sleep(for: .seconds(1.05))
+            withAnimation(.easeIn(duration: 0.28)) { showFilmReveal = false }
         }
     }
 }
