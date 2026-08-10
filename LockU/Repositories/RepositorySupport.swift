@@ -1,5 +1,19 @@
 import Foundation
 
+enum LockUError: Error {
+    case storage(StorageFailure)
+    case media(MediaFailure)
+    case policy(PolicyFailure)
+    case migration(MigrationFailure)
+    case recovery(RecoveryFailure)
+}
+
+enum StorageFailure: Error { case metadataReadFailed, metadataWriteFailed, imageWriteFailed, imageDeleteFailed }
+enum MediaFailure: Error { case encodingFailed, missingFile }
+enum PolicyFailure: Error { case dailyLimitReached, invalidPlacement }
+enum MigrationFailure: Error { case unsupportedSchema(Int), conversionFailed }
+enum RecoveryFailure: Error { case inspectionFailed, unsafeRepairRequired }
+
 enum LockUStorageError: LocalizedError {
     case applicationSupportUnavailable
     case invalidImage

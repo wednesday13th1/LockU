@@ -12,21 +12,21 @@ struct LockerHomeView: View {
     var body: some View {
         GeometryReader { proxy in
             let isOpen = appModel.lockerDoorState.isOpenOrOpening
-            let maxHeight: CGFloat = isOpen ? 680 : 640
-            let lockerHeight = min(maxHeight, proxy.size.height - 116)
+            let maxHeight: CGFloat = isOpen ? 670 : 655
+            let lockerHeight = min(maxHeight, proxy.size.height - 104)
             let lockerWidth = min(
-                proxy.size.width * 0.94,
-                lockerHeight * 0.62,
-                LockUDesign.lockerMaxWidth * 1.08
+                proxy.size.width - 60,
+                lockerHeight / 1.90,
+                354
             )
 
-            VStack(spacing: 20) {
+            VStack(spacing: 22) {
                 LockerUtilityBar(
                     onShare: onShare,
                     onCode: onCode,
                     onSettings: onSettings
                 )
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
 
                 ZStack {
                     LockerFrameView(
@@ -47,9 +47,9 @@ struct LockerHomeView: View {
                         .zIndex(10)
                 }
                 .frame(width: lockerWidth, height: lockerHeight)
-                .animation(LockUDesign.Motion.softSpring, value: isOpen)
+                .animation(.easeOut(duration: 0.22), value: isOpen)
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 24)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .opacity(appeared ? 1 : 0.65)
@@ -74,19 +74,19 @@ private struct LockerUtilityBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(Date.now.formatted(.dateTime.month(.abbreviated).day()))
-                .font(.caption.weight(.medium))
-                .foregroundStyle(LockUDesign.Color.schoolNavy)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color(red: 48/255, green: 69/255, blue: 87/255).opacity(0.88))
             Spacer()
             utilityButton("Share", icon: "square.and.arrow.up", action: onShare)
             utilityButton("Locker Code", icon: "number", action: onCode)
             utilityButton("Settings", icon: "gearshape", action: onSettings)
         }
-        .frame(minHeight: 44)
-        .padding(.horizontal, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
-        .background(.white.opacity(0.70), in: RoundedRectangle(cornerRadius: 28))
-        .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.38), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.08), radius: 18, y: 6)
+        .frame(height: 59)
+        .padding(.horizontal, 18)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30))
+        .background(.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 30))
+        .overlay(RoundedRectangle(cornerRadius: 30).stroke(.white.opacity(0.38), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.07), radius: 14, y: 5)
     }
 
     private func utilityButton(
@@ -96,8 +96,8 @@ private struct LockerUtilityBar: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.subheadline.weight(.semibold))
-                .frame(width: 36, height: 36)
+                .font(.system(size: 19, weight: .medium))
+                .frame(width: 44, height: 44)
                 .background(.clear, in: Circle())
         }
         .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.82))
@@ -111,8 +111,8 @@ struct LockerFrameView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let frameWidth = max(15.0, min(17.0, proxy.size.width * 0.03))
-            let topHeight = max(38.0, min(50.0, proxy.size.height * 0.09))
+            let frameWidth = max(12.0, min(14.0, proxy.size.width * 0.038))
+            let topHeight: CGFloat = 16
 
             ZStack {
                 LockerInteriorSurface()
@@ -162,12 +162,12 @@ struct LockerFrameView: View {
                     number: settingsRepository.settings.lockerNumber,
                     ownerName: settingsRepository.settings.ownerName
                 )
-                .frame(width: min(118, proxy.size.width * 0.29))
-                .position(x: frameWidth + min(66, proxy.size.width * 0.17), y: topHeight / 2)
+                .frame(width: min(92, proxy.size.width * 0.27), height: 44)
+                .position(x: proxy.size.width / 2, y: 22)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .clipShape(RoundedRectangle(cornerRadius: 2))
             .overlay {
-                RoundedRectangle(cornerRadius: 7)
+                RoundedRectangle(cornerRadius: 2)
                     .stroke(
                         LinearGradient(
                             colors: [
@@ -190,13 +190,14 @@ struct LockerFrameView: View {
         let end: UnitPoint = axis == .horizontal ? (reversed ? .top : .bottom) : (reversed ? .leading : .trailing)
         return LinearGradient(
             stops: [
-                .init(color: Color(red: 109/255, green: 116/255, blue: 119/255), location: 0),
-                .init(color: Color(red: 173/255, green: 179/255, blue: 181/255), location: 0.18),
-                .init(color: Color(red: 205/255, green: 209/255, blue: 210/255), location: 0.55),
-                .init(color: LockUDesign.Color.deepMetal, location: 0.82),
-                .init(color: Color(red: 98/255, green: 105/255, blue: 108/255), location: 1)
+                .init(color: Color(red: 98/255, green: 107/255, blue: 111/255), location: 0),
+                .init(color: Color(red: 157/255, green: 166/255, blue: 170/255), location: 0.18),
+                .init(color: Color(red: 197/255, green: 204/255, blue: 207/255), location: 0.54),
+                .init(color: Color(red: 125/255, green: 135/255, blue: 139/255), location: 0.82),
+                .init(color: Color(red: 78/255, green: 87/255, blue: 90/255), location: 1)
             ], startPoint: start, endPoint: end
         )
+        .overlay(LinearGradient(colors: [LockUDesign.Color.worldSkyReflection.opacity(0.08), .clear], startPoint: .topLeading, endPoint: .center))
         .overlay(alignment: axis == .horizontal ? .bottom : (reversed ? .leading : .trailing)) {
             Rectangle().fill(.black.opacity(0.23)).frame(width: axis == .vertical ? 2 : nil, height: axis == .horizontal ? 2 : nil)
         }
@@ -215,19 +216,26 @@ private struct LockerInteriorSurface: View {
     var body: some View {
         GeometryReader { proxy in
             let side = proxy.size.width * 0.075
-            let ceiling = max(12, proxy.size.height * 0.035)
+            let ceiling = max(16, min(22, proxy.size.height * 0.032))
             let floor = max(14, proxy.size.height * 0.045)
             ZStack {
-                Color(red: 169/255, green: 175/255, blue: 176/255)
+                Color(red: 149/255, green: 157/255, blue: 159/255)
                     .clipShape(BackWallShape(side: side, ceiling: ceiling, floor: floor))
-                Color(red: 148/255, green: 155/255, blue: 157/255)
+                Color(red: 141/255, green: 149/255, blue: 151/255)
                     .clipShape(LeftInteriorWall(side: side, ceiling: ceiling, floor: floor))
-                Color(red: 133/255, green: 141/255, blue: 144/255)
+                Color(red: 135/255, green: 143/255, blue: 145/255)
                     .clipShape(RightInteriorWall(side: side, ceiling: ceiling, floor: floor))
-                Color(red: 123/255, green: 131/255, blue: 134/255)
+                LinearGradient(colors: [Color(red: 137/255, green: 147/255, blue: 151/255), Color(red: 105/255, green: 114/255, blue: 118/255)], startPoint: .top, endPoint: .bottom)
                     .clipShape(CeilingPlane(side: side, depth: ceiling))
-                Color(red: 140/255, green: 148/255, blue: 150/255)
+                Color(red: 120/255, green: 131/255, blue: 135/255)
                     .clipShape(BottomPlane(side: side, depth: floor))
+
+                PhysicalMetalGrain()
+                    .opacity(0.36)
+                    .padding(.horizontal, 1)
+
+                InteriorLightFalloff(side: side, ceiling: ceiling, floor: floor)
+                InteriorHardwareOverlay(side: side, ceiling: ceiling, floor: floor)
 
                 LockerInteriorContent()
                     .padding(.horizontal, side + 1)
@@ -242,6 +250,19 @@ private struct LockerInteriorSurface: View {
             .overlay(Rectangle().strokeBorder(.black.opacity(0.24), lineWidth: 2))
             .shadow(color: .black.opacity(0.24), radius: 14, y: 4)
         }
+    }
+}
+
+private struct PhysicalMetalGrain: View {
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<28 {
+                let x = CGFloat((index * 37) % 101) / 101 * size.width
+                let y = CGFloat((index * 61) % 97) / 97 * size.height
+                var grain = Path(); grain.move(to: CGPoint(x: x, y: y)); grain.addLine(to: CGPoint(x: x + CGFloat(index % 3), y: y + CGFloat(5 + index % 13)))
+                context.stroke(grain, with: .color(index.isMultiple(of: 4) ? .white.opacity(0.025) : .black.opacity(0.018)), lineWidth: 0.35)
+            }
+        }.allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
@@ -269,29 +290,71 @@ private struct InteriorAmbientOcclusion: View {
     }.allowsHitTesting(false) }
 }
 
+private struct InteriorLightFalloff: View {
+    let side, ceiling, floor: CGFloat
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.16), location: 0),
+                    .init(color: .clear, location: 0.14),
+                    .init(color: .white.opacity(0.07), location: 0.46),
+                    .init(color: .clear, location: 0.70),
+                    .init(color: .black.opacity(0.13), location: 1)
+                ], startPoint: .top, endPoint: .bottom
+            )
+            LinearGradient(colors: [.white.opacity(0.035), .clear, .black.opacity(0.07)], startPoint: .leading, endPoint: .trailing)
+        }
+        .padding(.horizontal, side).padding(.top, ceiling).padding(.bottom, floor)
+        .allowsHitTesting(false)
+    }
+}
+
+private struct InteriorHardwareOverlay: View {
+    let side, ceiling, floor: CGFloat
+    var body: some View { GeometryReader { p in
+        ZStack {
+            interiorScrew.position(x: side * 0.48, y: ceiling + 35)
+            interiorScrew.position(x: p.size.width - side * 0.48, y: ceiling + 35)
+            interiorScrew.position(x: side * 0.48, y: p.size.height - floor - 24)
+            interiorScrew.position(x: p.size.width - side * 0.48, y: p.size.height - floor - 24)
+            Ellipse().fill(Color(red: 115/255, green: 89/255, blue: 74/255).opacity(0.08)).frame(width: 8, height: 2)
+                .position(x: side + 4, y: p.size.height - floor - 1)
+            Ellipse().fill(Color(red: 139/255, green: 105/255, blue: 86/255).opacity(0.06)).frame(width: 7, height: 2)
+                .position(x: p.size.width - side - 4, y: p.size.height - floor - 1)
+        }
+    }.allowsHitTesting(false).accessibilityHidden(true) }
+
+    private var interiorScrew: some View {
+        Circle().fill(Color(red: 48/255, green: 56/255, blue: 59/255))
+            .frame(width: 4, height: 4)
+            .overlay(Circle().fill(Color(red: 135/255, green: 146/255, blue: 150/255)).frame(width: 2.8, height: 2.8))
+            .overlay(Circle().fill(.white.opacity(0.42)).frame(width: 1, height: 1).offset(x: -0.7, y: -0.7))
+            .shadow(color: .black.opacity(0.22), radius: 1, y: 1)
+    }
+}
+
 struct LockerNamePlateView: View {
     let number: String
     let ownerName: String
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text("LOCKU")
-                .font(.system(size: 10, weight: .medium))
-                .tracking(1.4)
+        VStack(spacing: 1) {
             Text(number.isEmpty ? "24" : number)
-                .font(.system(size: 28, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .minimumScaleFactor(0.7)
-            Text(ownerName.isEmpty ? "My Locker" : ownerName)
-                .font(.system(size: 12, weight: .regular))
+            Text(ownerName.isEmpty ? "MY LOCKER" : "\(ownerName.uppercased()) LOCKER")
+                .font(.system(size: 7, weight: .medium))
+                .tracking(0.8)
                 .lineLimit(1)
         }
         .foregroundStyle(LockUDesign.Color.ink)
         .padding(.horizontal, 8)
-        .padding(.vertical, 7)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
-        .background(Color(red: 247/255, green: 246/255, blue: 241/255), in: RoundedRectangle(cornerRadius: 1))
-        .overlay(RoundedRectangle(cornerRadius: 1).stroke(Color(red: 199/255, green: 197/255, blue: 190/255), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.10), radius: 1, y: 1)
+        .background(Color(red: 236/255, green: 237/255, blue: 232/255), in: RoundedRectangle(cornerRadius: 1.5))
+        .overlay(RoundedRectangle(cornerRadius: 1.5).stroke(Color(red: 195/255, green: 198/255, blue: 196/255), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Locker \(number), \(ownerName.isEmpty ? "My Locker" : ownerName)")
     }

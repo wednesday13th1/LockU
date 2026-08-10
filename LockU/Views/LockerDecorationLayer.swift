@@ -66,7 +66,7 @@ private struct LockerDecorationItem: View {
         .overlay {
             if isSelected {
                 RoundedRectangle(cornerRadius: 5)
-                    .stroke(.white.opacity(0.9), style: StrokeStyle(lineWidth: 1.5, dash: [5]))
+                    .stroke(Color(red: 247/255, green: 244/255, blue: 234/255).opacity(0.72), lineWidth: 0.8)
                     .padding(-5)
                     .allowsHitTesting(false)
             }
@@ -82,7 +82,7 @@ private struct LockerDecorationItem: View {
         )
         .onTapGesture {
             do {
-                try repository.bringToFront(decoration)
+                try LockerPlacementCoordinator(repository: repository).bringToFront(decoration)
                 onSelect()
             } catch {
                 appModel.report(error)
@@ -90,16 +90,10 @@ private struct LockerDecorationItem: View {
         }
         .contextMenu {
             Button("Bring to Front", systemImage: "square.3.layers.3d.top.filled") {
-                perform { try repository.bringToFront(decoration) }
+                perform { try LockerPlacementCoordinator(repository: repository).bringToFront(decoration) }
             }
             Button("Flip", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
-                perform {
-                    guard var current = repository.decoration(id: decoration.id) else {
-                        throw LockUStorageError.recordNotFound
-                    }
-                    current.isFlipped.toggle()
-                    try repository.update(current)
-                }
+                perform { try LockerPlacementCoordinator(repository: repository).flip(decoration) }
             }
             Button("Delete", systemImage: "trash", role: .destructive) {
                 perform { try repository.delete(decoration) }
@@ -116,16 +110,7 @@ private struct LockerDecorationItem: View {
             }
             .onEnded { value in
                 perform {
-                    guard var current = repository.decoration(id: decoration.id) else {
-                        throw LockUStorageError.recordNotFound
-                    }
-                    let x = current.position.x + value.translation.width / max(containerSize.width, 1)
-                    let y = current.position.y + value.translation.height / max(containerSize.height, 1)
-                    current.position = CodablePoint(
-                        x: min(max(x, 0.04), 0.96),
-                        y: min(max(y, 0.04), 0.96)
-                    )
-                    try repository.update(current)
+                    try LockerPlacementCoordinator(repository: repository).move(decoration, by: CodablePoint(x: value.translation.width / max(containerSize.width, 1), y: value.translation.height / max(containerSize.height, 1)))
                 }
             }
     }
@@ -137,11 +122,7 @@ private struct LockerDecorationItem: View {
             }
             .onEnded { value in
                 perform {
-                    guard var current = repository.decoration(id: decoration.id) else {
-                        throw LockUStorageError.recordNotFound
-                    }
-                    current.scale = min(max(current.scale * value, 0.3), 3)
-                    try repository.update(current)
+                    try LockerPlacementCoordinator(repository: repository).scale(decoration, by: value)
                 }
             }
     }
@@ -153,11 +134,7 @@ private struct LockerDecorationItem: View {
             }
             .onEnded { value in
                 perform {
-                    guard var current = repository.decoration(id: decoration.id) else {
-                        throw LockUStorageError.recordNotFound
-                    }
-                    current.rotationDegrees += value.degrees
-                    try repository.update(current)
+                    try LockerPlacementCoordinator(repository: repository).rotate(decoration, by: value.degrees)
                 }
             }
     }

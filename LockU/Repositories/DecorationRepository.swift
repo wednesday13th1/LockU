@@ -6,23 +6,18 @@ import UIKit
 final class DecorationRepository: ObservableObject {
     @Published private(set) var decorations: [LockerDecoration] = []
 
-    private let paths: LockUPaths
-    private let store: SafeJSONStore<LockerDecoration>
-    private let imageCache = NSCache<NSString, UIImage>()
+    private let store: DecorationMetadataStoring
+    private let imageStorage: DecorationImageStoring
+    private let imageCache: LockUImageCache
 
-    init(paths: LockUPaths) {
-        self.paths = paths
-        store = SafeJSONStore(directory: paths.root, fileName: "decorations.json")
-        imageCache.totalCostLimit = 64 * 1_024 * 1_024
+    init(paths: LockUPaths, imageStorage: DecorationImageStoring? = nil, imageCache: LockUImageCache? = nil, metadataStore: DecorationMetadataStoring? = nil) {
+        self.imageStorage = imageStorage ?? DecorationImageStorage(directory: paths.decorations)
+        self.imageCache = imageCache ?? LockUImageCache(costLimit: 64 * 1_024 * 1_024)
+        store = metadataStore ?? DecorationMetadataStore(directory: paths.root)
     }
 
     func reload() throws {
-        decorations = try store.load { [paths] record in
-            FileManager.default.fileExists(
-                atPath: paths.decorations.appendingPathComponent(record.imageFileName).path
-            )
-        }
-        .sorted { $0.zIndex < $1.zIndex }
+        decorations = try store.load().sorted { $0.zIndex < $1.zIndex }
     }
 
     @discardableResult
@@ -32,45 +27,29 @@ final class DecorationRepository: ObservableObject {
         initialPosition: CodablePoint = CodablePoint(x: 0.5, y: 0.52),
         initialScale: Double = 1
     ) throws -> LockerDecoration {
-        guard let data = image.pngData() else { throw LockUStorageError.invalidImage }
+        LockULog.debug(.decoration, "add transaction started")
         let id = UUID()
-        let fileName = "decoration-\(id.uuidString).png"
-        let imageURL = paths.decorations.appendingPathComponent(fileName)
-        try data.write(to: imageURL, options: [.atomic])
-
         let record = LockerDecoration(
             id: id,
             createdAt: createdAt,
-            imageFileName: fileName,
+            imageFileName: LockUFileNaming.decoration(id: id),
             position: initialPosition,
             scale: initialScale,
             rotationDegrees: 0,
             isFlipped: false,
             zIndex: (decorations.map(\.zIndex).max() ?? -1) + 1
         )
-        do {
-            decorations.append(record)
-            try store.save(decorations)
-            imageCache.setObject(
-                image,
-                forKey: fileName as NSString,
-                cost: image.lockUDecorationByteCost
-            )
-            return record
-        } catch {
-            decorations.removeAll { $0.id == id }
-            try? FileManager.default.removeItem(at: imageURL)
-            throw error
-        }
+        let result = try CreateDecorationTransaction(imageStorage: imageStorage, metadataStore: store, cache: imageCache).execute(image: image, record: record, existing: decorations)
+        decorations = result.records
+        LockULog.debug(.decoration, "add transaction committed")
+        return result.record
     }
 
     func image(for decoration: LockerDecoration) -> UIImage? {
-        let key = decoration.imageFileName as NSString
-        if let cached = imageCache.object(forKey: key) { return cached }
-        guard let image = UIImage(
-            contentsOfFile: paths.decorations.appendingPathComponent(decoration.imageFileName).path
-        ) else { return nil }
-        imageCache.setObject(image, forKey: key, cost: image.lockUDecorationByteCost)
+        let key = decoration.imageFileName
+        if let cached = imageCache.image(forKey: key) { return cached }
+        guard let image = imageStorage.load(fileName: key) else { return nil }
+        imageCache.insert(image, forKey: key, cost: image.lockUApproximateStorageCost)
         return image
     }
 
@@ -106,25 +85,14 @@ final class DecorationRepository: ObservableObject {
             throw error
         }
 
-        let imageURL = paths.decorations.appendingPathComponent(decoration.imageFileName)
-        if FileManager.default.fileExists(atPath: imageURL.path) {
-            try FileManager.default.removeItem(at: imageURL)
+        do {
+            try imageStorage.delete(fileName: decoration.imageFileName)
+        } catch {
+            decorations = previous
+            try? store.save(previous)
+            throw error
         }
-        imageCache.removeObject(forKey: decoration.imageFileName as NSString)
+        imageCache.remove(forKey: decoration.imageFileName)
     }
 
-    func bringToFront(_ decoration: LockerDecoration) throws {
-        guard var current = self.decoration(id: decoration.id) else {
-            throw LockUStorageError.recordNotFound
-        }
-        current.zIndex = (decorations.map(\.zIndex).max() ?? 0) + 1
-        try update(current)
-    }
-}
-
-private extension UIImage {
-    var lockUDecorationByteCost: Int {
-        guard let cgImage else { return 0 }
-        return cgImage.bytesPerRow * cgImage.height
-    }
 }

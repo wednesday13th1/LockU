@@ -8,8 +8,8 @@ struct LockerBottomShelfView: View {
         GeometryReader { proxy in
             HStack(alignment: .bottom, spacing: max(7, proxy.size.width * 0.02)) {
                 LockerBookSpineView(title: monthTitle, color: LockUDesign.Color.notebookPaper)
-                    .frame(width: proxy.size.width * 0.33)
-                    .rotationEffect(.degrees(-2))
+                    .frame(width: min(102, proxy.size.width * 0.32), height: 34)
+                    .rotationEffect(.degrees(-1.2))
                 .onTapGesture {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     appModel.selectedTab = .book
@@ -23,10 +23,10 @@ struct LockerBottomShelfView: View {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     appModel.selectedTab = .camera
                 }
-                .frame(width: min(96, proxy.size.width * 0.29))
+                .frame(width: min(88, proxy.size.width * 0.27))
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 15)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 17)
             .overlay(alignment: .bottom) {
                 PhysicalMetalShelf()
             }
@@ -42,16 +42,17 @@ private struct PhysicalMetalShelf: View {
     var body: some View {
         VStack(spacing: 0) {
             TrapezoidShelfTop()
-                .fill(Color(red: 174/255, green: 180/255, blue: 181/255))
-                .frame(height: 7)
+                .fill(Color(red: 166/255, green: 174/255, blue: 176/255))
+                .frame(height: 6)
+                .overlay(TrapezoidShelfTop().fill(LockUDesign.Color.worldSkyReflection.opacity(0.06)))
                 .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.40)).frame(height: 0.7).padding(.horizontal, 2) }
             Rectangle()
-                .fill(LinearGradient(colors: [Color(red: 126/255, green: 134/255, blue: 136/255), Color(red: 116/255, green: 124/255, blue: 126/255)], startPoint: .top, endPoint: .bottom))
-                .frame(height: 11)
-            Rectangle().fill(Color(red: 86/255, green: 93/255, blue: 96/255)).frame(height: 5)
+                .fill(Color(red: 112/255, green: 122/255, blue: 125/255))
+                .frame(height: 9)
+            Rectangle().fill(Color(red: 80/255, green: 89/255, blue: 92/255)).frame(height: 6)
         }
         .overlay { HStack { Rectangle().fill(.black.opacity(0.25)).frame(width: 2); Spacer(); Rectangle().fill(.black.opacity(0.25)).frame(width: 2) } }
-        .shadow(color: .black.opacity(0.28), radius: 12, y: 9)
+        .shadow(color: .black.opacity(0.25), radius: 10, y: 8)
     }
 }
 
@@ -70,20 +71,25 @@ struct LockerBookSpineView: View {
         HStack(spacing: 5) {
             Rectangle().fill(.black.opacity(0.14)).frame(width: 5)
             Text(title)
-                .font(.system(size: 9, weight: .bold))
-                .tracking(0.7)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .tracking(1.3)
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
             Spacer(minLength: 2)
         }
         .foregroundStyle(LockUDesign.Color.ink)
         .padding(.horizontal, 4)
-        .frame(maxWidth: .infinity, minHeight: 22, maxHeight: 28)
-        .background(color, in: RoundedRectangle(cornerRadius: 3))
+        .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 34)
+        .background(color, in: RoundedRectangle(cornerRadius: 1.5))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color(red: 235/255, green: 232/255, blue: 221/255)).frame(height: 4).padding(.horizontal, 7)
+                .overlay(Rectangle().fill(.black.opacity(0.08)).frame(height: 0.5).padding(.horizontal, 7), alignment: .bottom)
+        }
         .overlay(alignment: .bottom) {
             Rectangle().fill(.white.opacity(0.45)).frame(height: 2).padding(.horizontal, 5)
         }
-        .shadow(color: .black.opacity(0.2), radius: 2, y: 2)
+        .overlay(alignment: .trailing) { Rectangle().fill(.black.opacity(0.15)).frame(width: 2) }
+        .shadow(color: .black.opacity(0.18), radius: 1, y: 1)
     }
 }
 
@@ -94,7 +100,7 @@ struct LockerCameraButton: View {
         Button(action: action) {
             ZStack {
                 RoundedRectangle(cornerRadius: 5)
-                    .fill(LinearGradient(colors: [Color(red: 0.82, green: 0.81, blue: 0.77), Color(red: 0.78, green: 0.77, blue: 0.74), Color(red: 0.55, green: 0.55, blue: 0.53)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .fill(LinearGradient(colors: [Color(red: 217/255, green: 215/255, blue: 207/255), Color(red: 200/255, green: 197/255, blue: 188/255), Color(red: 150/255, green: 148/255, blue: 142/255)], startPoint: .topLeading, endPoint: .bottomTrailing))
                     .aspectRatio(1.18, contentMode: .fit)
                     .overlay(alignment: .leading) {
                         Rectangle().fill(.black.opacity(0.10)).frame(width: 12).padding(.vertical, 5)
@@ -115,13 +121,15 @@ struct LockerCameraButton: View {
                         CameraBodyMicroTexture()
                             .clipShape(RoundedRectangle(cornerRadius: 5))
                     }
+                    .overlay(alignment: .bottom) { Rectangle().fill(.black.opacity(0.20)).frame(height: 3).padding(.horizontal, 4) }
+                    .overlay(alignment: .trailing) { Rectangle().fill(.black.opacity(0.16)).frame(width: 3).padding(.vertical, 5) }
                 ZStack {
-                    Circle().fill(LinearGradient(colors: [.white.opacity(0.75), Color(white: 0.55), Color(white: 0.78)], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 52, height: 52)
-                    Circle().fill(Color(red: 21/255, green: 23/255, blue: 25/255)).frame(width: 44, height: 44)
-                    Circle().fill(RadialGradient(colors: [Color(red: 36/255, green: 58/255, blue: 68/255), Color(red: 16/255, green: 24/255, blue: 32/255), .black], center: .topLeading, startRadius: 1, endRadius: 21)).frame(width: 35, height: 35)
-                    Circle().fill(.black.opacity(0.88)).frame(width: 15, height: 15)
-                    Circle().fill(.white.opacity(0.62)).frame(width: 4, height: 2).offset(x: -8, y: -9).blur(radius: 0.3)
-                }.shadow(color: .black.opacity(0.42), radius: 3, x: 2, y: 4)
+                    Circle().fill(Color(red: 130/255, green: 132/255, blue: 134/255)).frame(width: 46, height: 46).shadow(color: .black.opacity(0.26), radius: 3, y: 3)
+                    Circle().fill(Color(red: 51/255, green: 55/255, blue: 58/255)).frame(width: 40, height: 40).shadow(color: .black.opacity(0.22), radius: 2, y: 2)
+                    Circle().fill(RadialGradient(colors: [LockUDesign.Color.worldSkyReflection.opacity(0.18), Color(red: 16/255, green: 24/255, blue: 31/255), Color(red: 5/255, green: 6/255, blue: 7/255)], center: .topLeading, startRadius: 1, endRadius: 17)).frame(width: 33, height: 33)
+                    Circle().fill(Color(red: 5/255, green: 6/255, blue: 7/255)).frame(width: 12, height: 12)
+                    Circle().trim(from: 0.10, to: 0.27).stroke(.white.opacity(0.34), lineWidth: 1).frame(width: 23, height: 23).rotationEffect(.degrees(-22))
+                }
                 RoundedRectangle(cornerRadius: 1).fill(Color(white: 0.82)).frame(width: 18, height: 7).offset(x: -25, y: -22).overlay(RoundedRectangle(cornerRadius: 1).stroke(.black.opacity(0.18))).offset(x: 0, y: 0)
                 HStack(spacing: 2) {
                     ForEach(0..<3, id: \.self) { _ in
@@ -144,8 +152,8 @@ struct LockerCameraButton: View {
                     .frame(width: 5, height: 11)
                     .offset(x: 45, y: 8)
             }
-            .shadow(color: .black.opacity(0.26), radius: 1, y: 1)
-            .shadow(color: .black.opacity(0.20), radius: 6, y: 5)
+            .shadow(color: .black.opacity(0.30), radius: 1, y: 1)
+            .shadow(color: .black.opacity(0.16), radius: 5, y: 4)
         }
         .buttonStyle(LockerPressStyle())
         .frame(minWidth: 44, minHeight: 44)

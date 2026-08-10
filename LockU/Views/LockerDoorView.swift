@@ -36,7 +36,7 @@ struct LockerDoorView: View {
                 axis: (x: 0, y: 1, z: 0),
                 anchor: .trailing,
                 anchorZ: doorForwardOffset,
-                perspective: 0.75
+                perspective: 0.52
             )
             .offset(x: doorForwardOffset)
             .opacity(reduceMotion && isOpen ? 0 : 1)
@@ -57,10 +57,11 @@ struct LockerDoorView: View {
                     Image(systemName: "xmark")
                         .font(.caption.bold())
                         .frame(width: 40, height: 40)
-                        .background(LockUDesign.Color.surface.opacity(0.9), in: Circle())
-                        .overlay(Circle().stroke(.black.opacity(0.06)))
+                        .background(.thinMaterial, in: Circle())
+                        .background(.white.opacity(0.78), in: Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.40), lineWidth: 0.5))
                         .foregroundStyle(LockUDesign.Color.textPrimary)
-                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                        .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
                 }
                 .position(x: proxy.size.width - 20, y: 20)
                 .accessibilityLabel("ロッカーを閉じる")
@@ -231,7 +232,7 @@ struct LockerDoorView: View {
         appModel.lockerDoorState = opening ? .opening : .closing
 
         Task {
-            let delay: UInt64 = reduceMotion ? 180_000_000 : 560_000_000
+            let delay: UInt64 = reduceMotion ? 180_000_000 : 520_000_000
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
             appModel.lockerDoorState = opening ? .open : .closed
@@ -244,29 +245,9 @@ struct LockerDoorView: View {
             doorForwardOffset = 0
             return
         }
-        Task { @MainActor in
-            if opening {
-                withAnimation(.easeOut(duration: 0.08)) {
-                    doorForwardOffset = -6
-                    doorAngle = -3
-                }
-                try? await Task.sleep(nanoseconds: 80_000_000)
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                    doorAngle = -95
-                    doorForwardOffset = 0
-                }
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                withAnimation(.easeOut(duration: 0.08)) { doorAngle = -100 }
-                try? await Task.sleep(nanoseconds: 80_000_000)
-                withAnimation(.spring(response: 0.12, dampingFraction: 0.82)) {
-                    doorAngle = -96
-                }
-            } else {
-                withAnimation(.spring(response: 0.44, dampingFraction: 0.86)) {
-                    doorAngle = 0
-                    doorForwardOffset = 0
-                }
-            }
+        withAnimation(.easeOut(duration: opening ? 0.52 : 0.48)) {
+            doorAngle = opening ? -96 : 0
+            doorForwardOffset = 0
         }
     }
 }

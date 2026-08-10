@@ -20,7 +20,7 @@ struct CutoutMemoryStickerView: View {
                         .shadow(color: .white.opacity(0.95), radius: 2, x: -2)
                         .shadow(color: .white.opacity(0.95), radius: 2, y: 2)
                         .shadow(color: .white.opacity(0.95), radius: 2, y: -2)
-                        .shadow(color: .black.opacity(0.28), radius: 5, y: 4)
+                        .shadow(color: .black.opacity(0.12), radius: 4, y: 3)
                 } else {
                     Image(systemName: "photo.badge.exclamationmark")
                         .resizable()

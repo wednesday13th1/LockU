@@ -22,6 +22,7 @@ enum LockUDesign {
         static let summerSkyBottom = SwiftUI.Color(red: 247 / 255, green: 235 / 255, blue: 213 / 255)
         static let cloudWhite = SwiftUI.Color(red: 1.00, green: 0.99, blue: 0.96)
         static let sunlight = SwiftUI.Color(red: 1, green: 216 / 255, blue: 144 / 255)
+        static let worldSkyReflection = SwiftUI.Color(red: 169 / 255, green: 214 / 255, blue: 239 / 255)
         static let sunsetPeach = SwiftUI.Color(red: 1.00, green: 0.72, blue: 0.55)
         static let ramuneBlue = SwiftUI.Color(red: 105 / 255, green: 183 / 255, blue: 217 / 255)
         static let schoolNavy = SwiftUI.Color(red: 0.18, green: 0.31, blue: 0.44)
@@ -72,12 +73,12 @@ enum LockUDesign {
         static let cameraOverlay = SwiftUI.Color.black.opacity(0.32)
         static let cameraBlack = SwiftUI.Color(red: 17 / 255, green: 19 / 255, blue: 21 / 255)
         static let pageBackground = SwiftUI.Color(red: 242 / 255, green: 246 / 255, blue: 247 / 255)
-        static let lockerSilver = SwiftUI.Color(red: 174 / 255, green: 181 / 255, blue: 185 / 255)
-        static let midMetal = SwiftUI.Color(red: 143 / 255, green: 152 / 255, blue: 157 / 255)
-        static let deepMetal = SwiftUI.Color(red: 104 / 255, green: 113 / 255, blue: 120 / 255)
-        static let darkCavity = SwiftUI.Color(red: 68 / 255, green: 75 / 255, blue: 79 / 255)
+        static let lockerSilver = SwiftUI.Color(red: 135 / 255, green: 146 / 255, blue: 150 / 255)
+        static let midMetal = SwiftUI.Color(red: 104 / 255, green: 115 / 255, blue: 120 / 255)
+        static let deepMetal = SwiftUI.Color(red: 66 / 255, green: 76 / 255, blue: 80 / 255)
+        static let darkCavity = SwiftUI.Color(red: 48 / 255, green: 56 / 255, blue: 59 / 255)
         static let lockerBody = lockerSilver
-        static let lockerBodyLight = SwiftUI.Color(red: 196 / 255, green: 201 / 255, blue: 203 / 255)
+        static let lockerBodyLight = SwiftUI.Color(red: 174 / 255, green: 183 / 255, blue: 186 / 255)
         static let lockerEdge = deepMetal
         static let lockerInteriorSoft = SwiftUI.Color(red: 137 / 255, green: 146 / 255, blue: 151 / 255)
         static let lockerInteriorBack = SwiftUI.Color(red: 115 / 255, green: 124 / 255, blue: 128 / 255)
@@ -158,34 +159,63 @@ extension SwiftUI.Color {
     }
 }
 
+enum WorldTimeOfDay: String, CaseIterable, Sendable {
+    case morningClear, aoharuBlue, afterSchool, goldenSunset, blueHour, quietNight
+}
+
+enum WorldWeather: String, CaseIterable, Sendable {
+    case sunny, cloudy, rain, afterRain, sunset
+}
+
+struct WorldProfile: Sendable {
+    let time: WorldTimeOfDay
+    let weather: WorldWeather
+    let skyStops: [Color]
+    let sunlight: Color
+    let sunlightOpacity: Double
+    let hazeOpacity: Double
+    let cloudTint: Color
+    let ambientReflection: Color
+
+    static let afterSchool = WorldProfile(
+        time: .afterSchool,
+        weather: .sunny,
+        skyStops: [
+            Color(red: 111/255, green: 174/255, blue: 234/255),
+            Color(red: 143/255, green: 196/255, blue: 238/255),
+            Color(red: 173/255, green: 216/255, blue: 244/255),
+            Color(red: 203/255, green: 230/255, blue: 247/255),
+            Color(red: 228/255, green: 242/255, blue: 250/255)
+        ],
+        sunlight: Color(red: 1, green: 247/255, blue: 222/255),
+        sunlightOpacity: 0.18,
+        hazeOpacity: 0.045,
+        cloudTint: Color(red: 245/255, green: 250/255, blue: 1),
+        ambientReflection: Color(red: 169/255, green: 214/255, blue: 239/255)
+    )
+}
+
 struct SummerSkyBackground: View {
+    let profile: WorldProfile
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drifting = false
+    @State private var breathing = false
+
+    init(profile: WorldProfile = .afterSchool) { self.profile = profile }
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    LockUDesign.Color.summerSkyTop,
-                    LockUDesign.Color.summerSkyMiddle,
-                    LockUDesign.Color.summerSkyBottom
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            SummerCloudLayer(scale: 1.2, opacity: 0.72)
-                .offset(x: drifting ? 12 : -12, y: -150)
-            SummerCloudLayer(scale: 0.78, opacity: 0.42)
-                .offset(x: drifting ? -18 : 8, y: 100)
-            SunlightOverlay()
-            FloatingLightParticles()
+            WorldSkyBase(profile: profile)
+            WorldCloudLayer(profile: profile, drifting: drifting)
+            WorldSunlightLayer(profile: profile, breathing: breathing)
+            WorldAtmosphericHaze(profile: profile, breathing: breathing)
+            WorldAmbientReflection(profile: profile)
         }
         .ignoresSafeArea()
         .onAppear {
             guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 24).repeatForever(autoreverses: true)) {
-                drifting = true
-            }
+            withAnimation(.linear(duration: 52).repeatForever(autoreverses: true)) { drifting = true }
+            withAnimation(.easeInOut(duration: 23).repeatForever(autoreverses: true)) { breathing = true }
         }
     }
 }
@@ -200,66 +230,69 @@ struct LockerSceneBackground: View {
     }
 }
 
-struct SummerCloudLayer: View {
-    let scale: CGFloat
-    let opacity: Double
-
+private struct WorldSkyBase: View {
+    let profile: WorldProfile
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                Ellipse().fill(LockUDesign.Color.cloudWhite.opacity(opacity * 0.42))
-                    .frame(width: 340, height: 100).blur(radius: 18)
-                    .position(x: proxy.size.width * 0.14, y: proxy.size.height * 0.38)
-                Ellipse().fill(LockUDesign.Color.cloudWhite.opacity(opacity))
-                    .frame(width: 220, height: 125).blur(radius: 7)
-                    .position(x: proxy.size.width * 0.22, y: proxy.size.height * 0.33)
-                Ellipse().fill(LockUDesign.Color.cloudWhite.opacity(opacity * 0.85))
-                    .frame(width: 180, height: 150).blur(radius: 9)
-                    .position(x: proxy.size.width * 0.05, y: proxy.size.height * 0.29)
-                Ellipse().fill(LockUDesign.Color.summerSkyMiddle.opacity(opacity * 0.28))
-                    .frame(width: 360, height: 70).blur(radius: 18)
-                    .position(x: proxy.size.width * 0.15, y: proxy.size.height * 0.42)
+                LinearGradient(stops: [
+                    .init(color: profile.skyStops[0], location: 0), .init(color: profile.skyStops[1], location: 0.28),
+                    .init(color: profile.skyStops[2], location: 0.55), .init(color: profile.skyStops[3], location: 0.78),
+                    .init(color: profile.skyStops[4], location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [.white.opacity(0.085), profile.skyStops[3].opacity(0.035), .clear], center: UnitPoint(x: 0.5, y: 0.82), startRadius: 10, endRadius: proxy.size.width)
             }
-            .scaleEffect(scale)
         }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 
-struct SunlightOverlay: View {
+private struct WorldCloudLayer: View {
+    let profile: WorldProfile
+    let drifting: Bool
     var body: some View {
-        RadialGradient(
-            colors: [
-                LockUDesign.Color.sunlight.opacity(0.46),
-                LockUDesign.Color.cloudWhite.opacity(0.18),
-                .clear
-            ],
-            center: .topLeading,
-            startRadius: 4,
-            endRadius: 390
-        )
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        GeometryReader { p in
+            ZStack {
+                NaturalCloud().fill(profile.cloudTint.opacity(0.52)).frame(width: 260, height: 92)
+                    .overlay(NaturalCloud().fill(Color(red: 187/255, green: 214/255, blue: 232/255).opacity(0.10)))
+                    .blur(radius: 3.5).position(x: -14 + (drifting ? 19 : 0), y: p.size.height * 0.20)
+                NaturalCloud().fill(.white.opacity(0.46)).frame(width: 190, height: 66).blur(radius: 4)
+                    .scaleEffect(x: -1, y: 1).position(x: p.size.width + 12 + (drifting ? -14 : 0), y: p.size.height * 0.36)
+                NaturalCloud().fill(profile.cloudTint.opacity(0.30)).frame(width: 145, height: 45).blur(radius: 5)
+                    .position(x: p.size.width * 0.12 + (drifting ? 11 : 0), y: p.size.height * 0.74)
+            }
+        }.allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
-struct FloatingLightParticles: View {
+private struct NaturalCloud: Shape {
+    func path(in r: CGRect) -> Path { Path { p in
+        p.move(to: CGPoint(x: 0, y: r.height * 0.70))
+        p.addCurve(to: CGPoint(x: r.width * 0.24, y: r.height * 0.42), control1: CGPoint(x: r.width * 0.07, y: r.height * 0.54), control2: CGPoint(x: r.width * 0.15, y: r.height * 0.56))
+        p.addCurve(to: CGPoint(x: r.width * 0.55, y: r.height * 0.38), control1: CGPoint(x: r.width * 0.34, y: r.height * 0.05), control2: CGPoint(x: r.width * 0.47, y: r.height * 0.18))
+        p.addCurve(to: CGPoint(x: r.width, y: r.height * 0.62), control1: CGPoint(x: r.width * 0.72, y: r.height * 0.20), control2: CGPoint(x: r.width * 0.85, y: r.height * 0.54))
+        p.addCurve(to: CGPoint(x: 0, y: r.height * 0.70), control1: CGPoint(x: r.width * 0.72, y: r.height), control2: CGPoint(x: r.width * 0.23, y: r.height * 0.91)); p.closeSubpath()
+    } }
+}
+
+private struct WorldSunlightLayer: View {
+    let profile: WorldProfile; let breathing: Bool
+    var body: some View { GeometryReader { p in
+        RadialGradient(colors: [profile.sunlight.opacity(profile.sunlightOpacity), profile.sunlight.opacity(0.055), .clear], center: UnitPoint(x: 0.02, y: 0.02), startRadius: 4, endRadius: min(340, p.size.width * 0.9))
+            .brightness(breathing ? 0.012 : 0).scaleEffect(breathing ? 1.02 : 1, anchor: .topLeading)
+    }.allowsHitTesting(false) }
+}
+
+private struct WorldAtmosphericHaze: View {
+    let profile: WorldProfile; let breathing: Bool
     var body: some View {
-        Canvas { context, size in
-            for index in 0..<21 {
-                let x = CGFloat((index * 47) % 101) / 101 * size.width
-                let y = CGFloat((index * 83) % 97) / 97 * size.height
-                let diameter = CGFloat(1 + index % 3)
-                context.fill(
-                    Path(ellipseIn: CGRect(x: x, y: y, width: diameter, height: diameter)),
-                    with: .color(.white.opacity(0.28))
-                )
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        LinearGradient(colors: [.white.opacity(0.01), Color(red: 225/255, green: 241/255, blue: 250/255).opacity(breathing ? profile.hazeOpacity + 0.01 : profile.hazeOpacity)], startPoint: .top, endPoint: .bottom)
+            .blendMode(.screen).allowsHitTesting(false)
     }
+}
+
+private struct WorldAmbientReflection: View {
+    let profile: WorldProfile
+    var body: some View { LinearGradient(colors: [profile.ambientReflection.opacity(0.025), .clear], startPoint: .topLeading, endPoint: .center).blendMode(.screen).allowsHitTesting(false) }
 }
 
 struct SummerGlassCard<Content: View>: View {

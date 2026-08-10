@@ -8,8 +8,8 @@ struct LockerInteriorContent: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let topShelfHeight = max(54.0, proxy.size.height * 0.15)
-            let bottomShelfHeight = max(82.0, proxy.size.height * 0.19)
+            let topShelfHeight = max(54.0, proxy.size.height * 0.14)
+            let bottomShelfHeight = max(78.0, proxy.size.height * 0.17)
 
             VStack(spacing: 0) {
                 LockerTopShelfView()
@@ -80,15 +80,12 @@ struct LockerTopShelfView: View {
     var body: some View {
         GeometryReader { proxy in
             HStack(alignment: .bottom, spacing: max(5, proxy.size.width * 0.018)) {
-                miniBook("MEMORY", color: LockUDesign.Color.mutedLavender.opacity(0.8))
-                miniBook("NOTES", color: LockUDesign.Color.paper)
+                miniBook("MEMORY", color: Color(red: 104/255, green: 112/255, blue: 116/255))
+                    .rotationEffect(.degrees(-1.2))
+                miniBook("NOTES", color: Color(red: 129/255, green: 137/255, blue: 139/255))
+                    .frame(height: 41, alignment: .bottom)
+                    .rotationEffect(.degrees(1.6))
                 Spacer(minLength: 4)
-                Image(systemName: "photo")
-                    .font(.title3)
-                    .foregroundStyle(LockUDesign.Color.ink)
-                    .padding(7)
-                    .background(LockUDesign.Color.paperCream, in: RoundedRectangle(cornerRadius: 2))
-                    .rotationEffect(.degrees(2))
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -102,21 +99,26 @@ struct LockerTopShelfView: View {
     private func miniBook(_ title: String, color: Color) -> some View {
         Text(title)
             .font(.system(size: 8, weight: .bold))
-            .foregroundStyle(LockUDesign.Color.ink)
-            .frame(width: 24, height: 45)
-            .background(color, in: RoundedRectangle(cornerRadius: 2))
+            .foregroundStyle(.white.opacity(0.78))
+            .frame(width: 20, height: 46)
+            .background(color, in: RoundedRectangle(cornerRadius: 1))
+            .overlay(alignment: .trailing) {
+                Rectangle().fill(Color(red: 229/255, green: 226/255, blue: 216/255)).frame(width: 3).padding(.vertical, 3)
+            }
+            .overlay(alignment: .leading) { Rectangle().fill(.black.opacity(0.18)).frame(width: 2) }
+            .shadow(color: .black.opacity(0.18), radius: 1, y: 1)
     }
 
     private var shelf: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(colors: [LockUDesign.Color.lockerBodyLight, LockUDesign.Color.midMetal, LockUDesign.Color.deepMetal], startPoint: .top, endPoint: .bottom)
-            )
-            .frame(height: 8)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(LockUDesign.Color.darkCavity.opacity(0.72)).frame(height: 3)
-            }
-            .shadow(color: .black.opacity(0.30), radius: 7, y: 5)
+        VStack(spacing: 0) {
+            TrapezoidTopShelf().fill(Color(red: 169/255, green: 176/255, blue: 178/255)).frame(height: 5)
+            Rectangle().fill(Color(red: 115/255, green: 124/255, blue: 128/255)).frame(height: 6)
+            Rectangle().fill(.black.opacity(0.20)).frame(height: 7).blur(radius: 3)
+        }
+        .padding(.horizontal, 1.5)
     }
+}
+
+private struct TrapezoidTopShelf: Shape {
+    func path(in r: CGRect) -> Path { Path { p in p.move(to: CGPoint(x: 2, y: 0)); p.addLine(to: CGPoint(x: r.width-2, y: 0)); p.addLine(to: CGPoint(x: r.width, y: r.height)); p.addLine(to: CGPoint(x: 0, y: r.height)); p.closeSubpath() } }
 }

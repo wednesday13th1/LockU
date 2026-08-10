@@ -30,52 +30,30 @@ final class LockUAppModel: ObservableObject {
     @Published var isCameraPresented = false
     @Published var selectedCapturedImage: UIImage?
     @Published var cameraPermissionDenied = false
+    @Published private(set) var bootState: AppBootState = .launching
 
     let memoryRepository: MemoryRepository
     let decorationRepository: DecorationRepository
     let settingsRepository: LockerSettingsRepository
     let backgroundRepository: BackgroundRepository
+    let storageMode: StorageMode
+    private let dependencies: LockUDependencyContainer
 
     init() {
-        do {
-            let paths = try LockUPaths()
-            memoryRepository = MemoryRepository(paths: paths)
-            decorationRepository = DecorationRepository(paths: paths)
-            settingsRepository = LockerSettingsRepository(paths: paths)
-            backgroundRepository = BackgroundRepository(paths: paths)
-        } catch {
-            let fallback = URL(fileURLWithPath: NSTemporaryDirectory())
-                .appendingPathComponent("LockU-Recovery", isDirectory: true)
-            try? FileManager.default.createDirectory(at: fallback, withIntermediateDirectories: true)
-            let paths = LockUPaths(recoveryRoot: fallback)
-            memoryRepository = MemoryRepository(paths: paths)
-            decorationRepository = DecorationRepository(paths: paths)
-            settingsRepository = LockerSettingsRepository(paths: paths)
-            backgroundRepository = BackgroundRepository(paths: paths)
-            presentedError = error.localizedDescription
-        }
+        let dependencies = LockUDependencyContainer()
+        self.dependencies = dependencies
+        storageMode = dependencies.storageMode
+        memoryRepository = dependencies.memoryRepository
+        decorationRepository = dependencies.decorationRepository
+        settingsRepository = dependencies.settingsRepository
+        backgroundRepository = dependencies.backgroundRepository
         load()
     }
 
     private func load() {
-        do {
-            try settingsRepository.reload()
-            try memoryRepository.reload()
-            try decorationRepository.reload()
-            backgroundRepository.reload()
-            let migration = LegacyMigrationService(
-                memories: memoryRepository,
-                decorations: decorationRepository,
-                settings: settingsRepository,
-                backgrounds: backgroundRepository
-            )
-            try migration.migrateIfNeeded()
-            try memoryRepository.reload()
-            try decorationRepository.reload()
-            backgroundRepository.reload()
-        } catch {
-            presentedError = error.localizedDescription
-        }
+        let (_, error) = LockUBootCoordinator(dependencies: dependencies).boot { bootState = $0 }
+        if storageMode == .recoveryTemporary { presentedError = "一時復旧モードで起動しました。新しいデータは永続保存されません。" }
+        else if let error { presentedError = error.localizedDescription }
         isReady = true
     }
 
