@@ -41,14 +41,15 @@ final class MemoryRepository: ObservableObject {
         weather: WeatherSnapshot? = nil,
         captureMode: CaptureMode = .photoLibrary,
         imageStyle: MemoryImageStyle = .original,
-        dailyFilm: DailyFilm? = nil
+        dailyFilm: DailyFilm? = nil,
+        memoryNote: String? = nil
     ) throws -> MemoryRecord {
-        try captureWorkflow.execute(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm)).memory
+        try captureWorkflow.execute(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm, memoryNote: memoryNote)).memory
     }
 
     @discardableResult
     func importLegacyImage(_ image: UIImage, createdAt: Date) throws -> MemoryRecord {
-        try createImageRecord(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: nil, weather: nil, captureMode: .legacy, imageStyle: .original, dailyFilm: nil), enforceDailyLimit: false)
+        try createImageRecord(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: nil, weather: nil, captureMode: .legacy, imageStyle: .original, dailyFilm: nil, memoryNote: nil), enforceDailyLimit: false)
     }
 
     func createImageRecord(
@@ -68,5 +69,14 @@ final class MemoryRepository: ObservableObject {
         guard let image = imageStorage.load(fileName: key) else { return nil }
         imageCache.insert(image, forKey: key, cost: image.lockUApproximateStorageCost)
         return image
+    }
+
+    func markMemoryAsRevisited(id: UUID, at date: Date = .now) throws {
+        guard let index = memories.firstIndex(where: { $0.id == id }) else { throw LockUStorageError.recordNotFound }
+        var updated = memories
+        updated[index].lastRevisitedAt = date
+        updated[index].revisitCount += 1
+        try store.save(updated)
+        memories = updated
     }
 }

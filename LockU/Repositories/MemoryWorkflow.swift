@@ -25,6 +25,28 @@ struct CaptureMemoryRequest {
     let captureMode: CaptureMode
     let imageStyle: MemoryImageStyle
     let dailyFilm: DailyFilm?
+    let memoryNote: String?
+
+    func withMemoryNote(_ note: String?) -> Self {
+        Self(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm, memoryNote: note)
+    }
+}
+
+struct MemoryNotePolicy {
+    static let maximumLength = 30
+
+    func normalize(_ note: String?) throws -> String? {
+        guard let note else { return nil }
+        let normalized = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        guard normalized.count <= Self.maximumLength else { throw MemoryNotePolicyError.tooLong }
+        return normalized
+    }
+}
+
+enum MemoryNotePolicyError: LocalizedError {
+    case tooLong
+    var errorDescription: String? { "一言は30文字以内で入力してください。" }
 }
 
 struct CaptureMemoryResult { let memory: MemoryRecord }
@@ -41,8 +63,9 @@ final class CaptureMemoryWorkflow {
         state = .validating
         do {
             try policy.validateCreation(on: request.createdAt, existing: repository.memories)
+            let validatedRequest = request.withMemoryNote(try MemoryNotePolicy().normalize(request.memoryNote))
             state = .writingImage
-            let record = try repository.createImageRecord(request, enforceDailyLimit: false)
+            let record = try repository.createImageRecord(validatedRequest, enforceDailyLimit: false)
             state = .completed
             return CaptureMemoryResult(memory: record)
         } catch { state = .failed; throw error }

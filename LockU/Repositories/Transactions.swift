@@ -12,7 +12,7 @@ struct CreateMemoryTransaction {
         case .jpeg: fileName = try imageStorage.saveJPEG(request.image, id: id); format = .jpeg
         case .png: fileName = try imageStorage.savePNG(request.image, id: id); format = .png
         }
-        let record = MemoryRecord(id: id, createdAt: request.createdAt, imageFileName: fileName, filterID: request.filterID, weather: request.weather, captureMode: request.captureMode, imageFormat: format, isSubjectCutout: request.imageStyle == .cutout, presentationStyle: DefaultMemoryPresentationPolicy().presentation(for: request.imageStyle, captureMode: request.captureMode), dailyFilmID: request.dailyFilm?.id, dailyFilmName: request.dailyFilm?.name, dailyFilmVersion: request.dailyFilm?.version)
+        let record = MemoryRecord(id: id, createdAt: request.createdAt, imageFileName: fileName, filterID: request.filterID, weather: request.weather, captureMode: request.captureMode, imageFormat: format, isSubjectCutout: request.imageStyle == .cutout, presentationStyle: DefaultMemoryPresentationPolicy().presentation(for: request.imageStyle, captureMode: request.captureMode), dailyFilmID: request.dailyFilm?.id, dailyFilmName: request.dailyFilm?.name, dailyFilmVersion: request.dailyFilm?.version, backImageFileName: fileName, memoryNote: request.memoryNote, dailyFilmIdentifier: request.dailyFilm?.id)
         var updated = existing; updated.append(record); updated.sort { $0.createdAt > $1.createdAt }
         do {
             try metadataStore.save(updated)
