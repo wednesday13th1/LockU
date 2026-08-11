@@ -4,17 +4,37 @@ import UIKit
 struct LockerMemoryBoardView: View {
     @EnvironmentObject private var memoryRepository: MemoryRepository
     @EnvironmentObject private var appModel: LockUAppModel
+    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var selectedMemoryID: UUID?
+    let appearanceOverride: LockerAppearanceSettings?
+
+    init(appearanceOverride: LockerAppearanceSettings? = nil) {
+        self.appearanceOverride = appearanceOverride
+    }
+
+    private var appearance: LockerAppearanceSettings {
+        appearanceOverride ?? settingsRepository.settings.appearance
+    }
 
     private var recentMemories: [MemoryRecord] {
-        Array(memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }.prefix(10))
+        let sorted = memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }
+        guard let featuredID = appearance.featuredVideoMemoryID,
+              let featured = sorted.first(where: { $0.id == featuredID }) else {
+            return Array(sorted.prefix(8))
+        }
+        return [featured] + Array(sorted.filter { $0.id != featured.id }.prefix(7))
     }
 
     var body: some View {
         GeometryReader { proxy in
-            let placements = DeterministicMemoryWallPlacementEngine().layout(memories: recentMemories, containerSize: proxy.size)
+            let placements = DeterministicMemoryWallPlacementEngine().layout(
+                memories: recentMemories,
+                containerSize: proxy.size,
+                appearance: appearance,
+                date: .now
+            )
             ZStack {
                 boardSurface
 
@@ -24,12 +44,16 @@ struct LockerMemoryBoardView: View {
                     ForEach(placements) { placement in
                         Group {
                             if placement.isLiving {
-                                LivingMemoryView(memory: placement.memory)
+                                LivingMemoryView(memory: placement.memory, frameStyle: placement.frameStyle, filterStyle: placement.filterStyle, filterAdjustment: placement.filterAdjustment, printAspectRatio: placement.printAspectRatio)
                             } else {
                                 MemoryPhysicalView(
                                     memory: placement.memory,
                                     role: memoryRole(for: placement.memory, index: placement.index),
                                     attachment: placement.tapeStyle,
+                                    frameStyle: placement.frameStyle,
+                                    filterStyle: placement.filterStyle,
+                                    filterAdjustment: placement.filterAdjustment,
+                                    printAspectRatio: placement.printAspectRatio,
                                     isSelected: selectedMemoryID == placement.id,
                                     onSelect: { selectedMemoryID = selectedMemoryID == placement.id ? nil : placement.id }
                                 )
@@ -100,6 +124,11 @@ private struct MemoryWallPlacement: Identifiable {
     let rotation: Double
     let zIndex: Double
     let tapeStyle: MemoryAttachment
+    let frameStyle: LockerFrameStyle
+    let filterStyle: LockerFilterStyle
+    let filterAdjustment: DailyLockerFilterAdjustment
+    let printAspectRatio: CGFloat
+    let printAspectRatio: CGFloat
     let isLiving: Bool
 
     var id: UUID { memory.id }
@@ -107,31 +136,32 @@ private struct MemoryWallPlacement: Identifiable {
 
 private struct DeterministicMemoryWallPlacementEngine {
     private let anchors: [CGPoint] = [
-        CGPoint(x: 0.50, y: 0.49),
-        CGPoint(x: 0.18, y: 0.15), CGPoint(x: 0.49, y: 0.14), CGPoint(x: 0.81, y: 0.17),
-        CGPoint(x: 0.13, y: 0.43), CGPoint(x: 0.87, y: 0.43),
-        CGPoint(x: 0.18, y: 0.77), CGPoint(x: 0.50, y: 0.82), CGPoint(x: 0.82, y: 0.77),
-        CGPoint(x: 0.88, y: 0.67)
+        CGPoint(x: 0.51, y: 0.45),
+        CGPoint(x: 0.22, y: 0.15), CGPoint(x: 0.73, y: 0.18),
+        CGPoint(x: 0.18, y: 0.40), CGPoint(x: 0.80, y: 0.43),
+        CGPoint(x: 0.23, y: 0.72), CGPoint(x: 0.43, y: 0.77), CGPoint(x: 0.78, y: 0.72)
     ]
-    private let widthFractions: [CGFloat] = [0.40, 0.22, 0.22, 0.18, 0.22, 0.26, 0.22, 0.18, 0.22, 0.22]
-    private let rotationPresets: [Double] = [-0.4, -2.0, 1.2, 2.8, -1.4, 0.6, -3.0, 1.8, -0.8, 2.1]
-    private let looseOffsets: [CGSize] = [
-        .zero, CGSize(width: -5, height: 5), CGSize(width: 4, height: -4), CGSize(width: 6, height: 8),
-        CGSize(width: -4, height: -7), CGSize(width: 5, height: 4), CGSize(width: -7, height: -5),
-        CGSize(width: 4, height: 7), CGSize(width: 7, height: -4), CGSize(width: -5, height: 6)
-    ]
+    private let widthFractions: [CGFloat] = [0.294, 0.1995, 0.2205, 0.189, 0.21, 0.1932, 0.2268, 0.2016]
+    private let rotationPresets: [Double] = [0.4, -3.0, 2.0, -1.5, 3.0, -2.0, 1.0, -2.5]
+    private let aspectRatios: [CGFloat] = [0.82, 0.82, 0.72, 1.0, 0.82, 0.96, 0.74, 0.88]
 
-    func layout(memories: [MemoryRecord], containerSize: CGSize) -> [MemoryWallPlacement] {
+    func layout(memories: [MemoryRecord], containerSize: CGSize, appearance: LockerAppearanceSettings, date: Date) -> [MemoryWallPlacement] {
         let density = MemoryDensity(count: memories.count)
         guard density != .empty, containerSize.width > 0, containerSize.height > 0 else { return [] }
+        let variation = DailyLockerVariationEngine().variation(
+            for: date,
+            memories: memories,
+            isEnabled: appearance.dailyVariationEnabled
+        )
 
         return memories.enumerated().map { index, memory in
             let presetIndex = index % anchors.count
             let anchor = anchors[presetIndex]
-            let looseOffset = looseOffsets[presetIndex]
+            let daily = variation.memoryAdjustments[memory.id] ?? .none
             let width = containerSize.width * widthFractions[presetIndex]
             let halfX = width / containerSize.width / 2 + 0.012
-            let estimatedHeight = width / 0.82
+            let printAspectRatio = daily.printAspectRatioOverride ?? aspectRatios[presetIndex]
+            let estimatedHeight = width / printAspectRatio
             let halfY = estimatedHeight / containerSize.height / 2 + 0.012
             let attachment: MemoryAttachment
             switch index {
@@ -145,30 +175,148 @@ private struct DeterministicMemoryWallPlacementEngine {
                 memory: memory,
                 index: index,
                 position: CGPoint(
-                    x: min(max(anchor.x + looseOffset.width / containerSize.width, halfX), 1 - halfX) * containerSize.width,
-                    y: min(max(anchor.y + looseOffset.height / containerSize.height, halfY), 1 - halfY) * containerSize.height
+                    x: min(max(anchor.x * containerSize.width + daily.positionOffset.width, halfX * containerSize.width), (1 - halfX) * containerSize.width),
+                    y: min(max(anchor.y * containerSize.height + daily.positionOffset.height, halfY * containerSize.height), (1 - halfY) * containerSize.height)
                 ),
                 width: width,
-                rotation: rotationPresets[presetIndex],
+                rotation: min(max(rotationPresets[presetIndex] + daily.rotationOffset, -4), 4),
                 zIndex: index == 0 ? 30 : Double(20 + (index % 7)),
                 tapeStyle: index == 0 ? .none : attachment,
+                frameStyle: daily.frameOverride ?? resolvedFrame(appearance.frameStyle, collage: appearance.collageStyle, index: index),
+                filterStyle: appearance.filterStyle,
+                filterAdjustment: index == 0 ? variation.filterAdjustment.featuredVideoAdjustment : variation.filterAdjustment,
+                printAspectRatio: printAspectRatio,
                 isLiving: index == 0
             )
         }
+    }
+
+    private func resolvedFrame(_ selected: LockerFrameStyle, collage: LockerCollageStyle, index: Int) -> LockerFrameStyle {
+        guard selected == .mixed else { return selected }
+        let sequence: [LockerFrameStyle]
+        switch collage {
+        case .polaroid: sequence = [.polaroid, .polaroid, .thinWhite, .polaroid]
+        case .digicam: sequence = [.thinWhite, .borderless, .thinWhite, .polaroid]
+        case .balanced, .casual: sequence = [.polaroid, .thinWhite, .borderless, .polaroid]
+        }
+        return sequence[index % sequence.count]
+    }
+}
+
+private struct DailyLockerFilterAdjustment: Equatable {
+    let brightness: Double
+    let contrast: Double
+    let saturation: Double
+    let warmth: Double
+
+    static let none = DailyLockerFilterAdjustment(brightness: 0, contrast: 0, saturation: 0, warmth: 0)
+
+    var featuredVideoAdjustment: Self {
+        Self(brightness: brightness * 0.25, contrast: 0, saturation: 0, warmth: warmth * 0.15)
+    }
+}
+
+private struct DailyLockerMemoryAdjustment: Equatable {
+    let positionOffset: CGSize
+    let rotationOffset: Double
+    let frameOverride: LockerFrameStyle?
+    let printAspectRatioOverride: CGFloat?
+
+    static let none = DailyLockerMemoryAdjustment(positionOffset: .zero, rotationOffset: 0, frameOverride: nil, printAspectRatioOverride: nil)
+}
+
+private struct DailyLockerVariation: Equatable {
+    let seed: Int
+    let memoryAdjustments: [UUID: DailyLockerMemoryAdjustment]
+    let filterAdjustment: DailyLockerFilterAdjustment
+
+    static let none = DailyLockerVariation(seed: 0, memoryAdjustments: [:], filterAdjustment: .none)
+}
+
+private struct DailyLockerVariationEngine {
+    func variation(for date: Date, memories: [MemoryRecord], isEnabled: Bool, calendar: Calendar = .autoupdatingCurrent) -> DailyLockerVariation {
+        guard isEnabled, memories.count > 1 else { return .none }
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        let seed = (components.year ?? 0) * 10_000 + (components.month ?? 0) * 100 + (components.day ?? 0)
+        var generator = DailySeedGenerator(state: UInt64(max(seed, 1)))
+        let photoIDs = Array(memories.dropFirst().prefix(7).map(\.id))
+        let affectedCount = min(photoIDs.count, generator.nextInt(in: 1...2))
+        var available = photoIDs
+        var selected: [UUID] = []
+        for _ in 0..<affectedCount where !available.isEmpty {
+            selected.append(available.remove(at: generator.nextInt(in: 0...(available.count - 1))))
+        }
+
+        let frameOptions: [LockerFrameStyle] = [.polaroid, .thinWhite, .borderless]
+        var adjustments: [UUID: DailyLockerMemoryAdjustment] = [:]
+        for (offset, id) in selected.enumerated() {
+            let x = generator.nextDouble(in: -8...8)
+            let y = generator.nextDouble(in: -8...8)
+            let rotationMagnitude = generator.nextDouble(in: 0.5...1.5)
+            let rotation = generator.nextBool() ? rotationMagnitude : -rotationMagnitude
+            let changesFrame = offset == 0 && generator.nextBool()
+            let usesSquarePrint = changesFrame && generator.nextInt(in: 0...3) == 3
+            adjustments[id] = DailyLockerMemoryAdjustment(
+                positionOffset: CGSize(width: x, height: y),
+                rotationOffset: rotation,
+                frameOverride: changesFrame && !usesSquarePrint ? frameOptions[generator.nextInt(in: 0...(frameOptions.count - 1))] : nil,
+                printAspectRatioOverride: usesSquarePrint ? 1 : nil
+            )
+        }
+
+        return DailyLockerVariation(
+            seed: seed,
+            memoryAdjustments: adjustments,
+            filterAdjustment: DailyLockerFilterAdjustment(
+                brightness: generator.nextDouble(in: -0.02...0.02),
+                contrast: generator.nextDouble(in: -0.03...0.03),
+                saturation: generator.nextDouble(in: -0.03...0.03),
+                warmth: generator.nextDouble(in: -0.025...0.025)
+            )
+        )
+    }
+}
+
+private struct DailySeedGenerator {
+    private var state: UInt64
+    init(state: UInt64) { self.state = state }
+
+    mutating func next() -> UInt64 {
+        state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+        return state
+    }
+    mutating func nextBool() -> Bool { next().isMultiple(of: 2) }
+    mutating func nextInt(in range: ClosedRange<Int>) -> Int {
+        range.lowerBound + Int(next() % UInt64(range.upperBound - range.lowerBound + 1))
+    }
+    mutating func nextDouble(in range: ClosedRange<Double>) -> Double {
+        let unit = Double(next() >> 11) / Double(1 << 53)
+        return range.lowerBound + (range.upperBound - range.lowerBound) * unit
     }
 }
 
 private struct LivingMemoryView: View {
     @EnvironmentObject private var appModel: LockUAppModel
     let memory: MemoryRecord
+    let frameStyle: LockerFrameStyle
+    let filterStyle: LockerFilterStyle
+    let filterAdjustment: DailyLockerFilterAdjustment
 
     var body: some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             appModel.selectedTab = .book
         } label: {
-            PolaroidPrint(memory: memory, bottomMarginFraction: 0.19, allowsAnnotation: false)
-                .shadow(color: .black.opacity(0.13), radius: 3, y: 1.5)
+            PolaroidPrint(memory: memory, frameStyle: frameStyle, filterStyle: filterStyle, filterAdjustment: filterAdjustment, isFeatured: true, printAspectRatio: printAspectRatio)
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.90))
+                        .frame(width: 19, height: 19)
+                        .background(.black.opacity(0.32), in: Circle())
+                        .padding(7)
+                }
+                .shadow(color: .black.opacity(0.08), radius: 3.5, y: 2)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Latest memory from \(memory.createdAt.formatted(date: .abbreviated, time: .shortened))")
@@ -178,19 +326,22 @@ private struct LivingMemoryView: View {
 private struct PolaroidPrint: View {
     @EnvironmentObject private var repository: MemoryRepository
     let memory: MemoryRecord
-    let bottomMarginFraction: CGFloat
-    let allowsAnnotation: Bool
+    let frameStyle: LockerFrameStyle
+    let filterStyle: LockerFilterStyle
+    let filterAdjustment: DailyLockerFilterAdjustment
+    let isFeatured: Bool
+    let printAspectRatio: CGFloat
 
     var body: some View {
         GeometryReader { proxy in
-            let sideMargin = proxy.size.width * 0.055
-            let topMargin = proxy.size.height * 0.055
+            let sideMargin = proxy.size.width * sideMarginFraction
+            let topMargin = proxy.size.height * topMarginFraction
             let bottomMargin = proxy.size.height * bottomMarginFraction
             let photoHeight = max(0, proxy.size.height - topMargin - bottomMargin)
 
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 2.5)
-                    .fill(LockUSceneTokens.Material.paperBase)
+                    .fill(paperColor)
                     .overlay {
                         LinearGradient(
                             colors: [LockUSceneTokens.Material.paperHighlight.opacity(0.22), .clear, LockUSceneTokens.Material.paperShadow.opacity(0.07)],
@@ -210,34 +361,81 @@ private struct PolaroidPrint: View {
                             .overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.65)))
                     }
                 }
+                .modifier(LockerMemoryFilterModifier(style: filterStyle, adjustment: filterAdjustment))
                 .frame(width: proxy.size.width - sideMargin * 2, height: photoHeight)
                 .clipped()
                 .offset(x: sideMargin, y: topMargin)
 
-                if showsAnnotation {
-                    Text(annotation)
-                        .font(.system(size: max(7, proxy.size.width * 0.09), weight: .regular).italic())
-                        .foregroundStyle(Color(red: 99/255, green: 135/255, blue: 160/255).opacity(0.86))
+                if frameStyle == .polaroid || frameStyle == .mixed {
+                    Text(memory.createdAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).year(.twoDigits)))
+                        .font(.system(size: max(6, proxy.size.width * 0.072), weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color(red: 99/255, green: 115/255, blue: 124/255).opacity(0.80))
                         .lineLimit(1)
-                        .rotationEffect(.degrees(-0.6))
                         .frame(width: proxy.size.width - sideMargin * 2, alignment: .leading)
-                        .offset(x: sideMargin, y: proxy.size.height - bottomMargin * 0.68)
+                        .offset(x: sideMargin, y: proxy.size.height - bottomMargin * 0.64)
                 }
             }
         }
-        .aspectRatio(0.82, contentMode: .fit)
+        .aspectRatio(printAspectRatio, contentMode: .fit)
     }
 
-    private var showsAnnotation: Bool {
-        allowsAnnotation && checksum.isMultiple(of: 3)
+    private var sideMarginFraction: CGFloat {
+        switch frameStyle { case .polaroid, .mixed: 0.055; case .thinWhite: 0.025; case .borderless: 0 }
+    }
+    private var topMarginFraction: CGFloat {
+        switch frameStyle { case .polaroid, .mixed: 0.055; case .thinWhite: 0.022; case .borderless: 0 }
+    }
+    private var bottomMarginFraction: CGFloat {
+        switch frameStyle {
+        case .polaroid, .mixed: isFeatured ? 0.19 : 0.17
+        case .thinWhite: 0.025
+        case .borderless: 0
+        }
+    }
+    private var paperColor: Color {
+        frameStyle == .borderless ? .clear : LockUSceneTokens.Material.paperBase
+    }
+}
+
+private struct LockerMemoryFilterModifier: ViewModifier {
+    let style: LockerFilterStyle
+    let adjustment: DailyLockerFilterAdjustment
+
+    func body(content: Content) -> some View {
+        content
+            .saturation(saturation)
+            .contrast(contrast)
+            .brightness(brightness)
+            .overlay(tint.blendMode(.softLight).allowsHitTesting(false))
+            .overlay(dailyWarmth.blendMode(.softLight).allowsHitTesting(false))
     }
 
-    private var annotation: String {
-        ["8.10", "after school", ":)", "summer"][checksum % 4]
+    private var saturation: Double {
+        let base: Double
+        switch style { case .clear: base = 1; case .digicam: base = 0.96; case .film: base = 0.91; case .aoharu: base = 0.94; case .soft: base = 0.88 }
+        return base + adjustment.saturation
     }
-
-    private var checksum: Int {
-        memory.id.uuidString.unicodeScalars.reduce(0) { ($0 + Int($1.value)) % 997 }
+    private var contrast: Double {
+        let base: Double
+        switch style { case .clear: base = 1.0; case .digicam: base = 1.08; case .film: base = 1.02; case .aoharu: base = 0.98; case .soft: base = 0.93 }
+        return base + adjustment.contrast
+    }
+    private var brightness: Double {
+        adjustment.brightness + (style == .soft ? 0.018 : 0)
+    }
+    private var tint: Color {
+        switch style {
+        case .clear: .clear
+        case .digicam: Color(red: 0.72, green: 0.88, blue: 0.94).opacity(0.025)
+        case .film: Color(red: 0.96, green: 0.80, blue: 0.58).opacity(0.035)
+        case .aoharu: Color(red: 0.60, green: 0.82, blue: 0.96).opacity(0.030)
+        case .soft: Color(red: 1.0, green: 0.88, blue: 0.80).opacity(0.025)
+        }
+    }
+    private var dailyWarmth: Color {
+        adjustment.warmth >= 0
+            ? Color(red: 1, green: 0.77, blue: 0.55).opacity(adjustment.warmth)
+            : Color(red: 0.55, green: 0.78, blue: 1).opacity(abs(adjustment.warmth))
     }
 }
 
@@ -261,25 +459,32 @@ private struct MemoryPhysicalView: View {
     let memory: MemoryRecord
     let role: MemoryVisualRole
     let attachment: MemoryAttachment
+    let frameStyle: LockerFrameStyle
+    let filterStyle: LockerFilterStyle
+    let filterAdjustment: DailyLockerFilterAdjustment
     let isSelected: Bool
     let onSelect: () -> Void
-    @GestureState private var drag: CGSize = .zero
 
     private var depth: MemoryDepthLevel {
         switch role { case .cheki: return .paper; case .cutout: return .raisedSticker; default: return .flatPhoto }
     }
 
     var body: some View {
-        PolaroidPrint(memory: memory, bottomMarginFraction: 0.17, allowsAnnotation: true)
+        PolaroidPrint(memory: memory, frameStyle: frameStyle, filterStyle: filterStyle, filterAdjustment: filterAdjustment, isFeatured: false, printAspectRatio: printAspectRatio)
+        .overlay(alignment: .bottomLeading) {
+            if frameStyle == .thinWhite || frameStyle == .borderless {
+                Text(memory.createdAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits)))
+                    .font(.system(size: 6.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.88))
+                    .shadow(color: .black.opacity(0.42), radius: 1)
+                    .padding(4)
+            }
+        }
         .overlay(alignment: .top) { attachmentView }
-        .scaleEffect(drag == .zero ? 1 : 1.01)
-        .offset(drag)
-        .shadow(color: .black.opacity(drag == .zero ? 0.12 : 0.14), radius: drag == .zero ? 2.5 : 4, y: drag == .zero ? 1.25 : 1.5)
+        .shadow(color: .black.opacity(0.08), radius: 3.5, y: 2)
         .contentShape(Rectangle())
         .onTapGesture { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onSelect() }
         .onTapGesture(count: 2) { appModel.selectedTab = .book }
-        .gesture(DragGesture(minimumDistance: 3).updating($drag) { value, state, _ in state = value.translation })
-        .animation(.easeOut(duration: 0.20), value: drag)
     }
 
     @ViewBuilder private var physicalPhoto: some View {

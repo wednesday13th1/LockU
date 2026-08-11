@@ -107,15 +107,53 @@ private struct LockerSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var repository: LockerSettingsRepository
     @EnvironmentObject private var appModel: LockUAppModel
+    @EnvironmentObject private var memoryRepository: MemoryRepository
     @State private var ownerName = ""
     @State private var lockerNumber = ""
+    @State private var appearance = LockerAppearanceSettings.default
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Owner name", text: $ownerName)
-                TextField("Locker code", text: $lockerNumber)
-                    .keyboardType(.numberPad)
+                Section {
+                    ZStack {
+                        LockUSceneTokens.Material.backWall
+                        LockerMemoryBoardView(appearanceOverride: appearance)
+                            .environmentObject(memoryRepository)
+                            .environmentObject(appModel)
+                    }
+                    .frame(height: 230)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.42), lineWidth: 1))
+                    .allowsHitTesting(false)
+                    .accessibilityLabel("Current Locker Home preview")
+                }
+
+                Section("Locker Appearance") {
+                    Picker("Collage Style", selection: $appearance.collageStyle) {
+                        ForEach(LockerCollageStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Frame", selection: $appearance.frameStyle) {
+                        ForEach(LockerFrameStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Filter", selection: $appearance.filterStyle) {
+                        ForEach(LockerFilterStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Featured Video", selection: $appearance.featuredVideoMemoryID) {
+                        Text("Automatic — Latest Memory").tag(UUID?.none)
+                        ForEach(memoryRepository.memories) { memory in
+                            Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .tag(Optional(memory.id))
+                        }
+                    }
+                    Toggle("Daily Variation", isOn: $appearance.dailyVariationEnabled)
+                }
+
+                Section("Locker") {
+                    TextField("Owner name", text: $ownerName)
+                    TextField("Locker code", text: $lockerNumber)
+                        .keyboardType(.numberPad)
+                }
             }
             .navigationTitle("Settings")
             .toolbar {
@@ -128,6 +166,7 @@ private struct LockerSettingsSheet: View {
                             var settings = repository.settings
                             settings.ownerName = ownerName.isEmpty ? "My" : ownerName
                             settings.lockerNumber = lockerNumber.isEmpty ? "24" : lockerNumber
+                            settings.appearance = appearance
                             try repository.update(settings)
                             dismiss()
                         } catch {
@@ -139,6 +178,7 @@ private struct LockerSettingsSheet: View {
             .onAppear {
                 ownerName = repository.settings.ownerName
                 lockerNumber = repository.settings.lockerNumber
+                appearance = repository.settings.appearance
             }
         }
     }
