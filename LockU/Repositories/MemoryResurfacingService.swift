@@ -16,6 +16,7 @@ struct MemoryResurfacingService {
     static let fullRevisitMemoryCount = 14
     static let forgottenThresholdDays = 30
     static let randomPastMinimumAgeDays = 14
+    static let revisitCooldownDays = 7
 
     func candidate(
         for date: Date,
@@ -58,7 +59,7 @@ struct MemoryResurfacingService {
     private func forgottenCandidate(for today: Date, from memories: [MemoryRecord], calendar: Calendar) -> MemoryRecord? {
         guard let threshold = calendar.date(byAdding: .day, value: -Self.forgottenThresholdDays, to: today) else { return nil }
         return memories
-            .filter { calendar.startOfDay(for: $0.memoryDate) <= threshold }
+            .filter { calendar.startOfDay(for: $0.memoryDate) <= threshold && isOutsideRevisitCooldown($0, today: today, calendar: calendar) }
             .sorted { lhs, rhs in
                 switch (lhs.lastRevisitedAt, rhs.lastRevisitedAt) {
                 case (nil, .some): return true
@@ -72,7 +73,9 @@ struct MemoryResurfacingService {
 
     private func stablePastCandidate(for today: Date, from memories: [MemoryRecord], calendar: Calendar) -> MemoryRecord? {
         guard let threshold = calendar.date(byAdding: .day, value: -Self.randomPastMinimumAgeDays, to: today) else { return nil }
-        let eligible = memories.filter { calendar.startOfDay(for: $0.memoryDate) <= threshold }
+        let eligible = memories.filter {
+            calendar.startOfDay(for: $0.memoryDate) <= threshold && isOutsideRevisitCooldown($0, today: today, calendar: calendar)
+        }
         guard !eligible.isEmpty else { return nil }
         let dayComponents = calendar.dateComponents([.year, .month, .day], from: today)
         let daySeed = UInt64((dayComponents.year ?? 0) * 10_000 + (dayComponents.month ?? 0) * 100 + (dayComponents.day ?? 0))
@@ -83,5 +86,13 @@ struct MemoryResurfacingService {
         id.uuidString.utf8.reduce(14_695_981_039_346_656_037 ^ daySeed) { value, byte in
             (value ^ UInt64(byte)) &* 1_099_511_628_211
         }
+    }
+
+    private func isOutsideRevisitCooldown(_ memory: MemoryRecord, today: Date, calendar: Calendar) -> Bool {
+        guard let lastRevisitedAt = memory.lastRevisitedAt,
+              let cooldownStart = calendar.date(byAdding: .day, value: -Self.revisitCooldownDays, to: today) else {
+            return true
+        }
+        return lastRevisitedAt < cooldownStart
     }
 }
