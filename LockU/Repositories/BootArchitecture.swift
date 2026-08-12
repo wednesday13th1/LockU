@@ -32,31 +32,81 @@ struct BootAvailability: Sendable {
     var isUsable: Bool { memory || decoration || settings || background }
 }
 
+struct EssentialBootResult {
+    let availability: BootAvailability
+    let error: Error?
+}
+
+struct DeferredBootResult {
+    let didMigrate: Bool
+    let error: Error?
+}
+
 @MainActor
 final class LockUBootCoordinator {
     private let dependencies: LockUDependencyContainer
     init(dependencies: LockUDependencyContainer) { self.dependencies = dependencies }
 
-    func boot(state: (AppBootState) -> Void) -> (BootAvailability, Error?) {
+    func performEssentialBoot(state: (AppBootState) -> Void) async -> EssentialBootResult {
         var availability = BootAvailability(); var firstError: Error?
         state(.preparingStorage)
         state(.loading)
         attempt({ try dependencies.settingsRepository.reload() }, success: { availability.settings = true }, onError: { firstError = firstError ?? $0 })
+        await Task.yield()
         attempt({ try dependencies.memoryRepository.reload() }, success: { availability.memory = true }, onError: { firstError = firstError ?? $0 })
+        await Task.yield()
         attempt({ try dependencies.decorationRepository.reload() }, success: { availability.decoration = true }, onError: { firstError = firstError ?? $0 })
-        attempt({ try dependencies.reflectionRepository.reload() }, success: {}, onError: { LockULog.error(.metadata, "Reflection history could not be loaded: \($0.localizedDescription)") })
+        await Task.yield()
         dependencies.backgroundRepository.reload(); availability.background = true
 
+        let finalState: AppBootState = availability.isUsable
+            ? .ready
+            : .failed(firstError ?? BootFailure.noSubsystemAvailable)
+        state(finalState)
+        return EssentialBootResult(availability: availability, error: firstError)
+    }
+
+    func performDeferredBoot(state: (AppBootState) -> Void) async -> DeferredBootResult {
+        var firstError: Error?
+        var didMigrate = false
+
+        attempt(
+            { try dependencies.reflectionRepository.reload() },
+            success: {},
+            onError: {
+                firstError = firstError ?? $0
+                LockULog.error(.metadata, "Reflection history could not be loaded: \($0.localizedDescription)")
+            }
+        )
+        await Task.yield()
+
         state(.migrating)
-        attempt({ try MigrationCoordinator(legacy: LegacyMigrationService(memories: dependencies.memoryRepository, decorations: dependencies.decorationRepository, settings: dependencies.settingsRepository, backgrounds: dependencies.backgroundRepository)).migrateIfNeeded() }, success: {}, onError: { firstError = firstError ?? $0 })
-        if availability.memory { attempt({ try dependencies.memoryRepository.reload() }, success: {}, onError: { firstError = firstError ?? $0 }) }
-        if availability.decoration { attempt({ try dependencies.decorationRepository.reload() }, success: {}, onError: { firstError = firstError ?? $0 }) }
+        do {
+            didMigrate = try MigrationCoordinator(
+                legacy: LegacyMigrationService(
+                    memories: dependencies.memoryRepository,
+                    decorations: dependencies.decorationRepository,
+                    settings: dependencies.settingsRepository,
+                    backgrounds: dependencies.backgroundRepository
+                )
+            ).migrateIfNeeded()
+        } catch {
+            firstError = firstError ?? error
+        }
+        await Task.yield()
+
+        if didMigrate {
+            attempt({ try dependencies.memoryRepository.reload() }, success: {}, onError: { firstError = firstError ?? $0 })
+            await Task.yield()
+            attempt({ try dependencies.decorationRepository.reload() }, success: {}, onError: { firstError = firstError ?? $0 })
+            dependencies.backgroundRepository.reload()
+        }
 
         state(.recovering)
         let report = StorageHealthInspector(paths: dependencies.paths).inspect(memories: dependencies.memoryRepository.memories, decorations: dependencies.decorationRepository.decorations)
         if report.hasIssues { LockULog.debug(.recovery, "health issues detected; no automatic deletion") }
-        state(availability.isUsable ? .ready : .failed(firstError ?? BootFailure.noSubsystemAvailable))
-        return (availability, firstError)
+        state(.ready)
+        return DeferredBootResult(didMigrate: didMigrate, error: firstError)
     }
 
     private func attempt(_ operation: () throws -> Void, success: () -> Void, onError: (Error) -> Void) { do { try operation(); success() } catch { onError(error) } }

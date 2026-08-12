@@ -37,12 +37,13 @@ final class LegacyMigrationService {
         self.backgrounds = backgrounds
     }
 
-    func migrateIfNeeded() throws {
-        guard !defaults.bool(forKey: Key.completed) else { return }
+    @discardableResult
+    func migrateIfNeeded() throws -> Bool {
+        guard !defaults.bool(forKey: Key.completed) else { return false }
         let existingKeys = Key.all.filter { defaults.object(forKey: $0) != nil }
         guard !existingKeys.isEmpty else {
             defaults.set(true, forKey: Key.completed)
-            return
+            return false
         }
 
         try migrateImageArray(forKey: Key.memories) { image, date in
@@ -75,6 +76,7 @@ final class LegacyMigrationService {
 
         existingKeys.forEach(defaults.removeObject(forKey:))
         defaults.set(true, forKey: Key.completed)
+        return true
     }
 
     private func migrateImageArray(

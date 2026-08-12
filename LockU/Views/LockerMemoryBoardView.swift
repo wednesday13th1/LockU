@@ -164,7 +164,7 @@ private struct DeterministicMemoryWallPlacementEngine {
         CGPoint(x: 0.23, y: 0.72), CGPoint(x: 0.43, y: 0.77), CGPoint(x: 0.78, y: 0.72)
     ]
     private let widthFractions: [CGFloat] = [0.294, 0.1995, 0.2205, 0.189, 0.21, 0.1932, 0.2268, 0.2016]
-    private let rotationPresets: [Double] = [0.4, -3.0, 2.0, -1.5, 3.0, -2.0, 1.0, -2.5]
+    private let rotationPresets: [Double] = [0.2, -1.2, 1.1, -0.8, 1.6, -1.4, 0.7, -1.8]
     private let aspectRatios: [CGFloat] = [0.82, 0.82, 0.72, 1.0, 0.82, 0.96, 0.74, 0.88]
 
     func layout(memories: [MemoryRecord], containerSize: CGSize, appearance: LockerAppearanceSettings, date: Date) -> [MemoryWallPlacement] {
@@ -187,9 +187,7 @@ private struct DeterministicMemoryWallPlacementEngine {
             let halfY = estimatedHeight / containerSize.height / 2 + 0.012
             let attachment: MemoryAttachment
             switch index {
-            case 6, 8: attachment = .clearTape
-            case 7: attachment = .maskingTape
-            case 9: attachment = .magnet
+            case 1, 4, 7: attachment = .maskingTape
             default: attachment = .none
             }
 
@@ -201,7 +199,7 @@ private struct DeterministicMemoryWallPlacementEngine {
                     y: min(max(anchor.y * containerSize.height + daily.positionOffset.height, halfY * containerSize.height), (1 - halfY) * containerSize.height)
                 ),
                 width: width,
-                rotation: min(max(rotationPresets[presetIndex] + daily.rotationOffset, -4), 4),
+                rotation: min(max(rotationPresets[presetIndex] + daily.rotationOffset, -2.5), 2.5),
                 zIndex: index == 0 ? 30 : Double(20 + (index % 7)),
                 tapeStyle: index == 0 ? .none : attachment,
                 frameStyle: daily.frameOverride ?? resolvedFrame(appearance.frameStyle, collage: appearance.collageStyle, index: index),
@@ -339,7 +337,7 @@ private struct LivingMemoryView: View {
                         .background(.black.opacity(0.32), in: Circle())
                         .padding(7)
                 }
-                .shadow(color: .black.opacity(0.08), radius: 3.5, y: 2)
+                .shadow(color: .black.opacity(0.10), radius: 3, y: 2)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Latest memory from \(memory.createdAt.formatted(date: .abbreviated, time: .shortened))")
@@ -357,47 +355,44 @@ private struct PolaroidPrint: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let variant = PolaroidVisualVariant(memoryID: memory.id)
             let sideMargin = proxy.size.width * sideMarginFraction
             let topMargin = proxy.size.height * topMarginFraction
             let bottomMargin = proxy.size.height * bottomMarginFraction
             let photoHeight = max(0, proxy.size.height - topMargin - bottomMargin)
 
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 2.5)
-                    .fill(paperColor)
-                    .overlay {
-                        LinearGradient(
-                            colors: [LockUSceneTokens.Material.paperHighlight.opacity(0.22), .clear, LockUSceneTokens.Material.paperShadow.opacity(0.07)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 2.5))
-                    }
+                PolaroidPaperView(
+                    variant: variant,
+                    isVisible: frameStyle != .borderless
+                )
 
-                Group {
-                    if let image = repository.image(for: memory) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Color(white: 0.52)
-                            .overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.65)))
+                MemoryPhotoSurface(memoryID: memory.id, variant: variant) {
+                    Group {
+                        if let image = repository.image(for: memory) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Color(white: 0.52)
+                                .overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.65)))
+                        }
                     }
+                    .modifier(LockerMemoryFilterModifier(style: filterStyle, adjustment: filterAdjustment))
                 }
-                .modifier(LockerMemoryFilterModifier(style: filterStyle, adjustment: filterAdjustment))
                 .frame(width: proxy.size.width - sideMargin * 2, height: photoHeight)
-                .clipped()
                 .offset(x: sideMargin, y: topMargin)
 
                 if frameStyle == .polaroid || frameStyle == .mixed {
-                    Text(memory.createdAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).year(.twoDigits)))
-                        .font(.system(size: max(6, proxy.size.width * 0.072), weight: .medium, design: .monospaced))
-                        .foregroundStyle(Color(red: 99/255, green: 115/255, blue: 124/255).opacity(0.80))
-                        .lineLimit(1)
-                        .frame(width: proxy.size.width - sideMargin * 2, alignment: .leading)
-                        .offset(x: sideMargin, y: proxy.size.height - bottomMargin * 0.64)
+                    MemoryDateStampView(date: memory.createdAt, memoryID: memory.id, printWidth: proxy.size.width)
+                        .frame(width: proxy.size.width - sideMargin * 2, alignment: .trailing)
+                        .offset(
+                            x: sideMargin + variant.dateOffset.width,
+                            y: proxy.size.height - bottomMargin * 0.60 + variant.dateOffset.height
+                        )
                 }
             }
+            .clipShape(ImperfectPhotoShape())
         }
         .aspectRatio(printAspectRatio, contentMode: .fit)
     }
@@ -415,8 +410,168 @@ private struct PolaroidPrint: View {
         case .borderless: 0
         }
     }
-    private var paperColor: Color {
-        frameStyle == .borderless ? .clear : LockUSceneTokens.Material.paperBase
+}
+
+private struct PolaroidVisualVariant {
+    let index: Int
+    let digicamStyle: DigicamPhotoStyle
+
+    init(memoryID: UUID) {
+        let stableHash = memoryID.uuidString.utf8.reduce(0) { ($0 &* 31 + Int($1)) % 9_973 }
+        index = stableHash % 4
+        digicamStyle = DigicamPhotoStyle.variant(stableHash % 5)
+    }
+
+    var paperColor: Color {
+        switch index {
+        case 0: Color(red: 247/255, green: 244/255, blue: 238/255)
+        case 1: Color(red: 248/255, green: 247/255, blue: 243/255)
+        case 2: Color(red: 245/255, green: 246/255, blue: 243/255)
+        default: Color(red: 248/255, green: 246/255, blue: 241/255)
+        }
+    }
+
+    var dateOffset: CGSize {
+        [CGSize(width: -1.5, height: 0.5), CGSize(width: 1, height: -0.5), CGSize(width: -0.5, height: 0), CGSize(width: 1.5, height: 0.8)][index]
+    }
+}
+
+private struct DigicamPhotoStyle {
+    let exposure: Double
+    let contrast: Double
+    let saturation: Double
+    let coolOpacity: Double
+    let warmOpacity: Double
+    let blackLiftOpacity: Double
+    let highlightOpacity: Double
+    let noiseAmount: Double
+    let flashAmount: Double
+
+    static func variant(_ index: Int) -> Self {
+        switch index {
+        case 0: // Clear Day
+            Self(exposure: 0.010, contrast: 1.04, saturation: 1.00, coolOpacity: 0.012, warmOpacity: 0.004, blackLiftOpacity: 0.008, highlightOpacity: 0.018, noiseAmount: 0.020, flashAmount: 0)
+        case 1: // Soft Summer
+            Self(exposure: 0.015, contrast: 1.02, saturation: 0.98, coolOpacity: 0.006, warmOpacity: 0.008, blackLiftOpacity: 0.010, highlightOpacity: 0.022, noiseAmount: 0.018, flashAmount: 0)
+        case 2: // Indoor Digicam
+            Self(exposure: 0.004, contrast: 1.05, saturation: 0.98, coolOpacity: 0, warmOpacity: 0.004, blackLiftOpacity: 0.008, highlightOpacity: 0.012, noiseAmount: 0.024, flashAmount: 0)
+        case 3: // Restrained Direct Flash
+            Self(exposure: 0.004, contrast: 1.06, saturation: 0.97, coolOpacity: 0.004, warmOpacity: 0.004, blackLiftOpacity: 0.006, highlightOpacity: 0.016, noiseAmount: 0.022, flashAmount: 0.028)
+        default: // Faded Digital
+            Self(exposure: 0.006, contrast: 1.03, saturation: 0.96, coolOpacity: 0.006, warmOpacity: 0.002, blackLiftOpacity: 0.014, highlightOpacity: 0.014, noiseAmount: 0.020, flashAmount: 0)
+        }
+    }
+}
+
+private struct PolaroidPaperView: View {
+    let variant: PolaroidVisualVariant
+    let isVisible: Bool
+
+    var body: some View {
+        if isVisible {
+            ImperfectPhotoShape()
+                .fill(variant.paperColor)
+                .overlay(PhotoPaperTexture().opacity(0.10))
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color(red: 121/255, green: 113/255, blue: 101/255).opacity(0.08))
+                        .frame(height: 0.7)
+                }
+        } else {
+            Color.clear
+        }
+    }
+}
+
+private struct MemoryPhotoSurface<Content: View>: View {
+    let memoryID: UUID
+    let variant: PolaroidVisualVariant
+    let content: Content
+
+    init(
+        memoryID: UUID,
+        variant: PolaroidVisualVariant,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.memoryID = memoryID
+        self.variant = variant
+        self.content = content()
+    }
+
+    var body: some View {
+        let style = variant.digicamStyle
+        content
+            .brightness(style.exposure)
+            .contrast(style.contrast)
+            .saturation(style.saturation)
+            .overlay(coolTone(style).blendMode(SwiftUI.BlendMode.softLight))
+            .overlay(warmTone(style).blendMode(SwiftUI.BlendMode.softLight))
+            .overlay(blackLift(style).blendMode(SwiftUI.BlendMode.screen))
+            .overlay(highlightTone(style).blendMode(SwiftUI.BlendMode.softLight))
+            .overlay(DigicamFlashTreatment(amount: style.flashAmount))
+            .overlay(PhotoPrintGrain(seed: grainSeed, amount: style.noiseAmount))
+            .clipped()
+    }
+
+    private var grainSeed: Int {
+        memoryID.uuidString.utf8.reduce(0) { ($0 &* 33 + Int($1)) % 101 }
+    }
+
+    private func coolTone(_ style: DigicamPhotoStyle) -> SwiftUI.Color {
+        SwiftUI.Color(.sRGB, red: 0.72, green: 0.88, blue: 1, opacity: style.coolOpacity)
+    }
+
+    private func warmTone(_ style: DigicamPhotoStyle) -> SwiftUI.Color {
+        SwiftUI.Color(.sRGB, red: 1, green: 0.84, blue: 0.68, opacity: style.warmOpacity)
+    }
+
+    private func blackLift(_ style: DigicamPhotoStyle) -> SwiftUI.Color {
+        SwiftUI.Color(.sRGB, red: 0.32, green: 0.32, blue: 0.32, opacity: style.blackLiftOpacity)
+    }
+
+    private func highlightTone(_ style: DigicamPhotoStyle) -> SwiftUI.Color {
+        SwiftUI.Color(.sRGB, red: 1, green: 1, blue: 1, opacity: style.highlightOpacity)
+    }
+}
+
+private struct PhotoPrintGrain: View {
+    let seed: Int
+    let amount: Double
+
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<30 {
+                let x = CGFloat((index * 41 + seed * 7 + index * index) % 103) / 103 * size.width
+                let y = CGFloat((index * 67 + seed * 3 + index * index * 2) % 101) / 101 * size.height
+                let diameter = CGFloat(5 + (index + seed) % 6) / 10
+                let color = index.isMultiple(of: 3)
+                    ? Color.white.opacity(amount)
+                    : Color(red: 83/255, green: 87/255, blue: 91/255).opacity(amount * 0.72)
+                context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: diameter, height: diameter)), with: .color(color))
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct DigicamFlashTreatment: View {
+    let amount: Double
+
+    var body: some View {
+        if amount > 0 {
+            RadialGradient(
+                colors: [.white.opacity(amount), .clear, .black.opacity(amount * 0.45)],
+                center: .center,
+                startRadius: 0,
+                endRadius: 150
+            )
+            .blendMode(.softLight)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        } else {
+            Color.clear
+        }
     }
 }
 
@@ -462,6 +617,43 @@ private struct LockerMemoryFilterModifier: ViewModifier {
     }
 }
 
+private struct MemoryDateStampView: View {
+    let date: Date
+    let memoryID: UUID
+    let printWidth: CGFloat
+
+    var body: some View {
+        Text(dateText)
+            .font(.system(size: fontSize, weight: .regular, design: .monospaced))
+            .tracking(0.5)
+            .foregroundStyle(Color(red: 79/255, green: 76/255, blue: 70/255).opacity(inkOpacity))
+            .lineLimit(1)
+            .padding(.trailing, min(9, max(6, printWidth * 0.055)))
+            .offset(y: baselineOffset)
+            .rotationEffect(.degrees(rotation))
+            .accessibilityLabel(date.formatted(date: .long, time: .omitted))
+    }
+
+    private var dateText: String {
+        let components = Calendar.autoupdatingCurrent.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "'%02d %02d %02d",
+            (components.year ?? 0) % 100,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+    }
+
+    private var stableVariant: Int {
+        memoryID.uuidString.utf8.reduce(0) { ($0 &* 31 + Int($1)) % 997 }
+    }
+
+    private var fontSize: CGFloat { min(9, max(7, printWidth * 0.062)) }
+    private var inkOpacity: Double { 0.70 + Double(stableVariant % 3) * 0.025 }
+    private var baselineOffset: CGFloat { CGFloat((stableVariant % 3) - 1) * 0.4 }
+    private var rotation: Double { Double((stableVariant / 3) % 3 - 1) * 0.25 }
+}
+
 private enum MemoryDepthLevel {
     case wall, flatPhoto, paper, raisedSticker, shelfObject, camera
     var shadow: (opacity: Double, radius: CGFloat, y: CGFloat) {
@@ -505,7 +697,7 @@ private struct MemoryPhysicalView: View {
             }
         }
         .overlay(alignment: .top) { attachmentView }
-        .shadow(color: .black.opacity(0.08), radius: 3.5, y: 2)
+        .shadow(color: .black.opacity(0.10), radius: 3, y: 2)
         .contentShape(Rectangle())
         .onTapGesture { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onSelect() }
         .onTapGesture(count: 2) { appModel.selectedTab = .book }
@@ -581,13 +773,9 @@ private struct MemoryPhysicalView: View {
                     .position(tapePosition(in: proxy.size))
                     .rotationEffect(.degrees(-1.6))
             case .maskingTape:
-                ImperfectTape()
-                    .fill(Color(red: 216/255, green: 234/255, blue: 244/255).opacity(0.82))
-                    .overlay(TapeSurface(isClear: false))
-                    .frame(width: proxy.size.width * 0.38, height: min(12, proxy.size.width * 0.14))
-                    .position(tapePosition(in: proxy.size))
-                    .rotationEffect(.degrees(1.8))
-                    .shadow(color: .black.opacity(0.06), radius: 0.8, y: 0.6)
+                MaskingTapeView(memoryID: memory.id)
+                    .frame(width: proxy.size.width * tapeWidthFraction, height: tapeHeight)
+                    .position(maskingTapePosition(in: proxy.size))
             case .magnet:
                 PhysicalMagnet()
                     .frame(width: 15, height: 15)
@@ -599,7 +787,25 @@ private struct MemoryPhysicalView: View {
     private func tapePosition(in size: CGSize) -> CGPoint {
         let checksum = memory.id.uuidString.unicodeScalars.reduce(0) { ($0 + Int($1.value)) % 3 }
         let x: CGFloat = checksum == 0 ? size.width * 0.30 : (checksum == 1 ? size.width * 0.50 : size.width * 0.70)
-        return CGPoint(x: x, y: 0)
+        return CGPoint(x: x, y: 1)
+    }
+
+    private var tapeVariant: Int {
+        memory.id.uuidString.unicodeScalars.reduce(0) { ($0 + Int($1.value)) % 3 }
+    }
+
+    private var tapeWidthFraction: CGFloat {
+        [0.28, 0.35, 0.43][tapeVariant]
+    }
+
+    private var tapeHeight: CGFloat { [12, 14.5, 17][tapeVariant] }
+
+    private func maskingTapePosition(in size: CGSize) -> CGPoint {
+        switch tapeVariant {
+        case 0: CGPoint(x: size.width * 0.50, y: 1)
+        case 1: CGPoint(x: size.width * 0.23, y: 3)
+        default: CGPoint(x: size.width * 0.77, y: 3)
+        }
     }
 
     private var handwriting: String {
@@ -622,6 +828,50 @@ private struct TapeSurface: View {
             Ellipse().stroke(.white.opacity(isClear ? 0.16 : 0.07), lineWidth: 0.4).frame(width: 7, height: 3).offset(x: 9, y: 1)
             Rectangle().fill(.black.opacity(0.025)).frame(width: 0.5).rotationEffect(.degrees(8)).offset(x: -6)
         }.allowsHitTesting(false)
+    }
+}
+
+private struct MaskingTapeView: View {
+    let memoryID: UUID
+
+    var body: some View {
+        ImperfectTape()
+            .fill(tapeColor)
+            .overlay {
+                TapeSurface(isClear: false)
+                Canvas { context, size in
+                    for index in 0..<9 {
+                        let x = CGFloat((index * 19 + variant * 7) % 47) / 47 * size.width
+                        var fiber = Path()
+                        fiber.move(to: CGPoint(x: x, y: 1))
+                        fiber.addLine(to: CGPoint(x: x + 1, y: size.height - 1))
+                        context.stroke(fiber, with: .color(.white.opacity(0.020)), lineWidth: 0.3)
+                    }
+                }
+            }
+            .rotationEffect(.degrees(rotation))
+            .shadow(color: .black.opacity(0.065), radius: 1.2, x: 0.5, y: 0.7)
+            .accessibilityHidden(true)
+    }
+
+    private var variant: Int {
+        memoryID.uuidString.utf8.reduce(0) { ($0 &* 31 + Int($1)) % 3 }
+    }
+
+    private var rotation: Double {
+        switch variant {
+        case 0: -2
+        case 1: -8
+        default: 8
+        }
+    }
+
+    private var tapeColor: Color {
+        switch variant {
+        case 0: Color(red: 244/255, green: 242/255, blue: 235/255).opacity(0.76)
+        case 1: Color(red: 216/255, green: 234/255, blue: 244/255).opacity(0.78)
+        default: Color(red: 243/255, green: 237/255, blue: 218/255).opacity(0.80)
+        }
     }
 }
 

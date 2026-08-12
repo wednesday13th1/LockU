@@ -120,7 +120,7 @@ struct LockerFrameView: View {
                     .padding(.horizontal, frameWidth)
                     .padding(.top, topHeight)
                     .padding(.bottom, frameWidth)
-                    .shadow(color: .black.opacity(0.34), radius: 5, x: 0, y: 5)
+                    .shadow(color: .black.opacity(0.20), radius: 4, x: 1, y: 2)
 
                 VStack(spacing: 0) {
                     topFrame(height: topHeight)
@@ -136,25 +136,13 @@ struct LockerFrameView: View {
                 .padding(.top, topHeight - 1)
                 .overlay {
                     HStack {
-                        LinearGradient(
-                            colors: [
-                                LockUDesign.Color.lockerEdgeHighlight.opacity(0.42),
-                                .clear,
-                                .black.opacity(0.18)
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
+                        LinearGradient(colors: [.white.opacity(0.10), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
                         .frame(width: frameWidth)
-                        .shadow(color: .black.opacity(0.18), radius: 8, x: 8)
+                        .shadow(color: .black.opacity(0.10), radius: 3, x: 2)
                         Spacer()
-                        LinearGradient(
-                            colors: [.black.opacity(0.2), .clear],
-                            startPoint: .trailing,
-                            endPoint: .leading
-                        )
+                        LinearGradient(colors: [.clear, .black.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
                         .frame(width: frameWidth)
-                        .shadow(color: .black.opacity(0.18), radius: 8, x: -8)
+                        .shadow(color: .black.opacity(0.10), radius: 3, x: -2)
                     }
                     .padding(.top, topHeight - 1)
                 }
@@ -182,7 +170,7 @@ struct LockerFrameView: View {
                         lineWidth: 1.5
                     )
             }
-            .shadow(color: .black.opacity(0.20), radius: 12, y: 9)
+            .shadow(color: .black.opacity(0.18), radius: 8, x: 2, y: 5)
         }
     }
 
@@ -190,15 +178,11 @@ struct LockerFrameView: View {
         let start: UnitPoint = axis == .horizontal ? (reversed ? .bottom : .top) : (reversed ? .trailing : .leading)
         let end: UnitPoint = axis == .horizontal ? (reversed ? .top : .bottom) : (reversed ? .leading : .trailing)
         return LinearGradient(
-            stops: [
-                .init(color: Color(red: 98/255, green: 107/255, blue: 111/255), location: 0),
-                .init(color: Color(red: 157/255, green: 166/255, blue: 170/255), location: 0.18),
-                .init(color: Color(red: 197/255, green: 204/255, blue: 207/255), location: 0.54),
-                .init(color: Color(red: 125/255, green: 135/255, blue: 139/255), location: 0.82),
-                .init(color: Color(red: 78/255, green: 87/255, blue: 90/255), location: 1)
-            ], startPoint: start, endPoint: end
+            colors: [lockerColor, lockerColor.opacity(0.96), lockerColor.opacity(0.90)],
+            startPoint: start,
+            endPoint: end
         )
-        .overlay(LinearGradient(colors: [LockUDesign.Color.worldSkyReflection.opacity(0.08), .clear], startPoint: .topLeading, endPoint: .center))
+        .overlay(LinearGradient(colors: [.white.opacity(0.08), .clear, .black.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
         .overlay(alignment: axis == .horizontal ? .bottom : (reversed ? .leading : .trailing)) {
             Rectangle().fill(.black.opacity(0.23)).frame(width: axis == .vertical ? 2 : nil, height: axis == .horizontal ? 2 : nil)
         }
@@ -221,6 +205,8 @@ private struct LockerInteriorSurface: View {
             let side = proxy.size.width * LockUSceneTokens.Home.sideWallFraction
             let ceiling = max(16, min(22, proxy.size.height * 0.032))
             let floor = max(14, proxy.size.height * 0.045)
+            let shelfLip = min(8, floor * 0.36)
+            let aging = LockUDesign.LockerSurfaceAge.threeMonths.agingProfile
             ZStack {
                 LockerInteriorBackground(style: settingsRepository.settings.appearance.backgroundStyle)
                     .clipShape(BackWallShape(side: side, ceiling: ceiling, floor: floor))
@@ -228,13 +214,16 @@ private struct LockerInteriorSurface: View {
                     .clipShape(LeftInteriorWall(side: side, ceiling: ceiling, floor: floor))
                 LockUSceneTokens.Material.rightWall
                     .clipShape(RightInteriorWall(side: side, ceiling: ceiling, floor: floor))
-                LinearGradient(colors: [Color(red: 137/255, green: 147/255, blue: 151/255), Color(red: 105/255, green: 114/255, blue: 118/255)], startPoint: .top, endPoint: .bottom)
+                LinearGradient(colors: [Color(red: 145/255, green: 156/255, blue: 160/255), Color(red: 126/255, green: 137/255, blue: 141/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
                     .clipShape(CeilingPlane(side: side, depth: ceiling))
-                Color(red: 120/255, green: 131/255, blue: 135/255)
+                LinearGradient(colors: [LockUSceneTokens.Material.shelfTop, Color(red: 158/255, green: 172/255, blue: 176/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
                     .clipShape(BottomPlane(side: side, depth: floor))
+                LinearGradient(colors: [LockUSceneTokens.Material.shelfFront, Color(red: 124/255, green: 137/255, blue: 141/255)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: shelfLip)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .shadow(color: .black.opacity(0.12), radius: 3, x: 1, y: 2)
 
-                PhysicalMetalGrain()
-                    .opacity(0.36)
+                LockerSurfaceTexture(profile: aging)
                     .padding(.horizontal, 1)
 
                 InteriorLightFalloff(side: side, ceiling: ceiling, floor: floor)
@@ -251,7 +240,7 @@ private struct LockerInteriorSurface: View {
             }
             .background(LockUDesign.Color.darkCavity)
             .overlay(Rectangle().strokeBorder(.black.opacity(0.24), lineWidth: 2))
-            .shadow(color: .black.opacity(0.24), radius: 14, y: 4)
+            .shadow(color: .black.opacity(0.20), radius: 5, x: 1, y: 2)
         }
     }
 }
@@ -270,7 +259,7 @@ struct LockerInteriorBackground: View {
                     }
                 }
             }
-            .overlay(LinearGradient(colors: [.white.opacity(style.topLightOpacity), .clear], startPoint: .top, endPoint: .center))
+            .overlay(LinearGradient(colors: [.white.opacity(style.topLightOpacity), .clear, .black.opacity(0.025)], startPoint: .top, endPoint: .bottom))
             .accessibilityHidden(true)
     }
 }
@@ -278,27 +267,58 @@ struct LockerInteriorBackground: View {
 private extension LockerBackgroundStyle {
     var colors: [Color] {
         switch self {
-        case .clearBlue: [Color(red: 166/255, green: 187/255, blue: 194/255), Color(red: 140/255, green: 163/255, blue: 170/255)]
-        case .softSky: [Color(red: 184/255, green: 205/255, blue: 214/255), Color(red: 155/255, green: 180/255, blue: 188/255)]
-        case .warmSunset: [Color(red: 205/255, green: 188/255, blue: 169/255), Color(red: 171/255, green: 158/255, blue: 149/255)]
-        case .paleCream: [Color(red: 218/255, green: 214/255, blue: 201/255), Color(red: 185/255, green: 184/255, blue: 176/255)]
-        case .coolGray: [Color(red: 181/255, green: 190/255, blue: 193/255), Color(red: 148/255, green: 160/255, blue: 164/255)]
-        case .fadedSchoolBlue: [Color(red: 146/255, green: 170/255, blue: 179/255), Color(red: 117/255, green: 143/255, blue: 153/255)]
+        case .clearBlue: [Color(red: 151/255, green: 169/255, blue: 175/255), Color(red: 145/255, green: 163/255, blue: 169/255)]
+        case .softSky: [Color(red: 169/255, green: 190/255, blue: 198/255), Color(red: 162/255, green: 183/255, blue: 191/255)]
+        case .warmSunset: [Color(red: 188/255, green: 174/255, blue: 159/255), Color(red: 181/255, green: 167/255, blue: 153/255)]
+        case .paleCream: [Color(red: 201/255, green: 198/255, blue: 188/255), Color(red: 195/255, green: 192/255, blue: 182/255)]
+        case .coolGray: [Color(red: 166/255, green: 176/255, blue: 180/255), Color(red: 160/255, green: 170/255, blue: 174/255)]
+        case .fadedSchoolBlue: [Color(red: 133/255, green: 158/255, blue: 168/255), Color(red: 127/255, green: 152/255, blue: 162/255)]
         }
     }
-    var topLightOpacity: Double { self == .warmSunset ? 0.08 : 0.11 }
+    var topLightOpacity: Double { self == .warmSunset ? 0.025 : 0.035 }
 }
 
-private struct PhysicalMetalGrain: View {
+private struct LockerSurfaceTexture: View {
+    let profile: LockUSurfaceAgingProfile
+
     var body: some View {
-        Canvas { context, size in
-            for index in 0..<28 {
-                let x = CGFloat((index * 37) % 101) / 101 * size.width
-                let y = CGFloat((index * 61) % 97) / 97 * size.height
-                var grain = Path(); grain.move(to: CGPoint(x: x, y: y)); grain.addLine(to: CGPoint(x: x + CGFloat(index % 3), y: y + CGFloat(5 + index % 13)))
-                context.stroke(grain, with: .color(index.isMultiple(of: 4) ? .white.opacity(0.025) : .black.opacity(0.018)), lineWidth: 0.35)
+        ZStack {
+            Canvas { context, size in
+                for index in 0..<52 {
+                    let x = CGFloat((index * 37 + index * index * 3) % 103) / 103 * size.width
+                    let y = CGFloat((index * 61 + index * index) % 101) / 101 * size.height
+                    let diameter = CGFloat(5 + (index * 7) % 11) / 10
+                    let grainColor = index.isMultiple(of: 3)
+                        ? Color.white.opacity(0.022)
+                        : Color(red: 102/255, green: 112/255, blue: 115/255).opacity(0.018)
+                    context.fill(
+                        Path(ellipseIn: CGRect(x: x, y: y, width: diameter, height: diameter)),
+                        with: .color(grainColor)
+                    )
+                }
+
+                for index in 0..<12 {
+                    let x = CGFloat((index * 43 + 11) % 97) / 97 * size.width
+                    let y = CGFloat((index * 67 + 7) % 89) / 89 * size.height
+                    var scratch = Path()
+                    scratch.move(to: CGPoint(x: x, y: y))
+                    scratch.addLine(to: CGPoint(x: x + CGFloat(index % 3), y: y + CGFloat(4 + index % 9)))
+                    context.stroke(scratch, with: .color(.white.opacity(profile.scratchIntensity)), lineWidth: 0.35)
+                }
             }
-        }.allowsHitTesting(false).accessibilityHidden(true)
+
+            LinearGradient(
+                colors: [.white.opacity(0.018), .clear, .black.opacity(0.015), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .opacity(0.9)
+
+            Rectangle()
+                .strokeBorder(Color(red: 103/255, green: 113/255, blue: 116/255).opacity(profile.edgeWearIntensity), lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -354,9 +374,9 @@ private struct InteriorHardwareOverlay: View {
             interiorScrew.position(x: p.size.width - side * 0.48, y: ceiling + 35)
             interiorScrew.position(x: side * 0.48, y: p.size.height - floor - 24)
             interiorScrew.position(x: p.size.width - side * 0.48, y: p.size.height - floor - 24)
-            Ellipse().fill(Color(red: 115/255, green: 89/255, blue: 74/255).opacity(0.08)).frame(width: 8, height: 2)
+            Ellipse().fill(Color(red: 115/255, green: 89/255, blue: 74/255).opacity(0.004)).frame(width: 8, height: 2)
                 .position(x: side + 4, y: p.size.height - floor - 1)
-            Ellipse().fill(Color(red: 139/255, green: 105/255, blue: 86/255).opacity(0.06)).frame(width: 7, height: 2)
+            Ellipse().fill(Color(red: 139/255, green: 105/255, blue: 86/255).opacity(0.003)).frame(width: 7, height: 2)
                 .position(x: p.size.width - side - 4, y: p.size.height - floor - 1)
         }
     }.allowsHitTesting(false).accessibilityHidden(true) }

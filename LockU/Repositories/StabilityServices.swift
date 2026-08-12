@@ -6,7 +6,8 @@ enum LockUDataSchema { static let currentVersion = 2 }
 @MainActor
 struct MigrationCoordinator {
     let legacy: LegacyMigrationService
-    func migrateIfNeeded() throws {
+    @discardableResult
+    func migrateIfNeeded() throws -> Bool {
         // Legacy adapter remains idempotent and marks completion only after every legacy step succeeds.
         try legacy.migrateIfNeeded()
     }

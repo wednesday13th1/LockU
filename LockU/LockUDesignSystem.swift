@@ -39,8 +39,8 @@ enum LockUSceneTokens {
 
     enum Material {
         static let backWall = Color(red: 151/255, green: 166/255, blue: 170/255)
-        static let leftWall = Color(red: 177/255, green: 190/255, blue: 193/255)
-        static let rightWall = Color(red: 137/255, green: 152/255, blue: 157/255)
+        static let leftWall = Color(red: 160/255, green: 175/255, blue: 179/255)
+        static let rightWall = Color(red: 140/255, green: 154/255, blue: 158/255)
         static let shelfTop = Color(red: 170/255, green: 183/255, blue: 186/255)
         static let shelfFront = Color(red: 139/255, green: 152/255, blue: 156/255)
         static let recess = Color(red: 113/255, green: 128/255, blue: 135/255)
@@ -429,7 +429,7 @@ enum LockUDesign {
             switch self {
             case .initial: return .init(scratchIntensity: 0.01, edgeWearIntensity: 0.01, touchWearIntensity: 0, stickerGhostIntensity: 0, oxidationIntensity: 0)
             case .oneMonth: return .init(scratchIntensity: 0.025, edgeWearIntensity: 0.02, touchWearIntensity: 0.015, stickerGhostIntensity: 0, oxidationIntensity: 0)
-            case .threeMonths: return .init(scratchIntensity: 0.04, edgeWearIntensity: 0.045, touchWearIntensity: 0.03, stickerGhostIntensity: 0.01, oxidationIntensity: 0)
+            case .threeMonths: return .init(scratchIntensity: 0.03, edgeWearIntensity: 0.035, touchWearIntensity: 0.02, stickerGhostIntensity: 0, oxidationIntensity: 0.003)
             case .sixMonths: return .init(scratchIntensity: 0.055, edgeWearIntensity: 0.065, touchWearIntensity: 0.05, stickerGhostIntensity: 0.025, oxidationIntensity: 0.01)
             case .oneYear: return .init(scratchIntensity: 0.07, edgeWearIntensity: 0.085, touchWearIntensity: 0.065, stickerGhostIntensity: 0.04, oxidationIntensity: 0.02)
             }
