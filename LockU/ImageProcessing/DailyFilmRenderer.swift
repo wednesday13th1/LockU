@@ -3,11 +3,11 @@ import UIKit
 
 final class DailyFilmRenderer: @unchecked Sendable {
     static let shared = DailyFilmRenderer()
-    private let context = CIContext(options: [.cacheIntermediates: true])
+    nonisolated private let context = CIContext(options: [.cacheIntermediates: true])
 
     private init() {}
 
-    func render(_ image: UIImage, film: DailyFilm) -> UIImage? {
+    nonisolated func render(_ image: UIImage, film: DailyFilm) -> UIImage? {
         guard var output = CIImage(image: image) else { return nil }
         let extent = output.extent
 

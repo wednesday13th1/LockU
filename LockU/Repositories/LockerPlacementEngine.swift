@@ -1,6 +1,6 @@
 import Foundation
 
-struct LockerPlacementEngine {
+nonisolated struct LockerPlacementEngine {
     let policy: PlacementPolicy
     private let zIndex = LockerZIndexService()
     init(policy: PlacementPolicy = .locker) { self.policy = policy }

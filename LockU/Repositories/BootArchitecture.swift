@@ -10,6 +10,7 @@ final class LockUDependencyContainer {
     let decorationRepository: DecorationRepository
     let settingsRepository: LockerSettingsRepository
     let backgroundRepository: BackgroundRepository
+    let reflectionRepository: MemoryReflectionRepository
 
     init(fileManager: FileManager = .default) {
         if let persistentPaths = try? LockUPaths(fileManager: fileManager) {
@@ -22,6 +23,7 @@ final class LockUDependencyContainer {
         decorationRepository = DecorationRepository(paths: paths)
         settingsRepository = LockerSettingsRepository(paths: paths)
         backgroundRepository = BackgroundRepository(paths: paths)
+        reflectionRepository = MemoryReflectionRepository(paths: paths)
     }
 }
 
@@ -42,6 +44,7 @@ final class LockUBootCoordinator {
         attempt({ try dependencies.settingsRepository.reload() }, success: { availability.settings = true }, onError: { firstError = firstError ?? $0 })
         attempt({ try dependencies.memoryRepository.reload() }, success: { availability.memory = true }, onError: { firstError = firstError ?? $0 })
         attempt({ try dependencies.decorationRepository.reload() }, success: { availability.decoration = true }, onError: { firstError = firstError ?? $0 })
+        attempt({ try dependencies.reflectionRepository.reload() }, success: {}, onError: { LockULog.error(.metadata, "Reflection history could not be loaded: \($0.localizedDescription)") })
         dependencies.backgroundRepository.reload(); availability.background = true
 
         state(.migrating)

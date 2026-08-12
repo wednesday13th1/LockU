@@ -39,9 +39,22 @@ struct StorageHealthInspector {
     private let fileManager: FileManager
     init(paths: LockUPaths, fileManager: FileManager = .default) { self.paths = paths; self.fileManager = fileManager }
     func inspect(memories: [MemoryRecord], decorations: [LockerDecoration]) -> StorageRecoveryReport {
-        let memoryNames = Set(memories.map(\.imageFileName)); let decorationNames = Set(decorations.map(\.imageFileName))
+        let memoryNames = Set(memories.flatMap { memory in
+            [memory.imageFileName, memory.frontImageFileName, memory.backImageFileName, memory.videoThumbnailFileName]
+                .compactMap { $0 }
+        }); let decorationNames = Set(decorations.map(\.imageFileName))
+        let missingMemoryIDs = memories.filter { memory in
+            let posterMissing = !fileManager.fileExists(atPath: paths.memories.appendingPathComponent(memory.imageFileName).path)
+            let videoMissing = memory.videoFileName.map {
+                !fileManager.fileExists(atPath: paths.videos.appendingPathComponent($0).path)
+            } ?? false
+            let frontMissing = memory.frontImageFileName.map {
+                !fileManager.fileExists(atPath: paths.memories.appendingPathComponent($0).path)
+            } ?? false
+            return posterMissing || videoMissing || frontMissing
+        }.map(\.id)
         return StorageRecoveryReport(
-            missingMemoryMedia: memories.filter { !fileManager.fileExists(atPath: paths.memories.appendingPathComponent($0.imageFileName).path) }.map(\.id),
+            missingMemoryMedia: missingMemoryIDs,
             missingDecorationMedia: decorations.filter { !fileManager.fileExists(atPath: paths.decorations.appendingPathComponent($0.imageFileName).path) }.map(\.id),
             orphanMemoryFiles: mediaFiles(in: paths.memories).filter { !memoryNames.contains($0) },
             orphanDecorationFiles: mediaFiles(in: paths.decorations).filter { !decorationNames.contains($0) },

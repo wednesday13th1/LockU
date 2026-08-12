@@ -1,6 +1,85 @@
 import Combine
 import Foundation
 
+protocol LockUClock {
+    @MainActor
+    var now: Date { get }
+}
+
+struct SystemLockUClock: LockUClock {
+    var now: Date { .now }
+}
+
+struct FixedLockUClock: LockUClock {
+    let now: Date
+}
+
+enum LockUDemoTimePreset: String, CaseIterable, Identifiable {
+    case live
+    case morning
+    case afterSchool
+    case night
+    case revisitFuture
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .live: "Live"
+        case .morning: "Morning"
+        case .afterSchool: "After School"
+        case .night: "Night"
+        case .revisitFuture: "+37 Days · Night"
+        }
+    }
+}
+
+@MainActor
+final class LockUDemoClock: ObservableObject, LockUClock {
+    @Published private(set) var preset: LockUDemoTimePreset = .live
+    @Published private(set) var fixedNow: Date?
+
+    private let systemClock: SystemLockUClock
+    private let calendar: Calendar
+
+    init(systemClock: SystemLockUClock, calendar: Calendar) {
+        self.systemClock = systemClock
+        self.calendar = calendar
+    }
+
+    convenience init() {
+        self.init(systemClock: SystemLockUClock(), calendar: .autoupdatingCurrent)
+    }
+
+    var now: Date { fixedNow ?? systemClock.now }
+    var isLive: Bool { preset == .live }
+
+    func select(_ preset: LockUDemoTimePreset, memories: [MemoryRecord]) {
+        self.preset = preset
+        let liveNow = systemClock.now
+        switch preset {
+        case .live:
+            fixedNow = nil
+        case .morning:
+            fixedNow = time(hour: 8, on: liveNow)
+        case .afterSchool:
+            fixedNow = time(hour: 18, on: liveNow)
+        case .night:
+            fixedNow = time(hour: 22, on: liveNow)
+        case .revisitFuture:
+            let reference = memories
+                .filter { $0.memoryDate <= liveNow }
+                .max { $0.memoryDate < $1.memoryDate }?
+                .memoryDate ?? liveNow
+            let future = calendar.date(byAdding: .day, value: 37, to: reference) ?? liveNow
+            fixedNow = time(hour: 22, on: future)
+        }
+    }
+
+    private func time(hour: Int, on date: Date) -> Date {
+        calendar.date(bySettingHour: hour, minute: 0, second: 0, of: date) ?? date
+    }
+}
+
 struct RevisitPresentation: Identifiable, Equatable, Sendable {
     let memoryID: UUID
     let memory: MemoryRecord
@@ -20,12 +99,13 @@ final class RevisitCoordinator: ObservableObject {
     private let resurfacingService: MemoryResurfacingService
     private let calendar: Calendar
 
-    init(
-        resurfacingService: MemoryResurfacingService = MemoryResurfacingService(),
-        calendar: Calendar = .autoupdatingCurrent
-    ) {
+    init(resurfacingService: MemoryResurfacingService, calendar: Calendar) {
         self.resurfacingService = resurfacingService
         self.calendar = calendar
+    }
+
+    convenience init() {
+        self.init(resurfacingService: MemoryResurfacingService(), calendar: .autoupdatingCurrent)
     }
 
     func refresh(memories: [MemoryRecord], now: Date = .now) {

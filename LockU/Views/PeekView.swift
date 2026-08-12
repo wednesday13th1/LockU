@@ -2,12 +2,15 @@ import SwiftUI
 
 enum PeekContext: Equatable {
     case normal
+    case memory(MemoryRecord)
     case revisit(RevisitPresentation)
 }
 
 struct PeekView: View {
     @EnvironmentObject private var revisitCoordinator: RevisitCoordinator
     @EnvironmentObject private var appModel: LockUAppModel
+    @EnvironmentObject private var memoryRepository: MemoryRepository
+    @EnvironmentObject private var reflectionRepository: MemoryReflectionRepository
     @State private var code = ""
     @State private var hasStarted = false
     @State private var submittedCode: String?
@@ -27,11 +30,30 @@ struct PeekView: View {
             switch resolvedContext {
             case .normal:
                 normalPeek
+            case .memory(let memory):
+                DualMemoryPeekView(
+                    memory: memory,
+                    onClose: {
+                        appModel.peekMemory = nil
+                        appModel.selectedTab = .locker
+                    }
+                )
             case .revisit(let presentation):
                 RevisitExperienceView(
                     presentation: presentation,
                     onClose: { appModel.selectedTab = .locker },
                     onComplete: { reflection in
+                        if appModel.demoClock.isLive {
+                            try CompleteRevisitWorkflow(
+                                memoryRepository: memoryRepository,
+                                reflectionRepository: reflectionRepository
+                            ).execute(
+                                memoryID: presentation.memoryID,
+                                reflectionText: reflection,
+                                completedAt: .now
+                            )
+                        }
+                        appModel.refreshTimeDependentState()
                         onCompleteRevisit(presentation, reflection)
                         appModel.selectedTab = .locker
                     }
@@ -42,6 +64,7 @@ struct PeekView: View {
 
     private var resolvedContext: PeekContext {
         if let contextOverride { return contextOverride }
+        if let memory = appModel.peekMemory { return .memory(memory) }
         return revisitCoordinator.presentation.map(PeekContext.revisit) ?? .normal
     }
 
@@ -203,18 +226,97 @@ struct PeekView: View {
     }
 }
 
+private struct DualMemoryPeekView: View {
+    private enum Perspective { case whatYouSaw, you }
+
+    @EnvironmentObject private var memoryRepository: MemoryRepository
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let memory: MemoryRecord
+    let onClose: () -> Void
+    @State private var perspective: Perspective = .whatYouSaw
+
+    var body: some View {
+        ZStack {
+            LockUPageBackground()
+            VStack(spacing: 18) {
+                HStack {
+                    Button(action: onClose) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Memoryを閉じる")
+                    Spacer()
+                }
+
+                Spacer(minLength: 0)
+                if let image = displayedImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 500, maxHeight: 560)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .shadow(color: .black.opacity(0.11), radius: 5, y: 3)
+                        .id(perspective == .whatYouSaw ? 0 : 1)
+                        .transition(.opacity)
+                        .onTapGesture { toggle() }
+                        .accessibilityLabel(perspective == .whatYouSaw ? "その時に見ていた景色" : "その時の自分")
+                }
+                if hasBothPerspectives {
+                    HStack(spacing: 9) {
+                        Text("WHAT YOU SAW").opacity(perspective == .whatYouSaw ? 0.9 : 0.38)
+                        Text("·").opacity(0.45)
+                        Text("YOU").opacity(perspective == .you ? 0.9 : 0.38)
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.2)
+                    .onTapGesture { toggle() }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(perspective == .whatYouSaw ? "現在はその時に見ていた景色。タップしてその時の自分を表示" : "現在はその時の自分。タップして見ていた景色を表示")
+                    .accessibilityAddTraits(.isButton)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(LockUDesign.Color.schoolNavy)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
+        }
+    }
+
+    private var displayedImage: UIImage? {
+        if perspective == .you, let front = memoryRepository.frontImage(for: memory) { return front }
+        return memoryRepository.backImage(for: memory) ?? memoryRepository.frontImage(for: memory)
+    }
+
+    private var hasBothPerspectives: Bool {
+        memoryRepository.frontImage(for: memory) != nil
+            && memoryRepository.backImage(for: memory) != nil
+    }
+
+    private func toggle() {
+        guard hasBothPerspectives else { return }
+        let change = { perspective = perspective == .whatYouSaw ? .you : .whatYouSaw }
+        if reduceMotion { change() }
+        else { withAnimation(.easeInOut(duration: 0.24)) { change() } }
+    }
+}
+
 private struct RevisitExperienceView: View {
+    private enum DualPerspective: Hashable { case whatYouSaw, you }
     @EnvironmentObject private var memoryRepository: MemoryRepository
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let presentation: RevisitPresentation
     let onClose: () -> Void
-    let onComplete: (String) -> Void
+    let onComplete: (String) throws -> Void
 
     @State private var reflectionText = ""
     @State private var appeared = false
+    @State private var isCompletingRevisit = false
+    @State private var completionError: String?
+    @State private var dualPerspective: DualPerspective = .whatYouSaw
     @FocusState private var reflectionFocused: Bool
 
-    private let reflectionLimit = 150
+    private let reflectionLimit = MemoryReflectionPolicy.maximumLength
 
     var body: some View {
         ZStack {
@@ -226,6 +328,10 @@ private struct RevisitExperienceView: View {
                         .padding(.top, 14)
                     memoryImage
                         .padding(.top, 24)
+                    if hasFrontPerspective {
+                        perspectiveSelector
+                            .padding(.top, 12)
+                    }
                     originalContext
                         .padding(.top, 18)
                     Divider()
@@ -285,7 +391,7 @@ private struct RevisitExperienceView: View {
 
     @ViewBuilder
     private var memoryImage: some View {
-        if let image = memoryRepository.image(for: presentation.memory) {
+        if let image = displayedMemoryImage {
             let aspectRatio = max(0.55, min(1.8, image.size.width / max(image.size.height, 1)))
             Image(uiImage: image)
                 .resizable()
@@ -296,7 +402,11 @@ private struct RevisitExperienceView: View {
                 .shadow(color: .black.opacity(0.11), radius: 5, y: 3)
                 .opacity(appeared ? 1 : 0)
                 .scaleEffect(reduceMotion || appeared ? 1 : 0.985)
-                .accessibilityLabel("Memory photo")
+                .contentShape(Rectangle())
+                .onTapGesture { togglePerspective() }
+                .id(dualPerspective)
+                .transition(.opacity)
+                .accessibilityLabel(isShowingFront ? "その時の自分" : "その時に見ていた景色")
         } else {
             ZStack {
                 LockUDesign.Color.notebookPaper.opacity(0.55)
@@ -309,6 +419,49 @@ private struct RevisitExperienceView: View {
             .clipShape(RoundedRectangle(cornerRadius: 3))
             .accessibilityLabel("Memory photo unavailable")
         }
+    }
+
+    private var displayedMemoryImage: UIImage? {
+        if dualPerspective == .you, let front = memoryRepository.frontImage(for: presentation.memory) {
+            return front
+        }
+        return memoryRepository.backImage(for: presentation.memory)
+            ?? memoryRepository.frontImage(for: presentation.memory)
+    }
+
+    private var hasFrontPerspective: Bool {
+        presentation.memory.isDualCameraMemory
+            && memoryRepository.backImage(for: presentation.memory) != nil
+            && memoryRepository.frontImage(for: presentation.memory) != nil
+    }
+
+    private var isShowingFront: Bool {
+        dualPerspective == .you || memoryRepository.backImage(for: presentation.memory) == nil
+    }
+
+    private var perspectiveSelector: some View {
+        HStack(spacing: 9) {
+            Text("WHAT YOU SAW")
+                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(dualPerspective == .whatYouSaw ? 0.86 : 0.38))
+            Text("·").foregroundStyle(LockUDesign.Color.softInkSecondary.opacity(0.5))
+            Text("YOU")
+                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(dualPerspective == .you ? 0.86 : 0.38))
+        }
+        .font(.system(size: 10, weight: .semibold))
+        .tracking(1.2)
+        .onTapGesture { togglePerspective() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(dualPerspective == .whatYouSaw ? "現在はその時に見ていた景色。タップしてその時の自分を表示" : "現在はその時の自分。タップして見ていた景色を表示")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func togglePerspective() {
+        guard hasFrontPerspective else { return }
+        let change = {
+            dualPerspective = dualPerspective == .whatYouSaw ? .you : .whatYouSaw
+        }
+        if reduceMotion { change() }
+        else { withAnimation(.easeInOut(duration: 0.24)) { change() } }
     }
 
     private var originalContext: some View {
@@ -365,12 +518,41 @@ private struct RevisitExperienceView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
-            Button("残す") {
-                onComplete(reflectionText.trimmingCharacters(in: .whitespacesAndNewlines))
+            if let completionError {
+                Text(completionError)
+                    .font(LockUDesign.Typography.caption)
+                    .foregroundStyle(LockUDesign.Color.warning)
+                    .multilineTextAlignment(.leading)
+                    .accessibilityLabel(completionError)
+            }
+
+            Button {
+                completeRevisit()
+            } label: {
+                if isCompletingRevisit {
+                    HStack(spacing: 8) { ProgressView(); Text("保存しています…") }
+                } else {
+                    Text("残す")
+                }
             }
             .buttonStyle(LockUPrimaryButtonStyle())
-            .accessibilityLabel("振り返りを完了する")
+            .disabled(isCompletingRevisit)
+            .accessibilityLabel(isCompletingRevisit ? "振り返りを保存中" : "振り返りを完了する")
         }
         .frame(maxWidth: 500, alignment: .leading)
+    }
+
+    private func completeRevisit() {
+        guard !isCompletingRevisit else { return }
+        isCompletingRevisit = true
+        completionError = nil
+        do {
+            try onComplete(reflectionText)
+            reflectionFocused = false
+        } catch {
+            isCompletingRevisit = false
+            completionError = "振り返りを保存できませんでした。もう一度試してください。"
+            LockULog.error(.workflow, "Revisit completion failed: \(error.localizedDescription)")
+        }
     }
 }

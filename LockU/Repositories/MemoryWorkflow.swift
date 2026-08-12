@@ -1,7 +1,42 @@
 import Foundation
 import UIKit
 
-struct DailyMemoryPolicy {
+@MainActor
+struct CompleteRevisitWorkflow {
+    let memoryRepository: MemoryRepository
+    let reflectionRepository: MemoryReflectionRepository
+
+    func execute(memoryID: UUID, reflectionText: String, completedAt: Date = .now) throws {
+        guard memoryRepository.memories.contains(where: { $0.id == memoryID }) else {
+            throw LockUStorageError.recordNotFound
+        }
+
+        let normalized = try MemoryReflectionPolicy.normalized(reflectionText)
+        var createdReflectionID: UUID?
+        if let normalized {
+            createdReflectionID = try reflectionRepository.add(
+                memoryID: memoryID,
+                text: normalized,
+                createdAt: completedAt
+            )?.id
+        }
+
+        do {
+            try memoryRepository.markMemoryAsRevisited(id: memoryID, at: completedAt)
+        } catch {
+            if let createdReflectionID {
+                do {
+                    try reflectionRepository.delete(id: createdReflectionID)
+                } catch let rollbackError {
+                    LockULog.error(.transaction, "Revisit completion rollback failed: \(rollbackError.localizedDescription)")
+                }
+            }
+            throw error
+        }
+    }
+}
+
+nonisolated struct DailyMemoryPolicy {
     let calendar: Calendar
     init(calendar: Calendar = .current) { self.calendar = calendar }
     func canCreateMemory(on date: Date, existing: [MemoryRecord]) -> Bool {
@@ -60,7 +95,13 @@ final class CaptureMemoryWorkflow {
     private unowned let repository: MemoryRepository
     private let policy: DailyMemoryPolicy
     private(set) var state: MemorySaveState = .idle
-    init(repository: MemoryRepository, policy: DailyMemoryPolicy = DailyMemoryPolicy()) { self.repository = repository; self.policy = policy }
+    init(repository: MemoryRepository, policy: DailyMemoryPolicy) {
+        self.repository = repository
+        self.policy = policy
+    }
+    convenience init(repository: MemoryRepository) {
+        self.init(repository: repository, policy: DailyMemoryPolicy())
+    }
     func execute(_ request: CaptureMemoryRequest) throws -> CaptureMemoryResult {
         state = .validating
         do {

@@ -25,7 +25,8 @@ private final class FirstLockerOnboardingViewModel: ObservableObject {
     private var loadTask: Task<Void, Never>?
     private var selectionGeneration = UUID()
 
-    var canContinue: Bool { (5...7).contains(drafts.count) && !isLoadingSelection }
+    var requiredMemoryCount: Int { LockerMemoryLayout.photoSlotCount }
+    var canContinue: Bool { drafts.count == requiredMemoryCount && !isLoadingSelection }
 
     func createLocker(
         memoryRepository: MemoryRepository,
@@ -70,7 +71,7 @@ private final class FirstLockerOnboardingViewModel: ObservableObject {
         loadTask?.cancel()
         let generation = UUID()
         selectionGeneration = generation
-        let items = Array(selectedItems.prefix(7))
+        let items = Array(selectedItems.prefix(requiredMemoryCount))
         guard !items.isEmpty else {
             drafts = []
             selectionWarning = nil
@@ -177,7 +178,11 @@ struct FirstLockerOnboardingView: View {
                 .foregroundStyle(LockUDesign.Color.softInkSecondary)
             Spacer()
             pickerButton(title: "写真を選ぶ")
-            Text("5〜7枚選べます")
+            Text("0 / \(model.requiredMemoryCount)")
+                .font(LockUDesign.Typography.caption)
+                .foregroundStyle(LockUDesign.Color.softInkSecondary)
+                .accessibilityLabel("\(model.requiredMemoryCount)枚中0枚選択")
+            Text("ロッカーに飾る思い出を\(model.requiredMemoryCount)枚選ぼう")
                 .font(LockUDesign.Typography.caption)
                 .foregroundStyle(LockUDesign.Color.softInkSecondary)
                 .padding(.bottom, 34)
@@ -191,10 +196,10 @@ struct FirstLockerOnboardingView: View {
                 .font(LockUDesign.Typography.screenTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
                 .padding(.top, 26)
-            Text("\(model.drafts.count) / 7")
+            Text("\(model.drafts.count) / \(model.requiredMemoryCount)")
                 .font(LockUDesign.Typography.caption)
                 .foregroundStyle(LockUDesign.Color.softInkSecondary)
-                .accessibilityLabel("7枚中\(model.drafts.count)枚選択")
+                .accessibilityLabel("\(model.requiredMemoryCount)枚中\(model.drafts.count)枚選択")
 
             if model.isLoadingSelection {
                 ProgressView("写真を読み込んでいます")
@@ -216,7 +221,7 @@ struct FirstLockerOnboardingView: View {
                     .foregroundStyle(LockUDesign.Color.warning)
                     .multilineTextAlignment(.center)
             } else if !model.canContinue {
-                Text("5枚以上選ぶと次へ進めます")
+                Text("あと\(max(0, model.requiredMemoryCount - model.drafts.count))枚選んでください")
                     .font(LockUDesign.Typography.caption)
                     .foregroundStyle(LockUDesign.Color.softInkSecondary)
             }
@@ -333,18 +338,21 @@ struct FirstLockerOnboardingView: View {
         }
     }
 
+    @MainActor
     private func pickerButton(title: String) -> some View {
-        PhotosPicker(selection: $model.selectedItems, maxSelectionCount: 7, matching: .images) {
+        let loading = model.isLoadingSelection
+        let requiredCount = model.requiredMemoryCount
+        return PhotosPicker(selection: $model.selectedItems, maxSelectionCount: requiredCount, matching: .images) {
             HStack(spacing: 8) {
-                if model.isLoadingSelection { ProgressView() }
+                if loading { ProgressView() }
                 else { Image(systemName: "photo.on.rectangle.angled") }
-                Text(model.isLoadingSelection ? "読み込んでいます…" : title)
+                Text(loading ? "読み込んでいます…" : title)
             }
             .font(.system(size: 16, weight: .semibold))
             .frame(maxWidth: .infinity, minHeight: 54)
         }
         .buttonStyle(LockUSecondaryButtonStyle())
-        .disabled(model.isLoadingSelection)
+        .disabled(loading)
         .accessibilityLabel("思い出にする写真を選ぶ")
     }
 
@@ -388,7 +396,7 @@ private struct SeedLockerPreview: View {
         GeometryReader { proxy in
             ZStack {
                 LockerInteriorBackground(style: backgroundStyle)
-                ForEach(Array(drafts.prefix(7).enumerated()), id: \.element.id) { index, draft in
+                ForEach(Array(drafts.prefix(LockerMemoryLayout.photoSlotCount).enumerated()), id: \.element.id) { index, draft in
                     let width = proxy.size.width * widths[index]
                     Image(uiImage: draft.image)
                         .resizable()

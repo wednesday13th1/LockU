@@ -30,14 +30,18 @@ final class LockUAppModel: ObservableObject {
     @Published var isCameraPresented = false
     @Published var selectedCapturedImage: UIImage?
     @Published var cameraPermissionDenied = false
+    @Published var peekMemory: MemoryRecord?
     @Published private(set) var bootState: AppBootState = .launching
     @Published private(set) var shouldShowFirstLocker = false
+    @Published private(set) var memoryVariationPlan: LockerMemoryVariationPlan?
 
     let memoryRepository: MemoryRepository
     let decorationRepository: DecorationRepository
     let settingsRepository: LockerSettingsRepository
     let backgroundRepository: BackgroundRepository
     let revisitCoordinator: RevisitCoordinator
+    let reflectionRepository: MemoryReflectionRepository
+    let demoClock: LockUDemoClock
     let storageMode: StorageMode
     private let dependencies: LockUDependencyContainer
     private let onboardingDefaults = UserDefaults.standard
@@ -52,6 +56,8 @@ final class LockUAppModel: ObservableObject {
         settingsRepository = dependencies.settingsRepository
         backgroundRepository = dependencies.backgroundRepository
         revisitCoordinator = RevisitCoordinator()
+        reflectionRepository = dependencies.reflectionRepository
+        demoClock = LockUDemoClock()
         load()
     }
 
@@ -67,7 +73,7 @@ final class LockUAppModel: ObservableObject {
             || wasPreviouslyMigrated
         if hasExistingData { onboardingDefaults.set(true, forKey: onboardingCompletionKey) }
         shouldShowFirstLocker = !hasExistingData && !onboardingDefaults.bool(forKey: onboardingCompletionKey)
-        revisitCoordinator.refresh(memories: memoryRepository.memories)
+        refreshTimeDependentState()
         isReady = true
     }
 
@@ -79,6 +85,25 @@ final class LockUAppModel: ObservableObject {
         onboardingDefaults.set(true, forKey: onboardingCompletionKey)
         shouldShowFirstLocker = false
     }
+
+    func refreshTimeDependentState() {
+        let currentDate = demoClock.now
+        revisitCoordinator.refresh(memories: memoryRepository.memories, now: currentDate)
+        let appearance = settingsRepository.settings.appearance
+        memoryVariationPlan = LockerMemoryVariationService().plan(
+            for: currentDate,
+            memories: memoryRepository.memories,
+            featuredVideoMemoryID: appearance.featuredVideoMemoryID,
+            enabled: appearance.dailyVariationEnabled
+        )
+    }
+
+    #if DEBUG
+    func selectDemoPreset(_ preset: LockUDemoTimePreset) {
+        demoClock.select(preset, memories: memoryRepository.memories)
+        refreshTimeDependentState()
+    }
+    #endif
 }
 
 struct LockURootView: View {
@@ -114,12 +139,17 @@ struct LockURootView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.selectedTab)
+        .onChange(of: model.selectedTab) { _, tab in
+            if tab != .peek { model.peekMemory = nil }
+        }
         .environmentObject(model)
         .environmentObject(model.memoryRepository)
         .environmentObject(model.decorationRepository)
         .environmentObject(model.settingsRepository)
         .environmentObject(model.backgroundRepository)
         .environmentObject(model.revisitCoordinator)
+        .environmentObject(model.reflectionRepository)
+        .environmentObject(model.demoClock)
         .alert(
             "LockU",
             isPresented: Binding(

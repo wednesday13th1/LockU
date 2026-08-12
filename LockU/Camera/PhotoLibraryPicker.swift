@@ -19,7 +19,7 @@ struct PhotoLibraryPicker: View {
     var body: some View {
         PhotosPicker(selection: $item, matching: .images) {
             Group {
-                if style == .labeled {
+                if case .labeled = style {
                     HStack {
                         if isLoading {
                             ProgressView()

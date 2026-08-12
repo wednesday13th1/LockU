@@ -1,17 +1,17 @@
 import Foundation
 
-enum MemoryResurfacingReason: String, Codable, Equatable, Sendable {
+nonisolated enum MemoryResurfacingReason: String, Codable, Equatable, Sendable {
     case anniversary
     case forgotten
     case pastRandom
 }
 
-struct MemoryResurfacingResult: Equatable, Sendable {
+nonisolated struct MemoryResurfacingResult: Equatable, Sendable {
     let memory: MemoryRecord
     let reason: MemoryResurfacingReason
 }
 
-struct MemoryResurfacingService {
+nonisolated struct MemoryResurfacingService {
     static let minimumMemoryCount = 7
     static let fullRevisitMemoryCount = 14
     static let forgottenThresholdDays = 30

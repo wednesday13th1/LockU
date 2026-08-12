@@ -1,14 +1,24 @@
 import CoreGraphics
 import Foundation
 
-struct CodablePoint: Codable, Hashable, Sendable {
+nonisolated enum LockerMemoryLayout {
+    /// Number of static photo frames in the competition Locker Home layout.
+    static let photoSlotCount = 7
+    static let livingMemorySlotCount = 1
+
+    static var totalVisibleSlotCount: Int {
+        photoSlotCount + livingMemorySlotCount
+    }
+}
+
+nonisolated struct CodablePoint: Codable, Hashable, Sendable {
     var x: Double
     var y: Double
 
     var cgPoint: CGPoint { CGPoint(x: x, y: y) }
 }
 
-struct LockerPlacement: Codable, Hashable, Sendable {
+nonisolated struct LockerPlacement: Codable, Hashable, Sendable {
     var position: CodablePoint
     var scale: Double
     var rotationDegrees: Double
@@ -16,7 +26,7 @@ struct LockerPlacement: Codable, Hashable, Sendable {
     var zIndex: Int
 }
 
-struct LockerDecoration: Codable, Identifiable, Hashable, Sendable {
+nonisolated struct LockerDecoration: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let createdAt: Date
     let imageFileName: String

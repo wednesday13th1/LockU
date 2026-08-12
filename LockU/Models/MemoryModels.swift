@@ -1,23 +1,54 @@
 import Foundation
 
-enum CaptureMode: String, Codable, Sendable {
+nonisolated enum CaptureMode: String, Codable, Sendable {
     case photoLibrary
     case camera
     case legacy
 }
 
-enum MemoryOrigin: String, Codable, Sendable {
+nonisolated enum MemoryOrigin: String, Codable, Sendable {
     case dailyCapture
     case seedImport
     case legacy
 }
 
-struct WeatherSnapshot: Codable, Hashable, Sendable {
+nonisolated struct MemoryReflection: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let memoryID: UUID
+    let text: String
+    let createdAt: Date
+}
+
+nonisolated enum MemoryReflectionPolicy {
+    static let maximumLength = 150
+
+    static func normalized(_ text: String) throws -> String? {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        guard normalized.count <= maximumLength else {
+            throw MemoryReflectionError.textTooLong
+        }
+        return normalized
+    }
+}
+
+nonisolated enum MemoryReflectionError: LocalizedError {
+    case textTooLong
+
+    var errorDescription: String? {
+        switch self {
+        case .textTooLong:
+            "振り返りは\(MemoryReflectionPolicy.maximumLength)文字以内で入力してください。"
+        }
+    }
+}
+
+nonisolated struct WeatherSnapshot: Codable, Hashable, Sendable {
     var summary: String
     var temperatureCelsius: Double?
 }
 
-struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
+nonisolated struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let createdAt: Date
     let imageFileName: String
@@ -42,6 +73,9 @@ struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
     var importedAt: Date?
 
     var memoryDate: Date { createdAt }
+    var isDualCameraMemory: Bool {
+        frontImageFileName != nil && backImageFileName != nil
+    }
 
     init(
         id: UUID,

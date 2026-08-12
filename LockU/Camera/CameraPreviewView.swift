@@ -39,3 +39,56 @@ final class CameraPreviewUIView: UIView {
         }
     }
 }
+
+struct DualCameraPreviewView: UIViewRepresentable {
+    @ObservedObject var manager: CameraSessionManager
+
+    func makeUIView(context: Context) -> DualCameraPreviewUIView {
+        let view = DualCameraPreviewUIView(session: manager.dualSession)
+        manager.connectDualPreview(backLayer: view.backLayer, frontLayer: view.frontLayer)
+        return view
+    }
+
+    func updateUIView(_ uiView: DualCameraPreviewUIView, context: Context) {
+        manager.connectDualPreview(backLayer: uiView.backLayer, frontLayer: uiView.frontLayer)
+        uiView.updateFrames()
+    }
+}
+
+final class DualCameraPreviewUIView: UIView {
+    let backLayer: AVCaptureVideoPreviewLayer
+    let frontLayer: AVCaptureVideoPreviewLayer
+
+    init(session: AVCaptureMultiCamSession) {
+        backLayer = AVCaptureVideoPreviewLayer(sessionWithNoConnection: session)
+        frontLayer = AVCaptureVideoPreviewLayer(sessionWithNoConnection: session)
+        super.init(frame: .zero)
+        backgroundColor = .black
+        backLayer.videoGravity = .resizeAspectFill
+        frontLayer.videoGravity = .resizeAspectFill
+        layer.addSublayer(backLayer)
+        layer.addSublayer(frontLayer)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateFrames()
+    }
+
+    func updateFrames() {
+        backLayer.frame = bounds
+        let width = bounds.width * 0.28
+        let height = width * 1.25
+        frontLayer.frame = CGRect(x: bounds.width - width - 18, y: safeAreaInsets.top + 78, width: width, height: height)
+        frontLayer.cornerRadius = 14
+        frontLayer.masksToBounds = true
+        frontLayer.borderWidth = 1
+        frontLayer.borderColor = UIColor.white.withAlphaComponent(0.72).cgColor
+        frontLayer.shadowColor = UIColor.black.cgColor
+        frontLayer.shadowOpacity = 0.18
+        frontLayer.shadowRadius = 6
+        frontLayer.shadowOffset = CGSize(width: 0, height: 3)
+    }
+}

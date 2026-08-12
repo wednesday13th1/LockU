@@ -157,6 +157,22 @@ private struct LockerSettingsSheet: View {
                     TextField("Locker code", text: $lockerNumber)
                         .keyboardType(.numberPad)
                 }
+
+                #if DEBUG
+                Section("Demo Time") {
+                    Picker("Time", selection: Binding(
+                        get: { appModel.demoClock.preset },
+                        set: { appModel.selectDemoPreset($0) }
+                    )) {
+                        ForEach(LockUDemoTimePreset.allCases) { preset in
+                            Text(preset.title).tag(preset)
+                        }
+                    }
+                    Text("Session only · Memory dates are never changed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .toolbar {

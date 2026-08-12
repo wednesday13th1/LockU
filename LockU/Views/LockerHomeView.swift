@@ -5,6 +5,7 @@ struct LockerHomeView: View {
     @EnvironmentObject private var appModel: LockUAppModel
     @EnvironmentObject private var memoryRepository: MemoryRepository
     @EnvironmentObject private var revisitCoordinator: RevisitCoordinator
+    @EnvironmentObject private var demoClock: LockUDemoClock
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onShare: () -> Void
     let onCode: () -> Void
@@ -23,6 +24,7 @@ struct LockerHomeView: View {
 
             VStack(spacing: LockUSceneTokens.Home.headerToLocker) {
                 LockerUtilityBar(
+                    date: demoClock.now,
                     onShare: onShare,
                     onCode: onCode,
                     onSettings: onSettings
@@ -58,7 +60,7 @@ struct LockerHomeView: View {
             .opacity(appeared ? 1 : 0.65)
             .offset(y: appeared ? 0 : 8)
             .onAppear {
-                revisitCoordinator.refresh(memories: memoryRepository.memories)
+                appModel.refreshTimeDependentState()
                 guard !appeared else { return }
                 if reduceMotion {
                     appeared = true
@@ -71,6 +73,7 @@ struct LockerHomeView: View {
 }
 
 private struct LockerUtilityBar: View {
+    let date: Date
     let onShare: () -> Void
     let onCode: () -> Void
     let onSettings: () -> Void
@@ -81,7 +84,7 @@ private struct LockerUtilityBar: View {
                 .font(.system(size: 29, weight: .semibold))
                 .tracking(-0.5)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(Date.now.formatted(.dateTime.month(.abbreviated).day()))
+            Text(date.formatted(.dateTime.month(.abbreviated).day()))
                 .font(.system(size: 18, weight: .medium))
                 .frame(maxWidth: .infinity)
             Menu {

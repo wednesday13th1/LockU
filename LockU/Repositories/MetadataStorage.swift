@@ -12,6 +12,27 @@ struct MemoryMetadataStore: MemoryMetadataStoring {
     func save(_ records: [MemoryRecord]) throws { try store.save(records) }
 }
 
+protocol MemoryReflectionMetadataStoring {
+    func load() throws -> [MemoryReflection]
+    func save(_ records: [MemoryReflection]) throws
+}
+
+struct MemoryReflectionMetadataStore: MemoryReflectionMetadataStoring {
+    private let store: SafeJSONStore<MemoryReflection>
+
+    init(directory: URL) {
+        store = SafeJSONStore(directory: directory, fileName: "memory-reflections.json")
+    }
+
+    func load() throws -> [MemoryReflection] {
+        try store.load { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    func save(_ records: [MemoryReflection]) throws {
+        try store.save(records)
+    }
+}
+
 protocol DecorationMetadataStoring {
     func load() throws -> [LockerDecoration]
     func save(_ records: [LockerDecoration]) throws

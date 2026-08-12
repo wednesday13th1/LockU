@@ -1,6 +1,6 @@
 import Foundation
 
-struct DailyFilm: Identifiable, Codable, Equatable, Sendable {
+nonisolated struct DailyFilm: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let name: String
     let subtitle: String?

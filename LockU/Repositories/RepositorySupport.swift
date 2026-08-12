@@ -37,6 +37,7 @@ enum LockUStorageError: LocalizedError {
 struct LockUPaths: Sendable {
     let root: URL
     let memories: URL
+    let videos: URL
     let decorations: URL
     let backgrounds: URL
 
@@ -49,9 +50,10 @@ struct LockUPaths: Sendable {
         }
         root = applicationSupport.appendingPathComponent("LockU", isDirectory: true)
         memories = root.appendingPathComponent("Memories", isDirectory: true)
+        videos = root.appendingPathComponent("Videos", isDirectory: true)
         decorations = root.appendingPathComponent("Decorations", isDirectory: true)
         backgrounds = root.appendingPathComponent("Backgrounds", isDirectory: true)
-        for directory in [root, memories, decorations, backgrounds] {
+        for directory in [root, memories, videos, decorations, backgrounds] {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }
@@ -59,9 +61,10 @@ struct LockUPaths: Sendable {
     init(recoveryRoot: URL, fileManager: FileManager = .default) {
         root = recoveryRoot
         memories = root.appendingPathComponent("Memories", isDirectory: true)
+        videos = root.appendingPathComponent("Videos", isDirectory: true)
         decorations = root.appendingPathComponent("Decorations", isDirectory: true)
         backgrounds = root.appendingPathComponent("Backgrounds", isDirectory: true)
-        for directory in [root, memories, decorations, backgrounds] {
+        for directory in [root, memories, videos, decorations, backgrounds] {
             try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }

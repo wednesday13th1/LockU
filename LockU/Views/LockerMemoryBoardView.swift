@@ -5,6 +5,7 @@ struct LockerMemoryBoardView: View {
     @EnvironmentObject private var memoryRepository: MemoryRepository
     @EnvironmentObject private var appModel: LockUAppModel
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var demoClock: LockUDemoClock
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var selectedMemoryID: UUID?
@@ -22,9 +23,9 @@ struct LockerMemoryBoardView: View {
         let sorted = memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }
         guard let featuredID = appearance.featuredVideoMemoryID,
               let featured = sorted.first(where: { $0.id == featuredID }) else {
-            return Array(sorted.prefix(8))
+            return Array(sorted.prefix(LockerMemoryLayout.totalVisibleSlotCount))
         }
-        return [featured] + Array(sorted.filter { $0.id != featured.id }.prefix(7))
+        return [featured] + Array(sorted.filter { $0.id != featured.id }.prefix(LockerMemoryLayout.photoSlotCount))
     }
 
     var body: some View {
@@ -33,7 +34,7 @@ struct LockerMemoryBoardView: View {
                 memories: recentMemories,
                 containerSize: proxy.size,
                 appearance: appearance,
-                date: .now
+                date: demoClock.now
             )
             ZStack {
                 boardSurface
@@ -90,13 +91,22 @@ struct LockerMemoryBoardView: View {
                 filterAdjustment: placement.filterAdjustment,
                 printAspectRatio: placement.printAspectRatio,
                 isSelected: selectedMemoryID == placement.id,
-                onSelect: { toggleSelection(for: placement.id) }
+                onSelect: { select(placement.memory) }
             )
         }
     }
 
     private func toggleSelection(for id: UUID) {
         selectedMemoryID = selectedMemoryID == id ? nil : id
+    }
+
+    private func select(_ memory: MemoryRecord) {
+        guard memory.isDualCameraMemory else {
+            toggleSelection(for: memory.id)
+            return
+        }
+        appModel.peekMemory = memory
+        appModel.selectedTab = .peek
     }
 
     private func memoryRole(for memory: MemoryRecord, index: Int) -> MemoryVisualRole {
@@ -251,7 +261,7 @@ private struct DailyLockerVariationEngine {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         let seed = (components.year ?? 0) * 10_000 + (components.month ?? 0) * 100 + (components.day ?? 0)
         var generator = DailySeedGenerator(state: UInt64(max(seed, 1)))
-        let photoIDs = Array(memories.dropFirst().prefix(7).map(\.id))
+        let photoIDs = Array(memories.dropFirst().prefix(LockerMemoryLayout.photoSlotCount).map(\.id))
         let affectedCount = min(photoIDs.count, generator.nextInt(in: 1...2))
         var available = photoIDs
         var selected: [UUID] = []

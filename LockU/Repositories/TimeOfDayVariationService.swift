@@ -1,135 +1,178 @@
 import Foundation
 
-enum LockerTimeOfDay: String, Codable, CaseIterable, Sendable {
+enum LockerTimePeriod: String, Codable, CaseIterable, Sendable {
     case morning
     case day
     case afterSchool
     case night
 }
 
-struct LockerTimeOfDayResolver {
-    func resolve(for date: Date, calendar: Calendar = .autoupdatingCurrent) -> LockerTimeOfDay {
+struct LockerTimePeriodService {
+    let calendar: Calendar
+
+    init(calendar: Calendar = .autoupdatingCurrent) {
+        self.calendar = calendar
+    }
+
+    func period(for date: Date) -> LockerTimePeriod {
         switch calendar.component(.hour, from: date) {
-        case 6..<12: return .morning
-        case 12..<17: return .day
-        case 17..<21: return .afterSchool
-        default: return .night
+        case 6..<12: .morning
+        case 12..<17: .day
+        case 17..<21: .afterSchool
+        default: .night
         }
     }
 }
 
-struct TimeOfDayVariationResult: Equatable, Sendable {
-    let currentTimeOfDay: LockerTimeOfDay
-    let emphasizedMemoryIDs: [UUID]
+struct LockerMemoryVariationPlan: Equatable, Sendable {
+    let period: LockerTimePeriod
+    let primaryMemoryID: UUID?
+    let secondaryMemoryID: UUID?
     let resurfacedMemoryID: UUID?
-    let variationSeed: UInt64
-    let generatedAt: Date
+    let resurfacingReason: MemoryResurfacingReason?
+    let dayIdentifier: String
+
+    var emphasizedMemoryIDs: [UUID] {
+        [primaryMemoryID, secondaryMemoryID].compactMap { $0 }
+    }
 }
 
-struct TimeOfDayVariationService {
-    private let resolver: LockerTimeOfDayResolver
+struct LockerMemoryVariationService {
+    private let calendar: Calendar
+    private let periodService: LockerTimePeriodService
     private let resurfacingService: MemoryResurfacingService
 
-    init(
-        resolver: LockerTimeOfDayResolver = LockerTimeOfDayResolver(),
-        resurfacingService: MemoryResurfacingService = MemoryResurfacingService()
-    ) {
-        self.resolver = resolver
+    init(calendar: Calendar, resurfacingService: MemoryResurfacingService) {
+        self.calendar = calendar
+        periodService = LockerTimePeriodService(calendar: calendar)
         self.resurfacingService = resurfacingService
     }
 
-    func variation(
+    init() {
+        self.init(calendar: .autoupdatingCurrent, resurfacingService: MemoryResurfacingService())
+    }
+
+    func plan(
         for date: Date,
         memories: [MemoryRecord],
-        lockerIdentifier: String,
-        overridingTimeOfDay: LockerTimeOfDay? = nil,
-        calendar: Calendar = .autoupdatingCurrent
-    ) -> TimeOfDayVariationResult {
-        let timeOfDay = overridingTimeOfDay ?? resolver.resolve(for: date, calendar: calendar)
-        let seed = stableSeed(for: date, timeOfDay: timeOfDay, lockerIdentifier: lockerIdentifier, memories: memories, calendar: calendar)
-        let emphasized: [UUID]
-        let resurfaced: UUID?
-
-        switch timeOfDay {
-        case .morning:
-            emphasized = recentCandidate(for: date, memories: memories, prefersToday: false, calendar: calendar).map { [$0.id] } ?? []
-            resurfaced = nil
-        case .day:
-            emphasized = []
-            resurfaced = nil
-        case .afterSchool:
-            emphasized = recentCandidate(for: date, memories: memories, prefersToday: true, calendar: calendar).map { [$0.id] } ?? []
-            resurfaced = nil
-        case .night:
-            let candidate = resurfacingService.candidate(for: date, from: memories, calendar: calendar)?.memory
-            emphasized = candidate.map { [$0.id] } ?? []
-            resurfaced = candidate?.id
+        featuredVideoMemoryID: UUID?,
+        enabled: Bool
+    ) -> LockerMemoryVariationPlan {
+        let period = periodService.period(for: date)
+        let identifier = dayIdentifier(for: date)
+        guard enabled else {
+            return emptyPlan(period: period, dayIdentifier: identifier)
         }
 
-        return TimeOfDayVariationResult(
-            currentTimeOfDay: timeOfDay,
-            emphasizedMemoryIDs: emphasized,
-            resurfacedMemoryID: resurfaced,
-            variationSeed: seed,
-            generatedAt: intervalStart(for: date, timeOfDay: timeOfDay, calendar: calendar)
+        let today = calendar.startOfDay(for: date)
+        let eligible = memories
+            .filter { memory in
+                memory.id != featuredVideoMemoryID
+                    && calendar.startOfDay(for: memory.memoryDate) <= today
+            }
+            .sorted(by: stableRecentOrder)
+
+        switch period {
+        case .morning:
+            let recentBeforeToday = eligible.filter {
+                calendar.startOfDay(for: $0.memoryDate) < today
+            }
+            return plan(
+                period: period,
+                selected: Array(recentBeforeToday.prefix(2)),
+                dayIdentifier: identifier
+            )
+
+        case .day:
+            return emptyPlan(period: period, dayIdentifier: identifier)
+
+        case .afterSchool:
+            let todayDaily = eligible.first {
+                $0.origin == .dailyCapture && calendar.isDate($0.memoryDate, inSameDayAs: today)
+            }
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: today)
+            let yesterdayMemory = yesterday.flatMap { day in
+                eligible.first { calendar.isDate($0.memoryDate, inSameDayAs: day) }
+            }
+
+            var selected: [MemoryRecord] = []
+            if let todayDaily { selected.append(todayDaily) }
+            if let yesterdayMemory, !selected.contains(where: { $0.id == yesterdayMemory.id }) {
+                selected.append(yesterdayMemory)
+            }
+            if selected.isEmpty, let recent = eligible.first(where: {
+                calendar.startOfDay(for: $0.memoryDate) < today
+            }) {
+                selected.append(recent)
+            }
+            if selected.count < 2, let next = eligible.first(where: { candidate in
+                calendar.startOfDay(for: candidate.memoryDate) < today
+                    && !selected.contains(where: { $0.id == candidate.id })
+            }) {
+                selected.append(next)
+            }
+            return plan(period: period, selected: selected, dayIdentifier: identifier)
+
+        case .night:
+            guard let resurfaced = resurfacingService.candidate(
+                for: date,
+                from: eligible,
+                calendar: calendar
+            ) else {
+                return emptyPlan(period: period, dayIdentifier: identifier)
+            }
+            return LockerMemoryVariationPlan(
+                period: period,
+                primaryMemoryID: resurfaced.memory.id,
+                secondaryMemoryID: nil,
+                resurfacedMemoryID: resurfaced.memory.id,
+                resurfacingReason: resurfaced.reason,
+                dayIdentifier: identifier
+            )
+        }
+    }
+
+    private func plan(
+        period: LockerTimePeriod,
+        selected: [MemoryRecord],
+        dayIdentifier: String
+    ) -> LockerMemoryVariationPlan {
+        LockerMemoryVariationPlan(
+            period: period,
+            primaryMemoryID: selected.first?.id,
+            secondaryMemoryID: selected.dropFirst().first?.id,
+            resurfacedMemoryID: nil,
+            resurfacingReason: nil,
+            dayIdentifier: dayIdentifier
         )
     }
 
-    private func recentCandidate(
-        for date: Date,
-        memories: [MemoryRecord],
-        prefersToday: Bool,
-        calendar: Calendar
-    ) -> MemoryRecord? {
-        let today = calendar.startOfDay(for: date)
-        let sorted = memories.sorted { $0.memoryDate > $1.memoryDate }
-        if prefersToday, let todayMemory = sorted.first(where: { calendar.isDate($0.memoryDate, inSameDayAs: today) }) {
-            return todayMemory
-        }
-        if let yesterday = calendar.date(byAdding: .day, value: -1, to: today),
-           let yesterdayMemory = sorted.first(where: { calendar.isDate($0.memoryDate, inSameDayAs: yesterday) }) {
-            return yesterdayMemory
-        }
-        guard let recentStart = calendar.date(byAdding: .day, value: -7, to: today) else { return nil }
-        return sorted.first { memory in
-            let memoryDay = calendar.startOfDay(for: memory.memoryDate)
-            return memoryDay >= recentStart && memoryDay <= today
-        }
+    private func emptyPlan(
+        period: LockerTimePeriod,
+        dayIdentifier: String
+    ) -> LockerMemoryVariationPlan {
+        LockerMemoryVariationPlan(
+            period: period,
+            primaryMemoryID: nil,
+            secondaryMemoryID: nil,
+            resurfacedMemoryID: nil,
+            resurfacingReason: nil,
+            dayIdentifier: dayIdentifier
+        )
     }
 
-    private func intervalStart(for date: Date, timeOfDay: LockerTimeOfDay, calendar: Calendar) -> Date {
-        let today = calendar.startOfDay(for: date)
-        let hour: Int
-        switch timeOfDay {
-        case .morning: hour = 6
-        case .day: hour = 12
-        case .afterSchool: hour = 17
-        case .night:
-            if calendar.component(.hour, from: date) < 6 {
-                let previousDay = calendar.date(byAdding: .day, value: -1, to: today) ?? today
-                return calendar.date(bySettingHour: 21, minute: 0, second: 0, of: previousDay) ?? previousDay
-            }
-            hour = 21
-        }
-        return calendar.date(bySettingHour: hour, minute: 0, second: 0, of: today) ?? today
+    private func stableRecentOrder(_ lhs: MemoryRecord, _ rhs: MemoryRecord) -> Bool {
+        if lhs.memoryDate != rhs.memoryDate { return lhs.memoryDate > rhs.memoryDate }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 
-    private func stableSeed(
-        for date: Date,
-        timeOfDay: LockerTimeOfDay,
-        lockerIdentifier: String,
-        memories: [MemoryRecord],
-        calendar: Calendar
-    ) -> UInt64 {
+    private func dayIdentifier(for date: Date) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
-        let day = String(format: "%04d%02d%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
-        let memoryComponent = memories.map(\.id.uuidString).sorted().joined(separator: "|")
-        return fnv1a64("\(day)|\(timeOfDay.rawValue)|\(lockerIdentifier)|\(memoryComponent)")
-    }
-
-    private func fnv1a64(_ value: String) -> UInt64 {
-        value.utf8.reduce(14_695_981_039_346_656_037) { hash, byte in
-            (hash ^ UInt64(byte)) &* 1_099_511_628_211
-        }
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
     }
 }

@@ -1,17 +1,17 @@
 import Foundation
 
-enum MemoryImageStyle: String, CaseIterable, Identifiable, Sendable {
+nonisolated enum MemoryImageStyle: String, CaseIterable, Identifiable, Sendable {
     case original
     case cutout
 
     var id: String { rawValue }
 }
 
-enum MemoryImageFormat: String, Codable, Sendable {
+nonisolated enum MemoryImageFormat: String, Codable, Sendable {
     case jpeg
     case png
 }
 
-enum MemoryPresentationStyle: String, Codable, CaseIterable, Sendable {
+nonisolated enum MemoryPresentationStyle: String, Codable, CaseIterable, Sendable {
     case digicam, cheki, cutout, photobooth
 }

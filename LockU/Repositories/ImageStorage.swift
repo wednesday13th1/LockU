@@ -4,9 +4,58 @@ import UIKit
 protocol MemoryImageStoring {
     func saveJPEG(_ image: UIImage, id: UUID) throws -> String
     func savePNG(_ image: UIImage, id: UUID) throws -> String
+    func saveDualBackJPEG(_ image: UIImage, id: UUID) throws -> String
+    func saveDualFrontJPEG(_ image: UIImage, id: UUID) throws -> String
     func load(fileName: String) -> UIImage?
     func delete(fileName: String) throws
     func exists(fileName: String) -> Bool
+}
+
+protocol MemoryVideoStoring {
+    func saveVideo(from temporaryURL: URL, id: UUID) throws -> String
+    func url(fileName: String) -> URL?
+    func delete(fileName: String) throws
+    func exists(fileName: String) -> Bool
+}
+
+final class MemoryVideoStorage: MemoryVideoStoring {
+    private let directory: URL
+    private let fileManager: FileManager
+    private let supportedExtensions = Set(["mov", "mp4"])
+
+    init(directory: URL, fileManager: FileManager = .default) {
+        self.directory = directory
+        self.fileManager = fileManager
+    }
+
+    func saveVideo(from temporaryURL: URL, id: UUID) throws -> String {
+        let fileExtension = temporaryURL.pathExtension.lowercased()
+        guard supportedExtensions.contains(fileExtension),
+              fileManager.fileExists(atPath: temporaryURL.path) else {
+            throw MemoryVideoError.unsupportedOrMissingFile
+        }
+        let fileName = LockUFileNaming.video(id: id, extension: fileExtension)
+        let destination = directory.appendingPathComponent(fileName)
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+        try fileManager.copyItem(at: temporaryURL, to: destination)
+        return fileName
+    }
+
+    func url(fileName: String) -> URL? {
+        let candidate = directory.appendingPathComponent(fileName)
+        return fileManager.fileExists(atPath: candidate.path) ? candidate : nil
+    }
+
+    func delete(fileName: String) throws {
+        let target = directory.appendingPathComponent(fileName)
+        if fileManager.fileExists(atPath: target.path) { try fileManager.removeItem(at: target) }
+    }
+
+    func exists(fileName: String) -> Bool {
+        fileManager.fileExists(atPath: directory.appendingPathComponent(fileName).path)
+    }
 }
 
 final class MemoryImageStorage: MemoryImageStoring {
@@ -20,6 +69,14 @@ final class MemoryImageStorage: MemoryImageStoring {
     func savePNG(_ image: UIImage, id: UUID) throws -> String {
         guard let data = image.pngData() else { throw LockUStorageError.invalidImage }
         return try save(data, fileName: LockUFileNaming.memory(id: id, extension: "png"))
+    }
+    func saveDualBackJPEG(_ image: UIImage, id: UUID) throws -> String {
+        guard let data = image.jpegData(compressionQuality: 0.9) else { throw LockUStorageError.invalidImage }
+        return try save(data, fileName: LockUFileNaming.memoryBack(id: id))
+    }
+    func saveDualFrontJPEG(_ image: UIImage, id: UUID) throws -> String {
+        guard let data = image.jpegData(compressionQuality: 0.9) else { throw LockUStorageError.invalidImage }
+        return try save(data, fileName: LockUFileNaming.memoryFront(id: id))
     }
     func load(fileName: String) -> UIImage? {
         let url = directory.appendingPathComponent(fileName)
@@ -93,8 +150,27 @@ enum ImageStorageFailure: Error { case encodingFailed, verificationFailed }
 
 enum LockUFileNaming {
     static func memory(id: UUID, extension ext: String) -> String { "memory-\(id.uuidString).\(ext)" }
+    static func video(id: UUID, extension ext: String) -> String { "memory-video-\(id.uuidString).\(ext)" }
+    static func memoryBack(id: UUID) -> String { "memory-\(id.uuidString)-back.jpg" }
+    static func memoryFront(id: UUID) -> String { "memory-\(id.uuidString)-front.jpg" }
     static func decoration(id: UUID) -> String { "decoration-\(id.uuidString).png" }
     static let background = "background-current.jpg"
+}
+
+enum MemoryVideoError: LocalizedError {
+    case unsupportedOrMissingFile
+    case invalidDuration
+    case thumbnailGenerationFailed
+    case saveAlreadyInProgress
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedOrMissingFile: "動画ファイルを読み込めませんでした。"
+        case .invalidDuration: "有効な長さの動画を選んでください。"
+        case .thumbnailGenerationFailed: "動画のプレビューを作成できませんでした。"
+        case .saveAlreadyInProgress: "動画を保存しています。完了までお待ちください。"
+        }
+    }
 }
 
 final class LockUImageCache {
