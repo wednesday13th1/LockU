@@ -5,7 +5,7 @@ struct DailyMemoryPolicy {
     let calendar: Calendar
     init(calendar: Calendar = .current) { self.calendar = calendar }
     func canCreateMemory(on date: Date, existing: [MemoryRecord]) -> Bool {
-        !existing.contains { calendar.isDate($0.createdAt, inSameDayAs: date) }
+        !existing.contains { $0.origin != .seedImport && calendar.isDate($0.createdAt, inSameDayAs: date) }
     }
     func validateCreation(on date: Date, existing: [MemoryRecord]) throws {
         guard canCreateMemory(on: date, existing: existing) else { throw DailyMemoryPolicyError.alreadyCapturedToday }
@@ -26,9 +26,11 @@ struct CaptureMemoryRequest {
     let imageStyle: MemoryImageStyle
     let dailyFilm: DailyFilm?
     let memoryNote: String?
+    let origin: MemoryOrigin
+    let importedAt: Date?
 
     func withMemoryNote(_ note: String?) -> Self {
-        Self(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm, memoryNote: note)
+        Self(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm, memoryNote: note, origin: origin, importedAt: importedAt)
     }
 }
 

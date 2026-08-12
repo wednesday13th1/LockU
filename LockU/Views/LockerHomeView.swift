@@ -3,6 +3,8 @@ import SwiftUI
 struct LockerHomeView: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
     @EnvironmentObject private var appModel: LockUAppModel
+    @EnvironmentObject private var memoryRepository: MemoryRepository
+    @EnvironmentObject private var revisitCoordinator: RevisitCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onShare: () -> Void
     let onCode: () -> Void
@@ -56,6 +58,7 @@ struct LockerHomeView: View {
             .opacity(appeared ? 1 : 0.65)
             .offset(y: appeared ? 0 : 8)
             .onAppear {
+                revisitCoordinator.refresh(memories: memoryRepository.memories)
                 guard !appeared else { return }
                 if reduceMotion {
                     appeared = true
@@ -208,13 +211,15 @@ struct LockerFrameView: View {
 }
 
 private struct LockerInteriorSurface: View {
+    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+
     var body: some View {
         GeometryReader { proxy in
             let side = proxy.size.width * LockUSceneTokens.Home.sideWallFraction
             let ceiling = max(16, min(22, proxy.size.height * 0.032))
             let floor = max(14, proxy.size.height * 0.045)
             ZStack {
-                LockUSceneTokens.Material.backWall
+                LockerInteriorBackground(style: settingsRepository.settings.appearance.backgroundStyle)
                     .clipShape(BackWallShape(side: side, ceiling: ceiling, floor: floor))
                 LockUSceneTokens.Material.leftWall
                     .clipShape(LeftInteriorWall(side: side, ceiling: ceiling, floor: floor))
@@ -246,6 +251,39 @@ private struct LockerInteriorSurface: View {
             .shadow(color: .black.opacity(0.24), radius: 14, y: 4)
         }
     }
+}
+
+struct LockerInteriorBackground: View {
+    let style: LockerBackgroundStyle
+
+    var body: some View {
+        LinearGradient(colors: style.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+            .overlay {
+                Canvas { context, size in
+                    for index in 0..<18 {
+                        let x = CGFloat((index * 47) % 101) / 101 * size.width
+                        let y = CGFloat((index * 71) % 103) / 103 * size.height
+                        context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 0.7, height: 0.7)), with: .color(.white.opacity(0.035)))
+                    }
+                }
+            }
+            .overlay(LinearGradient(colors: [.white.opacity(style.topLightOpacity), .clear], startPoint: .top, endPoint: .center))
+            .accessibilityHidden(true)
+    }
+}
+
+private extension LockerBackgroundStyle {
+    var colors: [Color] {
+        switch self {
+        case .clearBlue: [Color(red: 166/255, green: 187/255, blue: 194/255), Color(red: 140/255, green: 163/255, blue: 170/255)]
+        case .softSky: [Color(red: 184/255, green: 205/255, blue: 214/255), Color(red: 155/255, green: 180/255, blue: 188/255)]
+        case .warmSunset: [Color(red: 205/255, green: 188/255, blue: 169/255), Color(red: 171/255, green: 158/255, blue: 149/255)]
+        case .paleCream: [Color(red: 218/255, green: 214/255, blue: 201/255), Color(red: 185/255, green: 184/255, blue: 176/255)]
+        case .coolGray: [Color(red: 181/255, green: 190/255, blue: 193/255), Color(red: 148/255, green: 160/255, blue: 164/255)]
+        case .fadedSchoolBlue: [Color(red: 146/255, green: 170/255, blue: 179/255), Color(red: 117/255, green: 143/255, blue: 153/255)]
+        }
+    }
+    var topLightOpacity: Double { self == .warmSunset ? 0.08 : 0.11 }
 }
 
 private struct PhysicalMetalGrain: View {

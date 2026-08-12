@@ -117,7 +117,7 @@ private struct LockerSettingsSheet: View {
             Form {
                 Section {
                     ZStack {
-                        LockUSceneTokens.Material.backWall
+                        LockerInteriorBackground(style: appearance.backgroundStyle)
                         LockerMemoryBoardView(appearanceOverride: appearance)
                             .environmentObject(memoryRepository)
                             .environmentObject(appModel)
@@ -130,6 +130,9 @@ private struct LockerSettingsSheet: View {
                 }
 
                 Section("Locker Appearance") {
+                    Picker("Locker Background", selection: $appearance.backgroundStyle) {
+                        ForEach(LockerBackgroundStyle.allCases) { Text($0.title).tag($0) }
+                    }
                     Picker("Collage Style", selection: $appearance.collageStyle) {
                         ForEach(LockerCollageStyle.allCases) { Text($0.title).tag($0) }
                     }

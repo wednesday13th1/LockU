@@ -6,6 +6,12 @@ enum CaptureMode: String, Codable, Sendable {
     case legacy
 }
 
+enum MemoryOrigin: String, Codable, Sendable {
+    case dailyCapture
+    case seedImport
+    case legacy
+}
+
 struct WeatherSnapshot: Codable, Hashable, Sendable {
     var summary: String
     var temperatureCelsius: Double?
@@ -32,6 +38,8 @@ struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
     var dailyFilmIdentifier: String?
     var lastRevisitedAt: Date?
     var revisitCount: Int
+    var origin: MemoryOrigin
+    var importedAt: Date?
 
     var memoryDate: Date { createdAt }
 
@@ -56,6 +64,8 @@ struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
         dailyFilmIdentifier: String? = nil,
         lastRevisitedAt: Date? = nil,
         revisitCount: Int = 0
+        , origin: MemoryOrigin = .dailyCapture
+        , importedAt: Date? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -77,12 +87,15 @@ struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
         self.dailyFilmIdentifier = dailyFilmIdentifier ?? dailyFilmID
         self.lastRevisitedAt = lastRevisitedAt
         self.revisitCount = max(0, revisitCount)
+        self.origin = origin
+        self.importedAt = importedAt
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, createdAt, imageFileName, filterID, weather, captureMode, imageFormat, isSubjectCutout, presentationStyle
         case dailyFilmID, dailyFilmName, dailyFilmVersion, frontImageFileName, backImageFileName
         case videoFileName, videoThumbnailFileName, memoryNote, dailyFilmIdentifier, lastRevisitedAt, revisitCount
+        case origin, importedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -107,6 +120,8 @@ struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
         dailyFilmIdentifier = try container.decodeIfPresent(String.self, forKey: .dailyFilmIdentifier) ?? dailyFilmID
         lastRevisitedAt = try container.decodeIfPresent(Date.self, forKey: .lastRevisitedAt)
         revisitCount = max(0, try container.decodeIfPresent(Int.self, forKey: .revisitCount) ?? 0)
+        origin = try container.decodeIfPresent(MemoryOrigin.self, forKey: .origin) ?? (captureMode == .legacy ? .legacy : .dailyCapture)
+        importedAt = try container.decodeIfPresent(Date.self, forKey: .importedAt)
     }
 
 }

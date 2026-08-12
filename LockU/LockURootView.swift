@@ -31,13 +31,17 @@ final class LockUAppModel: ObservableObject {
     @Published var selectedCapturedImage: UIImage?
     @Published var cameraPermissionDenied = false
     @Published private(set) var bootState: AppBootState = .launching
+    @Published private(set) var shouldShowFirstLocker = false
 
     let memoryRepository: MemoryRepository
     let decorationRepository: DecorationRepository
     let settingsRepository: LockerSettingsRepository
     let backgroundRepository: BackgroundRepository
+    let revisitCoordinator: RevisitCoordinator
     let storageMode: StorageMode
     private let dependencies: LockUDependencyContainer
+    private let onboardingDefaults = UserDefaults.standard
+    private let onboardingCompletionKey = "locku.first-locker.completed.v1"
 
     init() {
         let dependencies = LockUDependencyContainer()
@@ -47,18 +51,33 @@ final class LockUAppModel: ObservableObject {
         decorationRepository = dependencies.decorationRepository
         settingsRepository = dependencies.settingsRepository
         backgroundRepository = dependencies.backgroundRepository
+        revisitCoordinator = RevisitCoordinator()
         load()
     }
 
     private func load() {
+        let wasPreviouslyMigrated = onboardingDefaults.bool(forKey: "locku.migration.v2.completed")
         let (_, error) = LockUBootCoordinator(dependencies: dependencies).boot { bootState = $0 }
         if storageMode == .recoveryTemporary { presentedError = "一時復旧モードで起動しました。新しいデータは永続保存されません。" }
         else if let error { presentedError = error.localizedDescription }
+        let hasExistingData = !memoryRepository.memories.isEmpty
+            || !decorationRepository.decorations.isEmpty
+            || settingsRepository.hasStoredData
+            || backgroundRepository.image != nil
+            || wasPreviouslyMigrated
+        if hasExistingData { onboardingDefaults.set(true, forKey: onboardingCompletionKey) }
+        shouldShowFirstLocker = !hasExistingData && !onboardingDefaults.bool(forKey: onboardingCompletionKey)
+        revisitCoordinator.refresh(memories: memoryRepository.memories)
         isReady = true
     }
 
     func report(_ error: Error) {
         presentedError = error.localizedDescription
+    }
+
+    func completeFirstLocker() {
+        onboardingDefaults.set(true, forKey: onboardingCompletionKey)
+        shouldShowFirstLocker = false
     }
 }
 
@@ -77,12 +96,18 @@ struct LockURootView: View {
             .transition(.opacity)
             .zIndex(LockUSceneTokens.Layer.environment)
 
-            content
+            Group {
+                if model.shouldShowFirstLocker {
+                    FirstLockerOnboardingView()
+                } else {
+                    content
+                }
+            }
                 .id(model.selectedTab)
                 .transition(.opacity.combined(with: .scale(scale: 0.992)))
                 .zIndex(LockUSceneTokens.Layer.physical)
 
-            if model.selectedTab != .camera {
+            if model.selectedTab != .camera && !model.shouldShowFirstLocker {
                 LockUBottomBar(selection: $model.selectedTab)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(LockUSceneTokens.Layer.interface)
@@ -94,6 +119,7 @@ struct LockURootView: View {
         .environmentObject(model.decorationRepository)
         .environmentObject(model.settingsRepository)
         .environmentObject(model.backgroundRepository)
+        .environmentObject(model.revisitCoordinator)
         .alert(
             "LockU",
             isPresented: Binding(

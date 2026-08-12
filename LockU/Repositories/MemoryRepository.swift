@@ -44,12 +44,12 @@ final class MemoryRepository: ObservableObject {
         dailyFilm: DailyFilm? = nil,
         memoryNote: String? = nil
     ) throws -> MemoryRecord {
-        try captureWorkflow.execute(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm, memoryNote: memoryNote)).memory
+        try captureWorkflow.execute(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm, memoryNote: memoryNote, origin: .dailyCapture, importedAt: nil)).memory
     }
 
     @discardableResult
     func importLegacyImage(_ image: UIImage, createdAt: Date) throws -> MemoryRecord {
-        try createImageRecord(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: nil, weather: nil, captureMode: .legacy, imageStyle: .original, dailyFilm: nil, memoryNote: nil), enforceDailyLimit: false)
+        try createImageRecord(CaptureMemoryRequest(image: image, createdAt: createdAt, filterID: nil, weather: nil, captureMode: .legacy, imageStyle: .original, dailyFilm: nil, memoryNote: nil, origin: .legacy, importedAt: nil), enforceDailyLimit: false)
     }
 
     func createImageRecord(
@@ -79,4 +79,30 @@ final class MemoryRepository: ObservableObject {
         try store.save(updated)
         memories = updated
     }
+
+    @discardableResult
+    func importSeedMemories(_ items: [SeedMemoryImportItem], importedAt: Date = .now) async throws -> [MemoryRecord] {
+        guard (5...7).contains(items.count) else { throw SeedMemoryImportError.invalidSelectionCount }
+        let transaction = CreateSeedMemoriesTransaction(imageStorage: imageStorage, metadataStore: store, cache: imageCache)
+        let existing = memories
+        let result = try await Task.detached(priority: .userInitiated) {
+            try transaction.execute(items: items, importedAt: importedAt, existing: existing)
+        }.value
+        memories = result.records
+        return result.created
+    }
+
+    func rollbackSeedImport(ids: Set<UUID>) throws {
+        let targets = memories.filter { ids.contains($0.id) && $0.origin == .seedImport }
+        guard targets.count == ids.count else { return }
+        let remaining = memories.filter { !ids.contains($0.id) }
+        try store.save(remaining)
+        for target in targets { try? imageStorage.delete(fileName: target.imageFileName) }
+        memories = remaining
+    }
+}
+
+enum SeedMemoryImportError: LocalizedError {
+    case invalidSelectionCount
+    var errorDescription: String? { "写真を5〜7枚選んでください。" }
 }

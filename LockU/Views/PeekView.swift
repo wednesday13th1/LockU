@@ -1,11 +1,51 @@
 import SwiftUI
 
+enum PeekContext: Equatable {
+    case normal
+    case revisit(RevisitPresentation)
+}
+
 struct PeekView: View {
+    @EnvironmentObject private var revisitCoordinator: RevisitCoordinator
+    @EnvironmentObject private var appModel: LockUAppModel
     @State private var code = ""
     @State private var hasStarted = false
     @State private var submittedCode: String?
+    let contextOverride: PeekContext?
+    let onCompleteRevisit: (RevisitPresentation, String) -> Void
+
+    init(
+        context: PeekContext? = nil,
+        onCompleteRevisit: @escaping (RevisitPresentation, String) -> Void = { _, _ in }
+    ) {
+        contextOverride = context
+        self.onCompleteRevisit = onCompleteRevisit
+    }
 
     var body: some View {
+        Group {
+            switch resolvedContext {
+            case .normal:
+                normalPeek
+            case .revisit(let presentation):
+                RevisitExperienceView(
+                    presentation: presentation,
+                    onClose: { appModel.selectedTab = .locker },
+                    onComplete: { reflection in
+                        onCompleteRevisit(presentation, reflection)
+                        appModel.selectedTab = .locker
+                    }
+                )
+            }
+        }
+    }
+
+    private var resolvedContext: PeekContext {
+        if let contextOverride { return contextOverride }
+        return revisitCoordinator.presentation.map(PeekContext.revisit) ?? .normal
+    }
+
+    private var normalPeek: some View {
         ZStack {
             LockUPageBackground()
             ScrollView {
@@ -160,5 +200,177 @@ struct PeekView: View {
             .foregroundStyle(LockUDesign.Color.schoolNavy)
             .padding(24)
         }
+    }
+}
+
+private struct RevisitExperienceView: View {
+    @EnvironmentObject private var memoryRepository: MemoryRepository
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let presentation: RevisitPresentation
+    let onClose: () -> Void
+    let onComplete: (String) -> Void
+
+    @State private var reflectionText = ""
+    @State private var appeared = false
+    @FocusState private var reflectionFocused: Bool
+
+    private let reflectionLimit = 150
+
+    var body: some View {
+        ZStack {
+            LockUPageBackground()
+            ScrollView {
+                VStack(spacing: 0) {
+                    header
+                    revisitContext
+                        .padding(.top, 14)
+                    memoryImage
+                        .padding(.top, 24)
+                    originalContext
+                        .padding(.top, 18)
+                    Divider()
+                        .overlay(LockUDesign.Color.schoolNavy.opacity(0.10))
+                        .padding(.vertical, 28)
+                    reflection
+                }
+                .frame(maxWidth: 560)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 40)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .onAppear {
+            if reduceMotion {
+                appeared = true
+            } else {
+                withAnimation(.easeOut(duration: 0.34)) { appeared = true }
+            }
+        }
+        .onChange(of: reflectionText) { _, value in
+            if value.count > reflectionLimit {
+                reflectionText = String(value.prefix(reflectionLimit))
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Button(action: onClose) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Revisitを閉じる")
+            Spacer()
+        }
+        .foregroundStyle(LockUDesign.Color.schoolNavy)
+        .padding(.top, 4)
+    }
+
+    private var revisitContext: some View {
+        VStack(spacing: 7) {
+            Text(presentation.eyebrowText)
+                .font(.footnote.weight(.semibold))
+                .tracking(1.7)
+                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.64))
+                .accessibilityLabel("Revisit reason: \(presentation.eyebrowText)")
+            Text(presentation.relativeDateText)
+                .font(LockUDesign.Typography.body)
+                .foregroundStyle(LockUDesign.Color.softInkSecondary)
+        }
+        .multilineTextAlignment(.center)
+    }
+
+    @ViewBuilder
+    private var memoryImage: some View {
+        if let image = memoryRepository.image(for: presentation.memory) {
+            let aspectRatio = max(0.55, min(1.8, image.size.width / max(image.size.height, 1)))
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .aspectRatio(aspectRatio, contentMode: .fit)
+                .frame(maxWidth: 500, maxHeight: 520)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .shadow(color: .black.opacity(0.11), radius: 5, y: 3)
+                .opacity(appeared ? 1 : 0)
+                .scaleEffect(reduceMotion || appeared ? 1 : 0.985)
+                .accessibilityLabel("Memory photo")
+        } else {
+            ZStack {
+                LockUDesign.Color.notebookPaper.opacity(0.55)
+                Image(systemName: "photo")
+                    .font(.system(size: 30, weight: .light))
+                    .foregroundStyle(LockUDesign.Color.softInkSecondary.opacity(0.55))
+            }
+            .frame(maxWidth: 500)
+            .aspectRatio(4 / 3, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .accessibilityLabel("Memory photo unavailable")
+        }
+    }
+
+    private var originalContext: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(presentation.capturedAt.formatted(.dateTime.year().month(.abbreviated).day()))
+                .font(LockUDesign.Typography.caption)
+                .foregroundStyle(LockUDesign.Color.softInkSecondary)
+            if let note = presentation.memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
+                Text(note)
+                    .font(LockUDesign.Typography.body)
+                    .foregroundStyle(LockUDesign.Color.softInk)
+                    .lineSpacing(4)
+                    .lineLimit(5)
+            }
+        }
+        .frame(maxWidth: 500, alignment: .leading)
+    }
+
+    private var reflection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("この日のこと、\n今どう思う？")
+                .font(LockUDesign.Typography.sectionTitle)
+                .foregroundStyle(LockUDesign.Color.schoolNavy)
+
+            ZStack(alignment: .topLeading) {
+                if reflectionText.isEmpty {
+                    Text("今の自分から、ひとこと")
+                        .font(LockUDesign.Typography.body)
+                        .foregroundStyle(LockUDesign.Color.softInkSecondary.opacity(0.62))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 10)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $reflectionText)
+                    .font(LockUDesign.Typography.body)
+                    .foregroundStyle(LockUDesign.Color.softInk)
+                    .scrollContentBackground(.hidden)
+                    .focused($reflectionFocused)
+                    .frame(minHeight: 82, maxHeight: 112)
+                    .padding(.horizontal, -1)
+                    .background(LockUDesign.Color.notebookPaper.opacity(0.28))
+                    .accessibilityLabel("この日のことを今どう思うか入力")
+            }
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(LockUDesign.Color.schoolNavy.opacity(reflectionFocused ? 0.34 : 0.14))
+                    .frame(height: 1)
+            }
+
+            if reflectionText.count >= 130 {
+                Text("\(reflectionText.count) / \(reflectionLimit)")
+                    .font(LockUDesign.Typography.caption)
+                    .foregroundStyle(LockUDesign.Color.softInkSecondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+
+            Button("残す") {
+                onComplete(reflectionText.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            .buttonStyle(LockUPrimaryButtonStyle())
+            .accessibilityLabel("振り返りを完了する")
+        }
+        .frame(maxWidth: 500, alignment: .leading)
     }
 }

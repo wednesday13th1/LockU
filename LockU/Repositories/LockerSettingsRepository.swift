@@ -7,6 +7,7 @@ final class LockerSettingsRepository: ObservableObject {
 
     private let fileURL: URL
     private let backupURL: URL
+    var hasStoredData: Bool { FileManager.default.fileExists(atPath: fileURL.path) || FileManager.default.fileExists(atPath: backupURL.path) }
 
     init(paths: LockUPaths) {
         fileURL = paths.root.appendingPathComponent("locker-settings.json")

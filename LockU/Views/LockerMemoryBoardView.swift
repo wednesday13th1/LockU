@@ -42,23 +42,7 @@ struct LockerMemoryBoardView: View {
                     Color.clear
                 } else {
                     ForEach(placements) { placement in
-                        Group {
-                            if placement.isLiving {
-                                LivingMemoryView(memory: placement.memory, frameStyle: placement.frameStyle, filterStyle: placement.filterStyle, filterAdjustment: placement.filterAdjustment, printAspectRatio: placement.printAspectRatio)
-                            } else {
-                                MemoryPhysicalView(
-                                    memory: placement.memory,
-                                    role: memoryRole(for: placement.memory, index: placement.index),
-                                    attachment: placement.tapeStyle,
-                                    frameStyle: placement.frameStyle,
-                                    filterStyle: placement.filterStyle,
-                                    filterAdjustment: placement.filterAdjustment,
-                                    printAspectRatio: placement.printAspectRatio,
-                                    isSelected: selectedMemoryID == placement.id,
-                                    onSelect: { selectedMemoryID = selectedMemoryID == placement.id ? nil : placement.id }
-                                )
-                            }
-                        }
+                        memoryView(for: placement)
                             .frame(width: placement.width)
                             .rotationEffect(.degrees(placement.rotation))
                             .position(placement.position)
@@ -84,6 +68,35 @@ struct LockerMemoryBoardView: View {
 
     private var boardSurface: some View {
         Color.clear
+    }
+
+    @ViewBuilder
+    private func memoryView(for placement: MemoryWallPlacement) -> some View {
+        if placement.isLiving {
+            LivingMemoryView(
+                memory: placement.memory,
+                frameStyle: placement.frameStyle,
+                filterStyle: placement.filterStyle,
+                filterAdjustment: placement.filterAdjustment,
+                printAspectRatio: placement.printAspectRatio
+            )
+        } else {
+            MemoryPhysicalView(
+                memory: placement.memory,
+                role: memoryRole(for: placement.memory, index: placement.index),
+                attachment: placement.tapeStyle,
+                frameStyle: placement.frameStyle,
+                filterStyle: placement.filterStyle,
+                filterAdjustment: placement.filterAdjustment,
+                printAspectRatio: placement.printAspectRatio,
+                isSelected: selectedMemoryID == placement.id,
+                onSelect: { toggleSelection(for: placement.id) }
+            )
+        }
+    }
+
+    private func toggleSelection(for id: UUID) {
+        selectedMemoryID = selectedMemoryID == id ? nil : id
     }
 
     private func memoryRole(for memory: MemoryRecord, index: Int) -> MemoryVisualRole {
@@ -127,7 +140,6 @@ private struct MemoryWallPlacement: Identifiable {
     let frameStyle: LockerFrameStyle
     let filterStyle: LockerFilterStyle
     let filterAdjustment: DailyLockerFilterAdjustment
-    let printAspectRatio: CGFloat
     let printAspectRatio: CGFloat
     let isLiving: Bool
 
@@ -301,6 +313,7 @@ private struct LivingMemoryView: View {
     let frameStyle: LockerFrameStyle
     let filterStyle: LockerFilterStyle
     let filterAdjustment: DailyLockerFilterAdjustment
+    let printAspectRatio: CGFloat
 
     var body: some View {
         Button {
@@ -462,6 +475,7 @@ private struct MemoryPhysicalView: View {
     let frameStyle: LockerFrameStyle
     let filterStyle: LockerFilterStyle
     let filterAdjustment: DailyLockerFilterAdjustment
+    let printAspectRatio: CGFloat
     let isSelected: Bool
     let onSelect: () -> Void
 

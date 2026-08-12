@@ -1,6 +1,6 @@
 import Foundation
 
-enum MemoryResurfacingReason: String, Codable, Sendable {
+enum MemoryResurfacingReason: String, Codable, Equatable, Sendable {
     case anniversary
     case forgotten
     case pastRandom
