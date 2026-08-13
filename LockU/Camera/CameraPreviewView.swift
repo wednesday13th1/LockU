@@ -46,18 +46,27 @@ struct DualCameraPreviewView: UIViewRepresentable {
     func makeUIView(context: Context) -> DualCameraPreviewUIView {
         let view = DualCameraPreviewUIView(session: manager.dualSession)
         manager.connectDualPreview(backLayer: view.backLayer, frontLayer: view.frontLayer)
+        view.installDisconnectHandler { [weak manager, weak view] in
+            guard let manager, let view else { return }
+            manager.disconnectDualPreview(backLayer: view.backLayer, frontLayer: view.frontLayer)
+        }
         return view
     }
 
     func updateUIView(_ uiView: DualCameraPreviewUIView, context: Context) {
-        manager.connectDualPreview(backLayer: uiView.backLayer, frontLayer: uiView.frontLayer)
         uiView.updateFrames()
+    }
+
+    static func dismantleUIView(_ uiView: DualCameraPreviewUIView, coordinator: ()) {
+        uiView.disconnectPreview()
     }
 }
 
 final class DualCameraPreviewUIView: UIView {
     let backLayer: AVCaptureVideoPreviewLayer
     let frontLayer: AVCaptureVideoPreviewLayer
+    private let diagnosticID = String(UUID().uuidString.prefix(4))
+    private var lastReportedZeroFrame: Bool?
 
     init(session: AVCaptureMultiCamSession) {
         backLayer = AVCaptureVideoPreviewLayer(sessionWithNoConnection: session)
@@ -68,9 +77,28 @@ final class DualCameraPreviewUIView: UIView {
         frontLayer.videoGravity = .resizeAspectFill
         layer.addSublayer(backLayer)
         layer.addSublayer(frontLayer)
+        diagnosticLog("CREATED")
     }
 
     required init?(coder: NSCoder) { nil }
+
+    deinit {
+        #if DEBUG
+        print("[DualCamera][Preview][\(diagnosticID)][DEINIT]")
+        #endif
+    }
+
+    private var disconnectHandler: (() -> Void)?
+
+    func installDisconnectHandler(_ handler: @escaping () -> Void) {
+        disconnectHandler = handler
+    }
+
+    func disconnectPreview() {
+        diagnosticLog("DISCONNECT")
+        disconnectHandler?()
+        disconnectHandler = nil
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -90,5 +118,20 @@ final class DualCameraPreviewUIView: UIView {
         frontLayer.shadowOpacity = 0.18
         frontLayer.shadowRadius = 6
         frontLayer.shadowOffset = CGSize(width: 0, height: 3)
+
+        let hasZeroFrame = backLayer.frame.isEmpty || frontLayer.frame.isEmpty
+        if lastReportedZeroFrame != hasZeroFrame {
+            lastReportedZeroFrame = hasZeroFrame
+            diagnosticLog(
+                hasZeroFrame ? "ZERO_FRAME" : "FRAME_READY",
+                detail: "back=\(backLayer.frame) front=\(frontLayer.frame) window=\(window != nil)"
+            )
+        }
+    }
+
+    private func diagnosticLog(_ event: String, detail: String = "") {
+        #if DEBUG
+        print("[DualCamera][Preview][\(diagnosticID)][\(event)] \(detail)")
+        #endif
     }
 }

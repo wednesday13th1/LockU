@@ -284,13 +284,15 @@ private struct DualMemoryPeekView: View {
     }
 
     private var displayedImage: UIImage? {
-        if perspective == .you, let front = memoryRepository.frontImage(for: memory) { return front }
-        return memoryRepository.backImage(for: memory) ?? memoryRepository.frontImage(for: memory)
+        let target = CGSize(width: 500, height: 760)
+        if perspective == .you, let front = memoryRepository.frontImage(for: memory, purpose: .peek, targetPointSize: target) { return front }
+        return memoryRepository.backImage(for: memory, purpose: .peek, targetPointSize: target)
+            ?? memoryRepository.frontImage(for: memory, purpose: .peek, targetPointSize: target)
     }
 
     private var hasBothPerspectives: Bool {
-        memoryRepository.frontImage(for: memory) != nil
-            && memoryRepository.backImage(for: memory) != nil
+        memoryRepository.hasFrontImage(for: memory)
+            && memoryRepository.hasBackImage(for: memory)
     }
 
     private func toggle() {
@@ -422,21 +424,22 @@ private struct RevisitExperienceView: View {
     }
 
     private var displayedMemoryImage: UIImage? {
-        if dualPerspective == .you, let front = memoryRepository.frontImage(for: presentation.memory) {
+        let target = CGSize(width: 500, height: 760)
+        if dualPerspective == .you, let front = memoryRepository.frontImage(for: presentation.memory, purpose: .peek, targetPointSize: target) {
             return front
         }
-        return memoryRepository.backImage(for: presentation.memory)
-            ?? memoryRepository.frontImage(for: presentation.memory)
+        return memoryRepository.backImage(for: presentation.memory, purpose: .peek, targetPointSize: target)
+            ?? memoryRepository.frontImage(for: presentation.memory, purpose: .peek, targetPointSize: target)
     }
 
     private var hasFrontPerspective: Bool {
         presentation.memory.isDualCameraMemory
-            && memoryRepository.backImage(for: presentation.memory) != nil
-            && memoryRepository.frontImage(for: presentation.memory) != nil
+            && memoryRepository.hasBackImage(for: presentation.memory)
+            && memoryRepository.hasFrontImage(for: presentation.memory)
     }
 
     private var isShowingFront: Bool {
-        dualPerspective == .you || memoryRepository.backImage(for: presentation.memory) == nil
+        dualPerspective == .you || !memoryRepository.hasBackImage(for: presentation.memory)
     }
 
     private var perspectiveSelector: some View {

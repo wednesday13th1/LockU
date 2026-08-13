@@ -15,10 +15,10 @@ struct LockerHomeView: View {
     var body: some View {
         GeometryReader { proxy in
             let isOpen = appModel.lockerDoorState.isOpenOrOpening
-            let maxHeight: CGFloat = isOpen ? 670 : 655
-            let lockerHeight = min(maxHeight, proxy.size.height - 104)
+            let maxHeight: CGFloat = isOpen ? 680 : 664
+            let lockerHeight = min(maxHeight, proxy.size.height - 60)
             let lockerWidth = min(
-                proxy.size.width * 0.94,
+                proxy.size.width * 0.93,
                 lockerHeight / LockUSceneTokens.Home.lockerAspectRatio
             )
 
@@ -54,12 +54,13 @@ struct LockerHomeView: View {
                 .animation(.easeOut(duration: 0.22), value: isOpen)
                 .zIndex(LockUSceneTokens.Layer.physical)
 
-                Spacer(minLength: 24)
+                Spacer(minLength: 8)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .opacity(appeared ? 1 : 0.65)
             .offset(y: appeared ? 0 : 8)
             .onAppear {
+                if !appeared { appModel.markLockerFirstRender() }
                 appModel.refreshTimeDependentState()
                 guard !appeared else { return }
                 if reduceMotion {
@@ -81,8 +82,8 @@ private struct LockerUtilityBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Text("LockU")
-                .font(.system(size: 29, weight: .semibold))
-                .tracking(-0.5)
+                .font(.system(size: 21, weight: .semibold))
+                .tracking(-0.2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(date.formatted(.dateTime.month(.abbreviated).day()))
                 .font(.system(size: 18, weight: .medium))
@@ -96,12 +97,11 @@ private struct LockerUtilityBar: View {
                     .font(.system(size: 17, weight: .semibold))
                     .frame(width: 44, height: 44)
             }
-            .foregroundStyle(Color(red: 48/255, green: 69/255, blue: 87/255).opacity(0.84))
+            .foregroundStyle(LockUSceneTokens.Material.lockerInk.opacity(0.84))
             .accessibilityLabel("Locker menu")
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .foregroundStyle(.white.opacity(0.94))
-        .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+        .foregroundStyle(LockUSceneTokens.Material.lockerInk.opacity(0.92))
         .frame(height: LockUSceneTokens.Home.headerHeight)
     }
 }
@@ -120,7 +120,7 @@ struct LockerFrameView: View {
                     .padding(.horizontal, frameWidth)
                     .padding(.top, topHeight)
                     .padding(.bottom, frameWidth)
-                    .shadow(color: .black.opacity(0.20), radius: 4, x: 1, y: 2)
+                    .shadow(color: LockUSceneTokens.Shadow.structural, radius: 4, x: 1, y: 2)
 
                 VStack(spacing: 0) {
                     topFrame(height: topHeight)
@@ -136,13 +136,13 @@ struct LockerFrameView: View {
                 .padding(.top, topHeight - 1)
                 .overlay {
                     HStack {
-                        LinearGradient(colors: [.white.opacity(0.10), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        LinearGradient(colors: [.white.opacity(0.20), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
                         .frame(width: frameWidth)
-                        .shadow(color: .black.opacity(0.10), radius: 3, x: 2)
+                        .shadow(color: LockUSceneTokens.Shadow.structural, radius: 3, x: 2)
                         Spacer()
-                        LinearGradient(colors: [.clear, .black.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        LinearGradient(colors: [.clear, LockUSceneTokens.Material.lockerMetalShadow.opacity(0.20)], startPoint: .topLeading, endPoint: .bottomTrailing)
                         .frame(width: frameWidth)
-                        .shadow(color: .black.opacity(0.10), radius: 3, x: -2)
+                        .shadow(color: LockUSceneTokens.Shadow.structural, radius: 3, x: -2)
                     }
                     .padding(.top, topHeight - 1)
                 }
@@ -154,9 +154,9 @@ struct LockerFrameView: View {
                 .frame(width: min(92, proxy.size.width * 0.27), height: 44)
                 .position(x: proxy.size.width / 2, y: 22)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .clipShape(RoundedRectangle(cornerRadius: 7))
             .overlay {
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 7)
                     .stroke(
                         LinearGradient(
                             colors: [
@@ -170,7 +170,7 @@ struct LockerFrameView: View {
                         lineWidth: 1.5
                     )
             }
-            .shadow(color: .black.opacity(0.18), radius: 8, x: 2, y: 5)
+            .shadow(color: LockUSceneTokens.Shadow.structural, radius: 10, x: 1, y: 6)
         }
     }
 
@@ -182,9 +182,9 @@ struct LockerFrameView: View {
             startPoint: start,
             endPoint: end
         )
-        .overlay(LinearGradient(colors: [.white.opacity(0.08), .clear, .black.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .overlay(LinearGradient(colors: [.white.opacity(0.18), .clear, LockUSceneTokens.Material.lockerMetalShadow.opacity(0.16)], startPoint: .topLeading, endPoint: .bottomTrailing))
         .overlay(alignment: axis == .horizontal ? .bottom : (reversed ? .leading : .trailing)) {
-            Rectangle().fill(.black.opacity(0.23)).frame(width: axis == .vertical ? 2 : nil, height: axis == .horizontal ? 2 : nil)
+            Rectangle().fill(LockUSceneTokens.Material.lockerMetalShadow.opacity(0.34)).frame(width: axis == .vertical ? 1 : nil, height: axis == .horizontal ? 1 : nil)
         }
     }
 
@@ -214,14 +214,14 @@ private struct LockerInteriorSurface: View {
                     .clipShape(LeftInteriorWall(side: side, ceiling: ceiling, floor: floor))
                 LockUSceneTokens.Material.rightWall
                     .clipShape(RightInteriorWall(side: side, ceiling: ceiling, floor: floor))
-                LinearGradient(colors: [Color(red: 145/255, green: 156/255, blue: 160/255), Color(red: 126/255, green: 137/255, blue: 141/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                LinearGradient(colors: [LockUSceneTokens.Material.lockerMetalLight, LockUSceneTokens.Material.lockerMetalBase], startPoint: .topLeading, endPoint: .bottomTrailing)
                     .clipShape(CeilingPlane(side: side, depth: ceiling))
-                LinearGradient(colors: [LockUSceneTokens.Material.shelfTop, Color(red: 158/255, green: 172/255, blue: 176/255)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                LinearGradient(colors: [LockUSceneTokens.Material.shelfTop, LockUSceneTokens.Material.lockerMetalBase], startPoint: .topLeading, endPoint: .bottomTrailing)
                     .clipShape(BottomPlane(side: side, depth: floor))
-                LinearGradient(colors: [LockUSceneTokens.Material.shelfFront, Color(red: 124/255, green: 137/255, blue: 141/255)], startPoint: .top, endPoint: .bottom)
+                LinearGradient(colors: [LockUSceneTokens.Material.shelfFront, LockUSceneTokens.Material.lockerMetalShadow], startPoint: .top, endPoint: .bottom)
                     .frame(height: shelfLip)
                     .frame(maxHeight: .infinity, alignment: .bottom)
-                    .shadow(color: .black.opacity(0.12), radius: 3, x: 1, y: 2)
+                    .shadow(color: LockUSceneTokens.Shadow.structural, radius: 3, x: 1, y: 2)
 
                 LockerSurfaceTexture(profile: aging)
                     .padding(.horizontal, 1)
@@ -238,9 +238,9 @@ private struct LockerInteriorSurface: View {
                 LinearGradient(colors: [.black.opacity(0.12), .clear, .white.opacity(0.08), .clear, .black.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
                     .allowsHitTesting(false)
             }
-            .background(LockUDesign.Color.darkCavity)
-            .overlay(Rectangle().strokeBorder(.black.opacity(0.24), lineWidth: 2))
-            .shadow(color: .black.opacity(0.20), radius: 5, x: 1, y: 2)
+            .background(LockUSceneTokens.Material.lockerMetalShadow)
+            .overlay(Rectangle().strokeBorder(LockUSceneTokens.Material.lockerInk.opacity(0.12), lineWidth: 1))
+            .shadow(color: LockUSceneTokens.Shadow.structural, radius: 5, x: 1, y: 2)
         }
     }
 }
@@ -267,12 +267,12 @@ struct LockerInteriorBackground: View {
 private extension LockerBackgroundStyle {
     var colors: [Color] {
         switch self {
-        case .clearBlue: [Color(red: 151/255, green: 169/255, blue: 175/255), Color(red: 145/255, green: 163/255, blue: 169/255)]
-        case .softSky: [Color(red: 169/255, green: 190/255, blue: 198/255), Color(red: 162/255, green: 183/255, blue: 191/255)]
+        case .clearBlue: [Color(red: 205/255, green: 217/255, blue: 221/255), Color(red: 199/255, green: 211/255, blue: 215/255)]
+        case .softSky: [Color(red: 211/255, green: 223/255, blue: 227/255), Color(red: 204/255, green: 217/255, blue: 221/255)]
         case .warmSunset: [Color(red: 188/255, green: 174/255, blue: 159/255), Color(red: 181/255, green: 167/255, blue: 153/255)]
         case .paleCream: [Color(red: 201/255, green: 198/255, blue: 188/255), Color(red: 195/255, green: 192/255, blue: 182/255)]
-        case .coolGray: [Color(red: 166/255, green: 176/255, blue: 180/255), Color(red: 160/255, green: 170/255, blue: 174/255)]
-        case .fadedSchoolBlue: [Color(red: 133/255, green: 158/255, blue: 168/255), Color(red: 127/255, green: 152/255, blue: 162/255)]
+        case .coolGray: [Color(red: 207/255, green: 216/255, blue: 219/255), Color(red: 200/255, green: 210/255, blue: 213/255)]
+        case .fadedSchoolBlue: [Color(red: 192/255, green: 208/255, blue: 214/255), Color(red: 185/255, green: 201/255, blue: 207/255)]
         }
     }
     var topLightOpacity: Double { self == .warmSunset ? 0.025 : 0.035 }

@@ -2,12 +2,320 @@ import SwiftUI
 import UIKit
 
 struct LockerBottomShelfView: View {
-    @EnvironmentObject private var appModel: LockUAppModel
+    var body: some View {
+        GeometryReader { proxy in
+            let shelfTopY = proxy.size.height - 21
+
+            ZStack(alignment: .topLeading) {
+                LockerShelfObjectLayer()
+                    .frame(width: proxy.size.width, height: shelfTopY)
+                    .zIndex(50)
+
+                PhysicalMetalShelf()
+                    .frame(width: proxy.size.width, height: 21)
+                    .position(x: proxy.size.width * 0.5, y: shelfTopY + 10.5)
+                    .zIndex(40)
+            }
+            .accessibilityElement(children: .contain)
+        }
+    }
+}
+
+private struct LockerShelfObjectLayer: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+            let baseline = height - 1
+
+            ZStack(alignment: .topLeading) {
+                LockerBookStack()
+                    .frame(width: width * 0.29, height: min(height * 0.90, 76))
+                    .position(x: width * 0.16, y: baseline - min(height * 0.90, 76) * 0.5)
+
+                LockerSmallBottle()
+                    .frame(width: width * 0.075, height: min(height * 0.62, 49))
+                    .position(x: width * 0.49, y: baseline - min(height * 0.62, 49) * 0.5)
+
+                LockerSmallCase()
+                    .frame(width: width * 0.13, height: min(height * 0.31, 25))
+                    .position(x: width * 0.57, y: baseline - min(height * 0.31, 25) * 0.5)
+
+                LockerFabricPouch()
+                    .frame(width: width * 0.25, height: min(height * 0.36, 29))
+                    .position(x: width * 0.81, y: baseline - min(height * 0.36, 29) * 0.5)
+            }
+        }
+        .accessibilityLabel("教科書、ボトル、小物ケース、布のポーチ")
+    }
+}
+
+private struct LockerBookStack: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let bookWidth = proxy.size.width * 0.28
+            let height = proxy.size.height
+
+            ZStack(alignment: .bottomLeading) {
+                LockerStandingBook(
+                    cover: Color(red: 86/255, green: 104/255, blue: 114/255),
+                    page: Color(red: 229/255, green: 224/255, blue: 212/255),
+                    title: "国語"
+                )
+                .frame(width: bookWidth, height: height * 0.91)
+                .rotationEffect(.degrees(-2), anchor: .bottom)
+                .offset(x: proxy.size.width * 0.04)
+
+                LockerStandingBook(
+                    cover: Color(red: 116/255, green: 139/255, blue: 147/255),
+                    page: Color(red: 233/255, green: 229/255, blue: 218/255),
+                    title: "英語"
+                )
+                .frame(width: bookWidth * 0.94, height: height * 0.86)
+                .rotationEffect(.degrees(1), anchor: .bottom)
+                .offset(x: proxy.size.width * 0.32)
+
+                LockerStandingBook(
+                    cover: Color(red: 194/255, green: 192/255, blue: 181/255),
+                    page: Color(red: 233/255, green: 229/255, blue: 218/255),
+                    title: "NOTE"
+                )
+                .frame(width: bookWidth * 0.78, height: height * 0.78)
+                .rotationEffect(.degrees(4), anchor: .bottom)
+                .offset(x: proxy.size.width * 0.58)
+            }
+            .overlay(alignment: .bottom) {
+                Ellipse()
+                    .fill(.black.opacity(0.065))
+                    .frame(width: proxy.size.width * 0.92, height: 4)
+                    .blur(radius: 2)
+                    .offset(y: 2)
+            }
+        }
+    }
+}
+
+private struct LockerStandingBook: View {
+    let cover: Color
+    let page: Color
+    let title: String
 
     var body: some View {
         GeometryReader { proxy in
-            PhysicalMetalShelf().frame(maxHeight: .infinity, alignment: .bottom)
+            let spineWidth = max(5, proxy.size.width * 0.18)
+
+            ZStack(alignment: .leading) {
+                BookCoverSilhouette()
+                    .fill(
+                        LinearGradient(
+                            colors: [cover.opacity(0.94), cover, cover.opacity(0.82)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(alignment: .trailing) {
+                        Rectangle()
+                            .fill(page)
+                            .frame(width: max(3, proxy.size.width * 0.10))
+                            .padding(.vertical, 3)
+                            .overlay(alignment: .leading) { Rectangle().fill(.black.opacity(0.05)).frame(width: 0.6) }
+                    }
+                    .overlay {
+                        BookPaperGrain()
+                            .clipShape(BookCoverSilhouette())
+                    }
+
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.12), cover.opacity(0.72)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: spineWidth)
+                    .padding(.vertical, 1)
+
+                Text(title)
+                    .font(.system(size: 6, weight: .medium, design: .serif))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .rotationEffect(.degrees(90))
+                    .fixedSize()
+                    .offset(x: -1)
+            }
+            .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.13)).frame(height: 0.7).padding(.horizontal, 2) }
+            .overlay(alignment: .bottom) { Rectangle().fill(.black.opacity(0.07)).frame(height: 1.2).padding(.horizontal, 2) }
         }
+    }
+}
+
+private struct BookPaperGrain: View {
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<13 {
+                let x = CGFloat((index * 37) % 97) / 97 * size.width
+                let y = CGFloat((index * 61) % 89) / 89 * size.height
+                let color: Color = index.isMultiple(of: 3) ? .white.opacity(0.035) : .black.opacity(0.025)
+                context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 0.65, height: 0.65)), with: .color(color))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct LockerSmallBottle: View {
+    var body: some View {
+        ZStack(alignment: .top) {
+            LockerBottleBody()
+                .fill(
+                    LinearGradient(
+                        colors: [.white.opacity(0.22), Color(red: 191/255, green: 210/255, blue: 213/255).opacity(0.34), .white.opacity(0.10)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay {
+                    LockerBottleBody().stroke(.white.opacity(0.24), lineWidth: 0.7)
+                }
+                .overlay(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.28)).frame(width: 1.1).padding(.vertical, 10).padding(.leading, 3)
+                }
+                .padding(.top, 6)
+
+            RoundedRectangle(cornerRadius: 1.2)
+                .fill(Color(red: 127/255, green: 139/255, blue: 140/255))
+                .frame(width: 9, height: 7)
+        }
+        .overlay(alignment: .bottom) {
+            Ellipse().fill(.black.opacity(0.075)).frame(width: 18, height: 4).blur(radius: 2).offset(y: 2)
+        }
+    }
+}
+
+private struct LockerBottleBody: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.width * 0.30, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.width * 0.70, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.width * 0.76, y: rect.height * 0.14))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.90, y: rect.height * 0.25), control: CGPoint(x: rect.width * 0.88, y: rect.height * 0.18))
+            path.addLine(to: CGPoint(x: rect.width * 0.94, y: rect.height * 0.92))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.82, y: rect.height), control: CGPoint(x: rect.width * 0.94, y: rect.height))
+            path.addLine(to: CGPoint(x: rect.width * 0.18, y: rect.height))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.06, y: rect.height * 0.92), control: CGPoint(x: rect.width * 0.06, y: rect.height))
+            path.addLine(to: CGPoint(x: rect.width * 0.10, y: rect.height * 0.25))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.24, y: rect.height * 0.14), control: CGPoint(x: rect.width * 0.12, y: rect.height * 0.18))
+            path.closeSubpath()
+        }
+    }
+}
+
+private struct LockerSmallCase: View {
+    var body: some View {
+        ZStack {
+            UnevenCaseShape()
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 227/255, green: 224/255, blue: 213/255), Color(red: 205/255, green: 210/255, blue: 204/255)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.25)).frame(height: 0.7).padding(.horizontal, 3) }
+                .overlay(alignment: .center) { Rectangle().fill(.black.opacity(0.055)).frame(height: 0.7).padding(.horizontal, 2) }
+        }
+        .overlay(alignment: .bottom) {
+            Ellipse().fill(.black.opacity(0.055)).frame(height: 4).blur(radius: 2).offset(y: 2)
+        }
+    }
+}
+
+private struct UnevenCaseShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: 2, y: 1))
+            path.addQuadCurve(to: CGPoint(x: rect.width - 2, y: 0), control: CGPoint(x: rect.midX, y: 1))
+            path.addQuadCurve(to: CGPoint(x: rect.width, y: 3), control: CGPoint(x: rect.width, y: 0))
+            path.addLine(to: CGPoint(x: rect.width - 1, y: rect.height - 2))
+            path.addQuadCurve(to: CGPoint(x: 2, y: rect.height), control: CGPoint(x: rect.midX, y: rect.height - 1))
+            path.addQuadCurve(to: CGPoint(x: 0, y: rect.height - 3), control: CGPoint(x: 0, y: rect.height))
+            path.closeSubpath()
+        }
+    }
+}
+
+private struct LockerFabricPouch: View {
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                FabricPouchShape()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(red: 178/255, green: 196/255, blue: 202/255), Color(red: 165/255, green: 185/255, blue: 192/255), Color(red: 145/255, green: 167/255, blue: 175/255)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay { FabricTexture().clipShape(FabricPouchShape()) }
+                    .overlay(alignment: .top) {
+                        HStack(spacing: 0) {
+                            Rectangle().fill(.white.opacity(0.22)).frame(height: 0.8)
+                            Capsule().fill(Color(red: 105/255, green: 118/255, blue: 121/255)).frame(width: 7, height: 2.2)
+                        }
+                        .padding(.horizontal, 7)
+                        .offset(y: 4)
+                    }
+                    .overlay(alignment: .bottom) {
+                        Capsule().fill(.black.opacity(0.07)).frame(width: proxy.size.width * 0.68, height: 2).blur(radius: 1).offset(y: -2)
+                    }
+
+                Text("LU")
+                    .font(.system(size: 4.5, weight: .medium, design: .serif))
+                    .foregroundStyle(Color(red: 89/255, green: 102/255, blue: 106/255).opacity(0.64))
+                    .frame(width: 15, height: 8)
+                    .background(Color(red: 220/255, green: 215/255, blue: 201/255).opacity(0.82))
+                    .offset(x: proxy.size.width * 0.24, y: proxy.size.height * 0.14)
+            }
+            .overlay(alignment: .bottom) {
+                Ellipse()
+                    .fill(.black.opacity(0.085))
+                    .frame(width: proxy.size.width * 0.86, height: 5)
+                    .blur(radius: 2.5)
+                    .offset(y: 2)
+            }
+        }
+    }
+}
+
+private struct FabricPouchShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.width * 0.08, y: rect.height * 0.14))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.90, y: rect.height * 0.08), control: CGPoint(x: rect.width * 0.50, y: -1))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.97, y: rect.height * 0.30), control: CGPoint(x: rect.width, y: rect.height * 0.12))
+            path.addLine(to: CGPoint(x: rect.width * 0.94, y: rect.height * 0.82))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.78, y: rect.height * 0.96), control: CGPoint(x: rect.width * 0.90, y: rect.height))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.20, y: rect.height), control: CGPoint(x: rect.width * 0.50, y: rect.height * 0.91))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.04, y: rect.height * 0.78), control: CGPoint(x: rect.width * 0.07, y: rect.height))
+            path.addLine(to: CGPoint(x: rect.width * 0.02, y: rect.height * 0.31))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.08, y: rect.height * 0.14), control: CGPoint(x: 0, y: rect.height * 0.16))
+            path.closeSubpath()
+        }
+    }
+}
+
+private struct FabricTexture: View {
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<14 {
+                let y = CGFloat(index) / 14 * size.height
+                var path = Path()
+                path.move(to: CGPoint(x: 2, y: y))
+                path.addQuadCurve(to: CGPoint(x: size.width - 2, y: y + CGFloat(index % 3 - 1)), control: CGPoint(x: size.width * 0.52, y: y - 0.8))
+                context.stroke(path, with: .color(index.isMultiple(of: 4) ? .white.opacity(0.035) : .black.opacity(0.022)), lineWidth: 0.45)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 

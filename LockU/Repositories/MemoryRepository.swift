@@ -2,6 +2,16 @@ import Combine
 import Foundation
 import UIKit
 
+enum MemoryImagePurpose: String, Sendable {
+    case locker
+    case peek
+    case detail
+}
+
+private nonisolated struct SendableImage: @unchecked Sendable {
+    let image: UIImage?
+}
+
 @MainActor
 final class MemoryRepository: ObservableObject {
     @Published private(set) var memories: [MemoryRecord] = []
@@ -24,13 +34,20 @@ final class MemoryRepository: ObservableObject {
     ) {
         self.imageStorage = imageStorage ?? MemoryImageStorage(directory: paths.memories)
         self.videoStorage = videoStorage ?? MemoryVideoStorage(directory: paths.videos)
-        self.imageCache = imageCache ?? LockUImageCache(costLimit: 96 * 1_024 * 1_024)
+        self.imageCache = imageCache ?? LockUImageCache(costLimit: 80 * 1_024 * 1_024)
         dailyPolicy = DailyMemoryPolicy(calendar: calendar)
         store = metadataStore ?? MemoryMetadataStore(directory: paths.root)
     }
 
     func reload() throws {
         memories = try store.load().sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// Camera owns the foreground resource budget while it is visible. These images are
+    /// rebuildable display derivatives; originals and metadata remain untouched.
+    func releaseRebuildableDisplayResources() {
+        imageCache.clear()
+        LockULog.debug(.cache, "Released rebuildable memory images for Camera priority mode")
     }
 
     func hasMemory(on date: Date) -> Bool {
@@ -73,14 +90,87 @@ final class MemoryRepository: ObservableObject {
         return loadImage(fileName: frontFileName)
     }
 
+    func image(
+        for memory: MemoryRecord,
+        purpose: MemoryImagePurpose,
+        targetPointSize: CGSize,
+        displayScale: CGFloat? = nil
+    ) -> UIImage? {
+        let resolvedDisplayScale = displayScale ?? UIScreen.main.scale
+        let fileName = memory.imageFileName
+        if let image = loadImage(
+            fileName: fileName,
+            purpose: purpose,
+            targetPointSize: targetPointSize,
+            displayScale: resolvedDisplayScale
+        ) { return image }
+        guard let frontFileName = memory.frontImageFileName else { return nil }
+        return loadImage(
+            fileName: frontFileName,
+            purpose: purpose,
+            targetPointSize: targetPointSize,
+            displayScale: resolvedDisplayScale
+        )
+    }
+
+    func imageAsync(
+        for memory: MemoryRecord,
+        purpose: MemoryImagePurpose,
+        targetPointSize: CGSize,
+        displayScale: CGFloat? = nil
+    ) async -> UIImage? {
+        let resolvedDisplayScale = displayScale ?? UIScreen.main.scale
+        let candidates = [memory.imageFileName, memory.frontImageFileName].compactMap { $0 }
+        for fileName in candidates {
+            let pixelWidth = max(1, Int(ceil(targetPointSize.width * resolvedDisplayScale)))
+            let pixelHeight = max(1, Int(ceil(targetPointSize.height * resolvedDisplayScale)))
+            let cacheKey = "\(fileName)-\(purpose.rawValue)-\(pixelWidth)x\(pixelHeight)"
+            if let cached = imageCache.image(forKey: cacheKey) { return cached }
+            guard let url = imageStorage.url(fileName: fileName) else { continue }
+            let maximumPixelDimension = CGFloat(max(pixelWidth, pixelHeight))
+            let loadTask = Task.detached(priority: .userInitiated) {
+                SendableImage(image: MemoryImageStorage.downsampledImage(at: url, targetPixelSize: maximumPixelDimension))
+            }
+            let loaded = await withTaskCancellationHandler {
+                await loadTask.value
+            } onCancel: {
+                loadTask.cancel()
+            }
+            guard !Task.isCancelled, let image = loaded.image else { continue }
+            imageCache.insert(image, forKey: cacheKey, cost: image.lockUApproximateStorageCost)
+            return image
+        }
+        return nil
+    }
+
+
     func frontImage(for memory: MemoryRecord) -> UIImage? {
         guard let fileName = memory.frontImageFileName else { return nil }
         return loadImage(fileName: fileName)
     }
 
+    func frontImage(for memory: MemoryRecord, purpose: MemoryImagePurpose, targetPointSize: CGSize) -> UIImage? {
+        guard let fileName = memory.frontImageFileName else { return nil }
+        return loadImage(fileName: fileName, purpose: purpose, targetPointSize: targetPointSize, displayScale: UIScreen.main.scale)
+    }
+
     func backImage(for memory: MemoryRecord) -> UIImage? {
         let fileName = memory.backImageFileName ?? memory.imageFileName
         return loadImage(fileName: fileName)
+    }
+
+    func backImage(for memory: MemoryRecord, purpose: MemoryImagePurpose, targetPointSize: CGSize) -> UIImage? {
+        let fileName = memory.backImageFileName ?? memory.imageFileName
+        return loadImage(fileName: fileName, purpose: purpose, targetPointSize: targetPointSize, displayScale: UIScreen.main.scale)
+    }
+
+    func hasFrontImage(for memory: MemoryRecord) -> Bool {
+        memory.frontImageFileName.map { imageStorage.exists(fileName: $0) } ?? false
+    }
+
+    func hasBackImage(for memory: MemoryRecord) -> Bool {
+        let fileName = memory.backImageFileName ?? memory.imageFileName
+        return imageStorage.exists(fileName: fileName)
     }
 
     @discardableResult
@@ -113,6 +203,22 @@ final class MemoryRepository: ObservableObject {
         if let cached = imageCache.image(forKey: fileName) { return cached }
         guard let image = imageStorage.load(fileName: fileName) else { return nil }
         imageCache.insert(image, forKey: fileName, cost: image.lockUApproximateStorageCost)
+        return image
+    }
+
+    private func loadImage(
+        fileName: String,
+        purpose: MemoryImagePurpose,
+        targetPointSize: CGSize,
+        displayScale: CGFloat
+    ) -> UIImage? {
+        let pixelWidth = max(1, Int(ceil(targetPointSize.width * displayScale)))
+        let pixelHeight = max(1, Int(ceil(targetPointSize.height * displayScale)))
+        let maximumPixelDimension = CGFloat(max(pixelWidth, pixelHeight))
+        let cacheKey = "\(fileName)-\(purpose.rawValue)-\(pixelWidth)x\(pixelHeight)"
+        if let cached = imageCache.image(forKey: cacheKey) { return cached }
+        guard let image = imageStorage.load(fileName: fileName, targetPixelSize: maximumPixelDimension) else { return nil }
+        imageCache.insert(image, forKey: cacheKey, cost: image.lockUApproximateStorageCost)
         return image
     }
 

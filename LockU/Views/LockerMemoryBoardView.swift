@@ -68,7 +68,12 @@ struct LockerMemoryBoardView: View {
     }
 
     private var boardSurface: some View {
-        Color.clear
+        LinearGradient(
+            colors: [.white.opacity(0.045), .clear, .black.opacity(0.03)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -90,6 +95,7 @@ struct LockerMemoryBoardView: View {
                 filterStyle: placement.filterStyle,
                 filterAdjustment: placement.filterAdjustment,
                 printAspectRatio: placement.printAspectRatio,
+                tapePaletteIndex: placement.index == 7 ? 2 : (placement.index == 4 ? 0 : 1),
                 isSelected: selectedMemoryID == placement.id,
                 onSelect: { select(placement.memory) }
             )
@@ -158,14 +164,14 @@ private struct MemoryWallPlacement: Identifiable {
 
 private struct DeterministicMemoryWallPlacementEngine {
     private let anchors: [CGPoint] = [
-        CGPoint(x: 0.51, y: 0.45),
-        CGPoint(x: 0.22, y: 0.15), CGPoint(x: 0.73, y: 0.18),
-        CGPoint(x: 0.18, y: 0.40), CGPoint(x: 0.80, y: 0.43),
-        CGPoint(x: 0.23, y: 0.72), CGPoint(x: 0.43, y: 0.77), CGPoint(x: 0.78, y: 0.72)
+        CGPoint(x: 0.51, y: 0.445),
+        CGPoint(x: 0.225, y: 0.155), CGPoint(x: 0.755, y: 0.185),
+        CGPoint(x: 0.165, y: 0.405), CGPoint(x: 0.815, y: 0.425),
+        CGPoint(x: 0.225, y: 0.705), CGPoint(x: 0.435, y: 0.765), CGPoint(x: 0.785, y: 0.715)
     ]
-    private let widthFractions: [CGFloat] = [0.294, 0.1995, 0.2205, 0.189, 0.21, 0.1932, 0.2268, 0.2016]
-    private let rotationPresets: [Double] = [0.2, -1.2, 1.1, -0.8, 1.6, -1.4, 0.7, -1.8]
-    private let aspectRatios: [CGFloat] = [0.82, 0.82, 0.72, 1.0, 0.82, 0.96, 0.74, 0.88]
+    private let widthFractions: [CGFloat] = [0.315, 0.205, 0.165, 0.155, 0.205, 0.195, 0.155, 0.175]
+    private let rotationPresets: [Double] = [0.2, -1.6, 1.4, -0.7, 1.8, -1.8, 0.9, -1.1]
+    private let aspectRatios: [CGFloat] = [0.82, 0.82, 0.74, 0.67, 1.0, 0.86, 0.74, 0.90]
 
     func layout(memories: [MemoryRecord], containerSize: CGSize, appearance: LockerAppearanceSettings, date: Date) -> [MemoryWallPlacement] {
         let density = MemoryDensity(count: memories.count)
@@ -199,7 +205,7 @@ private struct DeterministicMemoryWallPlacementEngine {
                     y: min(max(anchor.y * containerSize.height + daily.positionOffset.height, halfY * containerSize.height), (1 - halfY) * containerSize.height)
                 ),
                 width: width,
-                rotation: min(max(rotationPresets[presetIndex] + daily.rotationOffset, -2.5), 2.5),
+                rotation: min(max(rotationPresets[presetIndex] + daily.rotationOffset, -2.6), 2.6),
                 zIndex: index == 0 ? 30 : Double(20 + (index % 7)),
                 tapeStyle: index == 0 ? .none : attachment,
                 frameStyle: daily.frameOverride ?? resolvedFrame(appearance.frameStyle, collage: appearance.collageStyle, index: index),
@@ -217,7 +223,7 @@ private struct DeterministicMemoryWallPlacementEngine {
         switch collage {
         case .polaroid: sequence = [.polaroid, .polaroid, .thinWhite, .polaroid]
         case .digicam: sequence = [.thinWhite, .borderless, .thinWhite, .polaroid]
-        case .balanced, .casual: sequence = [.polaroid, .thinWhite, .borderless, .polaroid]
+        case .balanced, .casual: sequence = [.polaroid, .polaroid, .thinWhite, .borderless, .thinWhite, .polaroid, .borderless, .thinWhite]
         }
         return sequence[index % sequence.count]
     }
@@ -270,9 +276,9 @@ private struct DailyLockerVariationEngine {
         let frameOptions: [LockerFrameStyle] = [.polaroid, .thinWhite, .borderless]
         var adjustments: [UUID: DailyLockerMemoryAdjustment] = [:]
         for (offset, id) in selected.enumerated() {
-            let x = generator.nextDouble(in: -8...8)
-            let y = generator.nextDouble(in: -8...8)
-            let rotationMagnitude = generator.nextDouble(in: 0.5...1.5)
+            let x = generator.nextDouble(in: -7...7)
+            let y = generator.nextDouble(in: -7...7)
+            let rotationMagnitude = generator.nextDouble(in: 0.5...1.2)
             let rotation = generator.nextBool() ? rotationMagnitude : -rotationMagnitude
             let changesFrame = offset == 0 && generator.nextBool()
             let usesSquarePrint = changesFrame && generator.nextInt(in: 0...3) == 3
@@ -329,13 +335,12 @@ private struct LivingMemoryView: View {
             appModel.selectedTab = .book
         } label: {
             PolaroidPrint(memory: memory, frameStyle: frameStyle, filterStyle: filterStyle, filterAdjustment: filterAdjustment, isFeatured: true, printAspectRatio: printAspectRatio)
-                .overlay(alignment: .bottomTrailing) {
+                .overlay {
                     Image(systemName: "play.fill")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.90))
-                        .frame(width: 19, height: 19)
-                        .background(.black.opacity(0.32), in: Circle())
-                        .padding(7)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.82))
+                        .frame(width: 30, height: 30)
+                        .background(.black.opacity(0.15), in: Circle())
                 }
                 .shadow(color: .black.opacity(0.10), radius: 3, y: 2)
         }
@@ -345,7 +350,6 @@ private struct LivingMemoryView: View {
 }
 
 private struct PolaroidPrint: View {
-    @EnvironmentObject private var repository: MemoryRepository
     let memory: MemoryRecord
     let frameStyle: LockerFrameStyle
     let filterStyle: LockerFilterStyle
@@ -368,16 +372,11 @@ private struct PolaroidPrint: View {
                 )
 
                 MemoryPhotoSurface(memoryID: memory.id, variant: variant) {
-                    Group {
-                        if let image = repository.image(for: memory) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                        } else {
-                            Color(white: 0.52)
-                                .overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.65)))
-                        }
-                    }
+                    DownsampledMemoryImage(
+                        memory: memory,
+                        purpose: .locker,
+                        targetPointSize: CGSize(width: proxy.size.width, height: photoHeight)
+                    )
                     .modifier(LockerMemoryFilterModifier(style: filterStyle, adjustment: filterAdjustment))
                 }
                 .frame(width: proxy.size.width - sideMargin * 2, height: photoHeight)
@@ -412,6 +411,39 @@ private struct PolaroidPrint: View {
     }
 }
 
+private struct DownsampledMemoryImage: View {
+    @EnvironmentObject private var repository: MemoryRepository
+    @State private var image: UIImage?
+    let memory: MemoryRecord
+    let purpose: MemoryImagePurpose
+    let targetPointSize: CGSize
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color(white: 0.52)
+                    .overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.65)))
+            }
+        }
+        .task(id: loadKey) {
+            image = await repository.imageAsync(
+                for: memory,
+                purpose: purpose,
+                targetPointSize: targetPointSize
+            )
+        }
+        .onDisappear { image = nil }
+    }
+
+    private var loadKey: String {
+        "\(memory.id.uuidString)-\(purpose.rawValue)-\(Int(targetPointSize.width.rounded()))x\(Int(targetPointSize.height.rounded()))"
+    }
+}
+
 private struct PolaroidVisualVariant {
     let index: Int
     let digicamStyle: DigicamPhotoStyle
@@ -424,10 +456,10 @@ private struct PolaroidVisualVariant {
 
     var paperColor: Color {
         switch index {
-        case 0: Color(red: 247/255, green: 244/255, blue: 238/255)
-        case 1: Color(red: 248/255, green: 247/255, blue: 243/255)
-        case 2: Color(red: 245/255, green: 246/255, blue: 243/255)
-        default: Color(red: 248/255, green: 246/255, blue: 241/255)
+        case 0: Color(red: 246/255, green: 244/255, blue: 238/255)
+        case 1: Color(red: 248/255, green: 245/255, blue: 239/255)
+        case 2: Color(red: 244/255, green: 243/255, blue: 237/255)
+        default: Color(red: 247/255, green: 242/255, blue: 236/255)
         }
     }
 
@@ -506,6 +538,7 @@ private struct MemoryPhotoSurface<Content: View>: View {
             .saturation(style.saturation)
             .overlay(coolTone(style).blendMode(SwiftUI.BlendMode.softLight))
             .overlay(warmTone(style).blendMode(SwiftUI.BlendMode.softLight))
+            .overlay(Color(red: 1, green: 0.86, blue: 0.72).opacity(0.008).blendMode(SwiftUI.BlendMode.softLight))
             .overlay(blackLift(style).blendMode(SwiftUI.BlendMode.screen))
             .overlay(highlightTone(style).blendMode(SwiftUI.BlendMode.softLight))
             .overlay(DigicamFlashTreatment(amount: style.flashAmount))
@@ -678,6 +711,7 @@ private struct MemoryPhysicalView: View {
     let filterStyle: LockerFilterStyle
     let filterAdjustment: DailyLockerFilterAdjustment
     let printAspectRatio: CGFloat
+    let tapePaletteIndex: Int
     let isSelected: Bool
     let onSelect: () -> Void
 
@@ -697,7 +731,7 @@ private struct MemoryPhysicalView: View {
             }
         }
         .overlay(alignment: .top) { attachmentView }
-        .shadow(color: .black.opacity(0.10), radius: 3, y: 2)
+        .shadow(color: LockUSceneTokens.Shadow.paper, radius: 2.5, y: 1.5)
         .contentShape(Rectangle())
         .onTapGesture { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onSelect() }
         .onTapGesture(count: 2) { appModel.selectedTab = .book }
@@ -714,7 +748,7 @@ private struct MemoryPhysicalView: View {
 
     private var image: some View {
         Group {
-            if let image = repository.image(for: memory) { Image(uiImage: image).resizable().scaledToFill() }
+            if let image = repository.image(for: memory, purpose: .locker, targetPointSize: CGSize(width: 220, height: 220)) { Image(uiImage: image).resizable().scaledToFill() }
             else { Color(white: 0.52).overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.65))) }
         }
         .overlay {
@@ -773,7 +807,7 @@ private struct MemoryPhysicalView: View {
                     .position(tapePosition(in: proxy.size))
                     .rotationEffect(.degrees(-1.6))
             case .maskingTape:
-                MaskingTapeView(memoryID: memory.id)
+                MaskingTapeView(memoryID: memory.id, paletteIndex: tapePaletteIndex)
                     .frame(width: proxy.size.width * tapeWidthFraction, height: tapeHeight)
                     .position(maskingTapePosition(in: proxy.size))
             case .magnet:
@@ -833,6 +867,7 @@ private struct TapeSurface: View {
 
 private struct MaskingTapeView: View {
     let memoryID: UUID
+    let paletteIndex: Int
 
     var body: some View {
         ImperfectTape()
@@ -867,10 +902,10 @@ private struct MaskingTapeView: View {
     }
 
     private var tapeColor: Color {
-        switch variant {
-        case 0: Color(red: 244/255, green: 242/255, blue: 235/255).opacity(0.76)
-        case 1: Color(red: 216/255, green: 234/255, blue: 244/255).opacity(0.78)
-        default: Color(red: 243/255, green: 237/255, blue: 218/255).opacity(0.80)
+        switch paletteIndex {
+        case 0: Color(red: 215/255, green: 232/255, blue: 238/255).opacity(0.76)
+        case 1: LockUSceneTokens.Material.warmTape.opacity(0.78)
+        default: Color(red: 231/255, green: 210/255, blue: 211/255).opacity(0.70)
         }
     }
 }
@@ -903,7 +938,7 @@ struct PolaroidMemoryView: View {
         } label: {
             VStack(spacing: 0) {
                 Group {
-                    if let image = repository.image(for: memory) {
+                    if let image = repository.image(for: memory, purpose: .locker, targetPointSize: CGSize(width: 220, height: 260)) {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()

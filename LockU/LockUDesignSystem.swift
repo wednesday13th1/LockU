@@ -29,7 +29,7 @@ enum LockUSceneTokens {
         static let headerHorizontalMargin: CGFloat = 20
         static let headerHeight: CGFloat = 44
         static let themeButtonTapTarget: CGFloat = 44
-        static let headerToLocker: CGFloat = 18
+        static let headerToLocker: CGFloat = 8
         static let lockerToTabBar: CGFloat = 24
         static let frameThickness: ClosedRange<CGFloat> = 12...14
         static let sideWallFraction: CGFloat = 0.075
@@ -38,22 +38,33 @@ enum LockUSceneTokens {
     }
 
     enum Material {
-        static let backWall = Color(red: 151/255, green: 166/255, blue: 170/255)
-        static let leftWall = Color(red: 160/255, green: 175/255, blue: 179/255)
-        static let rightWall = Color(red: 140/255, green: 154/255, blue: 158/255)
-        static let shelfTop = Color(red: 170/255, green: 183/255, blue: 186/255)
-        static let shelfFront = Color(red: 139/255, green: 152/255, blue: 156/255)
-        static let recess = Color(red: 113/255, green: 128/255, blue: 135/255)
+        static let environmentTop = Color(red: 237/255, green: 245/255, blue: 248/255)
+        static let environmentBottom = Color(red: 242/255, green: 247/255, blue: 248/255)
+        static let lockerMetalBase = Color(red: 203/255, green: 216/255, blue: 221/255)
+        static let lockerMetalLight = Color(red: 215/255, green: 225/255, blue: 228/255)
+        static let lockerMetalShadow = Color(red: 184/255, green: 199/255, blue: 205/255)
+        static let backWall = Color(red: 199/255, green: 211/255, blue: 215/255)
+        static let leftWall = Color(red: 208/255, green: 220/255, blue: 224/255)
+        static let rightWall = Color(red: 188/255, green: 202/255, blue: 207/255)
+        static let shelfTop = Color(red: 215/255, green: 225/255, blue: 228/255)
+        static let shelfFront = Color(red: 203/255, green: 216/255, blue: 221/255)
+        static let recess = Color(red: 178/255, green: 193/255, blue: 199/255)
         static let paperBase = Color(red: 247/255, green: 244/255, blue: 236/255)
-        static let paperHighlight = Color(red: 1, green: 253/255, blue: 247/255)
-        static let paperShadow = Color(red: 216/255, green: 211/255, blue: 201/255)
+        static let paperHighlight = Color(red: 248/255, green: 246/255, blue: 240/255)
+        static let paperShadow = Color(red: 109/255, green: 104/255, blue: 96/255)
+        static let fadedBlue = Color(red: 170/255, green: 191/255, blue: 200/255)
+        static let dustyPink = Color(red: 216/255, green: 191/255, blue: 192/255)
+        static let warmTape = Color(red: 236/255, green: 229/255, blue: 211/255)
+        static let lockerInk = Color(red: 39/255, green: 52/255, blue: 59/255)
+        static let lockerInkSecondary = Color(red: 93/255, green: 105/255, blue: 112/255)
     }
 
     enum Shadow {
-        static let structural = Color.black.opacity(0.18)
-        static let object = Color.black.opacity(0.20)
-        static let paper = Color.black.opacity(0.14)
-        static let contact = Color.black.opacity(0.26)
+        private static let charcoal = Color(red: 45/255, green: 58/255, blue: 65/255)
+        static let structural = charcoal.opacity(0.12)
+        static let object = charcoal.opacity(0.10)
+        static let paper = Color(red: 109/255, green: 104/255, blue: 96/255).opacity(0.09)
+        static let contact = charcoal.opacity(0.14)
     }
 }
 
@@ -579,7 +590,7 @@ enum LockUDesign {
 
     static let contentMaxWidth: CGFloat = 760
     static let lockerMaxWidth: CGFloat = 430
-    static let bottomBarHeight: CGFloat = 76
+    static let bottomBarHeight: CGFloat = 66
     static let shadow = SwiftUI.Color.black.opacity(0.12)
 }
 
@@ -703,7 +714,12 @@ struct SkyBackground: View {
 
 struct LockerSceneBackground: View {
     var body: some View {
-        SummerSkyBackground()
+        LinearGradient(
+            colors: [LockUSceneTokens.Material.environmentTop, LockUSceneTokens.Material.environmentBottom],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
     }
 }
 

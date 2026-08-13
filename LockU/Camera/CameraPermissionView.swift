@@ -3,6 +3,7 @@ import UIKit
 
 struct CameraPermissionView: View {
     let isRestricted: Bool
+    let onClose: () -> Void
     let onLibraryImage: (UIImage) -> Void
     let onError: (Error) -> Void
 
@@ -40,6 +41,9 @@ struct CameraPermissionView: View {
                         .buttonStyle(LockUPrimaryButtonStyle())
                     }
 
+                    Button("閉じる", action: onClose)
+                        .buttonStyle(LockUSecondaryButtonStyle())
+
                     PhotoLibraryPicker(
                         isDisabled: false,
                         style: .labeled,
@@ -61,6 +65,7 @@ struct CameraPermissionView: View {
 #Preview("Permission Denied") {
     CameraPermissionView(
         isRestricted: false,
+        onClose: {},
         onLibraryImage: { _ in },
         onError: { _ in }
     )
@@ -69,6 +74,7 @@ struct CameraPermissionView: View {
 #Preview("Permission Restricted") {
     CameraPermissionView(
         isRestricted: true,
+        onClose: {},
         onLibraryImage: { _ in },
         onError: { _ in }
     )

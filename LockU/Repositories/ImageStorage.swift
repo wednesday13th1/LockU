@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UIKit
 
 protocol MemoryImageStoring {
@@ -7,6 +8,8 @@ protocol MemoryImageStoring {
     func saveDualBackJPEG(_ image: UIImage, id: UUID) throws -> String
     func saveDualFrontJPEG(_ image: UIImage, id: UUID) throws -> String
     func load(fileName: String) -> UIImage?
+    func load(fileName: String, targetPixelSize: CGFloat) -> UIImage?
+    func url(fileName: String) -> URL?
     func delete(fileName: String) throws
     func exists(fileName: String) -> Bool
 }
@@ -82,6 +85,27 @@ final class MemoryImageStorage: MemoryImageStoring {
         let url = directory.appendingPathComponent(fileName)
         guard fileManager.fileExists(atPath: url.path) else { return nil }
         return UIImage(contentsOfFile: url.path)
+    }
+    func load(fileName: String, targetPixelSize: CGFloat) -> UIImage? {
+        let url = directory.appendingPathComponent(fileName)
+        guard fileManager.fileExists(atPath: url.path), targetPixelSize > 0 else { return nil }
+        return Self.downsampledImage(at: url, targetPixelSize: targetPixelSize)
+    }
+    nonisolated static func downsampledImage(at url: URL, targetPixelSize: CGFloat) -> UIImage? {
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else { return nil }
+        let options = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(ceil(targetPixelSize))
+        ] as CFDictionary
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return nil }
+        return UIImage(cgImage: cgImage, scale: 1, orientation: .up)
+    }
+    func url(fileName: String) -> URL? {
+        let url = directory.appendingPathComponent(fileName)
+        return fileManager.fileExists(atPath: url.path) ? url : nil
     }
     func delete(fileName: String) throws { let url = directory.appendingPathComponent(fileName); if fileManager.fileExists(atPath: url.path) { try fileManager.removeItem(at: url) } }
     func exists(fileName: String) -> Bool { fileManager.fileExists(atPath: directory.appendingPathComponent(fileName).path) }
@@ -173,13 +197,35 @@ enum MemoryVideoError: LocalizedError {
     }
 }
 
+private nonisolated final class LockUImageCacheBox: @unchecked Sendable {
+    let cache = NSCache<NSString, UIImage>()
+}
+
+@MainActor
 final class LockUImageCache {
-    private let cache = NSCache<NSString, UIImage>()
-    init(costLimit: Int) { cache.totalCostLimit = costLimit }
-    func image(forKey key: String) -> UIImage? { cache.object(forKey: key as NSString) }
-    func insert(_ image: UIImage, forKey key: String, cost: Int) { cache.setObject(image, forKey: key as NSString, cost: cost) }
-    func remove(forKey key: String) { cache.removeObject(forKey: key as NSString) }
-    func clear() { cache.removeAllObjects() }
+    private let box = LockUImageCacheBox()
+    private var memoryWarningObserver: NSObjectProtocol?
+
+    init(costLimit: Int, countLimit: Int = 24) {
+        box.cache.totalCostLimit = costLimit
+        box.cache.countLimit = countLimit
+        let box = box
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            box.cache.removeAllObjects()
+        }
+    }
+
+    deinit {
+        if let memoryWarningObserver { NotificationCenter.default.removeObserver(memoryWarningObserver) }
+    }
+    func image(forKey key: String) -> UIImage? { box.cache.object(forKey: key as NSString) }
+    func insert(_ image: UIImage, forKey key: String, cost: Int) { box.cache.setObject(image, forKey: key as NSString, cost: cost) }
+    func remove(forKey key: String) { box.cache.removeObject(forKey: key as NSString) }
+    func clear() { box.cache.removeAllObjects() }
 }
 
 extension UIImage {

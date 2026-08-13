@@ -1,20 +1,20 @@
 import Combine
 import Foundation
 
-protocol LockUClock {
+nonisolated protocol LockUClock {
     @MainActor
     var now: Date { get }
 }
 
-struct SystemLockUClock: LockUClock {
+nonisolated struct SystemLockUClock: LockUClock {
     var now: Date { .now }
 }
 
-struct FixedLockUClock: LockUClock {
+nonisolated struct FixedLockUClock: LockUClock {
     let now: Date
 }
 
-enum LockUDemoTimePreset: String, CaseIterable, Identifiable {
+nonisolated enum LockUDemoTimePreset: String, CaseIterable, Identifiable {
     case live
     case morning
     case afterSchool
@@ -80,7 +80,7 @@ final class LockUDemoClock: ObservableObject, LockUClock {
     }
 }
 
-struct RevisitPresentation: Identifiable, Equatable, Sendable {
+nonisolated struct RevisitPresentation: Identifiable, Equatable, Sendable {
     let memoryID: UUID
     let memory: MemoryRecord
     let reason: MemoryResurfacingReason

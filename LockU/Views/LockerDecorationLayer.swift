@@ -48,9 +48,10 @@ private struct LockerDecorationItem: View {
             }
         }
         .frame(
-            width: max(54, min(containerSize.width * 0.24, 118)),
-            height: max(54, min(containerSize.width * 0.24, 118))
+            width: max(48, min(containerSize.width * 0.20, 96)),
+            height: max(48, min(containerSize.width * 0.20, 96))
         )
+        .opacity(isSelected ? 0.92 : 0.78)
         .contentShape(Rectangle())
         .scaleEffect(
             x: decoration.isFlipped

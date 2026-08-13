@@ -70,6 +70,8 @@ final class LockUBootCoordinator {
         var firstError: Error?
         var didMigrate = false
 
+        guard !Task.isCancelled else { return DeferredBootResult(didMigrate: false, error: nil) }
+
         attempt(
             { try dependencies.reflectionRepository.reload() },
             success: {},
@@ -79,6 +81,7 @@ final class LockUBootCoordinator {
             }
         )
         await Task.yield()
+        guard !Task.isCancelled else { return DeferredBootResult(didMigrate: false, error: firstError) }
 
         state(.migrating)
         do {
@@ -94,6 +97,7 @@ final class LockUBootCoordinator {
             firstError = firstError ?? error
         }
         await Task.yield()
+        guard !Task.isCancelled else { return DeferredBootResult(didMigrate: didMigrate, error: firstError) }
 
         if didMigrate {
             attempt({ try dependencies.memoryRepository.reload() }, success: {}, onError: { firstError = firstError ?? $0 })
@@ -101,6 +105,8 @@ final class LockUBootCoordinator {
             attempt({ try dependencies.decorationRepository.reload() }, success: {}, onError: { firstError = firstError ?? $0 })
             dependencies.backgroundRepository.reload()
         }
+
+        guard !Task.isCancelled else { return DeferredBootResult(didMigrate: didMigrate, error: firstError) }
 
         state(.recovering)
         let report = StorageHealthInspector(paths: dependencies.paths).inspect(memories: dependencies.memoryRepository.memories, decorations: dependencies.decorationRepository.decorations)

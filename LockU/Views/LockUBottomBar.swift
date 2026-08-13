@@ -13,15 +13,15 @@ struct LockUBottomBar: View {
         }
         .padding(.horizontal, 10)
         .frame(maxWidth: 520)
-        .frame(height: 74)
+        .frame(height: 60)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26))
-        .background(.white.opacity(0.84), in: RoundedRectangle(cornerRadius: 28))
+        .background(Color(red: 247/255, green: 247/255, blue: 243/255).opacity(0.90), in: RoundedRectangle(cornerRadius: 28))
         .overlay {
             RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.35), lineWidth: 0.5)
         }
-        .shadow(color: .black.opacity(0.055), radius: 12, y: 5)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 8)
+        .shadow(color: Color(red: 42/255, green: 52/255, blue: 58/255).opacity(0.045), radius: 10, y: 4)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
     }
 
     private func tabButton(_ tab: LockUTab, title: String, icon: String) -> some View {
@@ -31,14 +31,14 @@ struct LockUBottomBar: View {
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 21, weight: .medium))
+                    .font(.system(size: 19, weight: .medium))
                 Text(title)
                     .font(.system(size: 11, weight: .medium))
             }
             .foregroundStyle(
                 selection == tab
-                    ? Color(red: 41/255, green: 70/255, blue: 93/255)
-                    : Color(red: 125/255, green: 147/255, blue: 158/255).opacity(0.72)
+                    ? Color(red: 49/255, green: 67/255, blue: 76/255).opacity(0.92)
+                    : Color(red: 125/255, green: 136/255, blue: 141/255).opacity(0.58)
             )
             .scaleEffect(selection == tab ? 1.03 : 1)
             .frame(maxWidth: .infinity)
@@ -53,18 +53,18 @@ struct LockUBottomBar: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(Color(red: 34/255, green: 137/255, blue: 232/255))
-                    .frame(width: 62, height: 62)
+                    .fill(Color(red: 49/255, green: 67/255, blue: 76/255))
+                    .frame(width: 40, height: 40)
                 Image(systemName: "camera.fill")
-                    .font(.system(size: 25, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 23, weight: .semibold))
+                    .foregroundStyle(Color(red: 248/255, green: 247/255, blue: 242/255).opacity(0.94))
             }
-                .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
+                .shadow(color: .black.opacity(0.09), radius: 6, y: 3)
                 .scaleEffect(selection == .camera ? 1.04 : 1)
                 .animation(LockUDesign.Motion.quick, value: selection)
         }
         .frame(maxWidth: .infinity)
-        .offset(y: -12)
+        .offset(y: -3)
         .accessibilityLabel("Camera")
     }
 }

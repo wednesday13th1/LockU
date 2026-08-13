@@ -46,6 +46,9 @@ final class LockUAppModel: ObservableObject {
     private let dependencies: LockUDependencyContainer
     private let onboardingDefaults = UserDefaults.standard
     private let onboardingCompletionKey = "locku.first-locker.completed.v1"
+    private var deferredBootTask: Task<Void, Never>?
+    private var deferredBootGeneration = 0
+    private var didLogLockerFirstRender = false
 
     init() {
         let dependencies = LockUDependencyContainer()
@@ -58,7 +61,10 @@ final class LockUAppModel: ObservableObject {
         revisitCoordinator = RevisitCoordinator()
         reflectionRepository = dependencies.reflectionRepository
         demoClock = LockUDemoClock()
+        launchLog("APP_LAUNCH")
         Task { @MainActor [weak self] in
+            // Let the initial background and controls render before metadata I/O begins.
+            await Task.yield()
             await self?.boot()
         }
     }
@@ -76,18 +82,58 @@ final class LockUAppModel: ObservableObject {
         )
         refreshTimeDependentState()
         isReady = true
+        launchLog("CORE_READY")
 
-        // Give SwiftUI an opportunity to present Locker Home before deferred disk work begins.
-        await Task.yield()
-        let deferred = await coordinator.performDeferredBoot { bootState = $0 }
-        if presentedError == nil, let error = deferred.error {
-            presentedError = error.localizedDescription
+        scheduleDeferredBoot()
+    }
+
+    private func scheduleDeferredBoot() {
+        guard deferredBootTask == nil, !isCameraPresented else { return }
+        deferredBootGeneration &+= 1
+        let generation = deferredBootGeneration
+        deferredBootTask = Task(priority: .utility) { @MainActor [weak self] in
+            guard let self else { return }
+            await Task.yield()
+            guard !Task.isCancelled, !isCameraPresented else {
+                if generation == deferredBootGeneration { deferredBootTask = nil }
+                return
+            }
+
+            let wasPreviouslyMigrated = onboardingDefaults.bool(forKey: "locku.migration.v2.completed")
+            let coordinator = LockUBootCoordinator(dependencies: dependencies)
+            let deferred = await coordinator.performDeferredBoot { bootState = $0 }
+            if generation == deferredBootGeneration { deferredBootTask = nil }
+            guard !Task.isCancelled, generation == deferredBootGeneration else { return }
+            if presentedError == nil, let error = deferred.error {
+                presentedError = error.localizedDescription
+            }
+            updateOnboardingState(
+                hasExistingMigration: wasPreviouslyMigrated || deferred.didMigrate,
+                migrationDecisionFinalized: true
+            )
+            refreshTimeDependentState()
+            launchLog("DEFERRED_READY")
         }
-        updateOnboardingState(
-            hasExistingMigration: wasPreviouslyMigrated || deferred.didMigrate,
-            migrationDecisionFinalized: true
-        )
-        refreshTimeDependentState()
+    }
+
+    func setCameraPresented(_ presented: Bool) {
+        guard isCameraPresented != presented else { return }
+        isCameraPresented = presented
+        if presented {
+            launchLog("CAMERA_REQUESTED")
+            deferredBootGeneration &+= 1
+            deferredBootTask?.cancel()
+            deferredBootTask = nil
+            memoryRepository.releaseRebuildableDisplayResources()
+        } else {
+            scheduleDeferredBoot()
+        }
+    }
+
+    func markLockerFirstRender() {
+        guard !didLogLockerFirstRender else { return }
+        didLogLockerFirstRender = true
+        launchLog("LOCKER_FIRST_RENDER")
     }
 
     private func updateOnboardingState(
@@ -125,6 +171,13 @@ final class LockUAppModel: ObservableObject {
         )
     }
 
+    private func launchLog(_ event: String) {
+        #if DEBUG
+        let milliseconds = Int(Date().timeIntervalSince1970 * 1_000)
+        print("[LockU][Launch][\(event)] t=\(milliseconds) boot=\(bootState) camera=\(isCameraPresented)")
+        #endif
+    }
+
     #if DEBUG
     func selectDemoPreset(_ preset: LockUDemoTimePreset) {
         demoClock.select(preset, memories: memoryRepository.memories)
@@ -149,7 +202,9 @@ struct LockURootView: View {
             .zIndex(LockUSceneTokens.Layer.environment)
 
             Group {
-                if !model.isReady {
+                if model.selectedTab == .camera && !model.shouldShowFirstLocker {
+                    content
+                } else if !model.isReady {
                     ProgressView()
                         .tint(.white)
                         .scaleEffect(0.85)
@@ -163,7 +218,7 @@ struct LockURootView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.992)))
                 .zIndex(LockUSceneTokens.Layer.physical)
 
-            if model.isReady && model.selectedTab != .camera && !model.shouldShowFirstLocker {
+            if model.selectedTab != .camera && !model.shouldShowFirstLocker {
                 LockUBottomBar(selection: $model.selectedTab)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(LockUSceneTokens.Layer.interface)
@@ -200,7 +255,7 @@ struct LockURootView: View {
         case .locker:
             HallwayView()
                 .frame(maxWidth: LockUDesign.contentMaxWidth)
-                .padding(.bottom, LockUDesign.bottomBarHeight + 16)
+                .padding(.bottom, LockUDesign.bottomBarHeight + 8)
         case .book:
             MemoryBookshelfView()
                 .frame(maxWidth: LockUDesign.contentMaxWidth)

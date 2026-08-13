@@ -24,86 +24,107 @@ struct CameraCaptureView: View {
     @State private var captureHasDailyFilm = false
     @State private var captureExperience: LockUCaptureExperience = .single
     @State private var isSavingDualMemory = false
+    @State private var isLightControlVisible = false
+    @State private var isAdjustingLight = false
+    @State private var lightDragStartLevel: Double = 50
+    @State private var lightDismissTask: Task<Void, Never>?
 
     private let dailyFilmService = DailyFilmService()
     private let revealStore = DailyFilmRevealStore()
 
     private var capturedToday: Bool {
-        memoryRepository.hasMemory(on: .now)
+        memoryRepository.hasMemory(on: Date.now)
     }
 
     var body: some View {
-        notificationObservers
+        observedCameraRoot
             .modifier(CameraErrorAlertModifier(errorMessage: $camera.errorMessage))
     }
 
-    private var cameraRoot: AnyView {
-        AnyView(ZStack {
+    private var cameraRoot: some View {
+        ZStack {
             Color.black.ignoresSafeArea()
-            if let dualResult = camera.dualCapturedImages {
-                DualCameraReviewView(
-                    result: dualResult,
-                    isSaving: isSavingDualMemory,
-                    onClose: closeDualReview,
-                    onRetake: retakeDual,
-                    onSave: { saveDual(result: dualResult) }
-                )
-            } else if let originalImage = editor.originalImage {
-                CameraReviewView(
-                    originalImage: originalImage,
-                    cutoutImage: editor.cutoutImage,
-                    selectedStyle: $editor.selectedStyle,
-                    captureMode: reviewMode,
-                    isExtracting: editor.isExtracting,
-                    isSaving: isSaving,
-                    cutoutErrorMessage: editor.cutoutErrorMessage,
-                    onClose: closeEditor,
-                    onExtractSubject: editor.extractSubject,
-                    onRetake: retake,
-                    onSave: save
-                )
-            } else if capturedToday {
-                alreadyCapturedView
-            } else {
-                cameraContent
-            }
-        })
-    }
-
-    private var appearanceObservers: AnyView {
-        AnyView(cameraRoot
-        .onAppear {
-            appModel.isCameraPresented = true
-            refreshDailyFilm(allowReveal: true)
-            if !capturedToday { camera.prepare() }
+            activeCameraContent
         }
-        .onDisappear {
-            appModel.isCameraPresented = false
-            camera.stopSession()
-            editor.clear()
-            camera.clearDualCapture()
-        })
     }
 
-    private var capturedImageObserver: AnyView {
-        AnyView(appearanceObservers
-        .onChange(of: camera.capturedImage) { _, image in
-            handleCapturedImage(image)
-        })
+    private var activeCameraContent: AnyView {
+        if let result = camera.dualCapturedImages { return dualReview(result) }
+        if let original = editor.originalImage { return photoReview(original) }
+        if capturedToday { return AnyView(alreadyCapturedView) }
+        return cameraContent
     }
 
-    private var permissionObserver: AnyView {
-        AnyView(capturedImageObserver
-        .onChange(of: camera.permissionStatus) { _, status in
-            appModel.cameraPermissionDenied = status == .denied || status == .restricted
-        })
+    private func dualReview(_ result: DualCameraCaptureResult) -> AnyView {
+        AnyView(DualCameraReviewView(
+            result: result,
+            isSaving: isSavingDualMemory,
+            onClose: closeDualReview,
+            onRetake: retakeDual,
+            onSave: { saveDual(result: result) }
+        ))
     }
 
-    private var lifecycleObservers: AnyView {
-        AnyView(permissionObserver
-        .onChange(of: scenePhase) { _, phase in
-            handleScenePhaseChange(phase)
-        })
+    private func photoReview(_ original: UIImage) -> AnyView {
+        AnyView(CameraReviewView(
+            originalImage: original,
+            cutoutImage: editor.cutoutImage,
+            selectedStyle: $editor.selectedStyle,
+            captureMode: reviewMode,
+            isExtracting: editor.isExtracting,
+            isSaving: isSaving,
+            cutoutErrorMessage: editor.cutoutErrorMessage,
+            onClose: closeEditor,
+            onExtractSubject: editor.extractSubject,
+            onRetake: retake,
+            onSave: save
+        ))
+    }
+
+    private var observedCameraRoot: some View {
+        cameraRoot
+            .modifier(CameraAppearanceEvents(
+                onAppear: handleCameraAppear,
+                onDisappear: handleCameraDisappear
+            ))
+            .modifier(CameraStateEvents(
+                capturedImage: camera.capturedImage,
+                permissionStatus: camera.permissionStatus,
+                scenePhase: scenePhase,
+                onCapturedImage: handleCapturedImage,
+                onPermission: handlePermissionChange,
+                onScenePhase: handleScenePhaseChange
+            ))
+            .modifier(CameraCalendarEvents(onRefresh: handleCalendarRefresh))
+    }
+
+    private func handleCameraAppear() {
+        appModel.setCameraPresented(true)
+        camera.setCameraScreenActive(true)
+        camera.setApplicationActive(scenePhase == .active)
+        refreshDailyFilm(allowReveal: true)
+        if !capturedToday { camera.prepare() }
+    }
+
+    private func handleCameraDisappear() {
+        appModel.setCameraPresented(false)
+        camera.setCameraScreenActive(false)
+        camera.setApplicationActive(false)
+        camera.stopSession()
+        editor.clear()
+        camera.clearDualCapture()
+        lightDismissTask?.cancel()
+        lightDismissTask = nil
+        isLightControlVisible = false
+        isAdjustingLight = false
+    }
+
+    private func handlePermissionChange(_ status: AVAuthorizationStatus) {
+        appModel.cameraPermissionDenied = status == .denied || status == .restricted
+    }
+
+    private func handleCalendarRefresh() {
+        refreshDailyFilm(allowReveal: false)
     }
 
     private func handleCapturedImage(_ image: UIImage?) {
@@ -120,6 +141,7 @@ struct CameraCaptureView: View {
     }
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {
+        camera.setApplicationActive(phase == .active)
         guard phase == .active else {
             camera.stopSession()
             return
@@ -136,21 +158,12 @@ struct CameraCaptureView: View {
         }
     }
 
-    private var notificationObservers: AnyView {
-        AnyView(lifecycleObservers
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
-            refreshDailyFilm(allowReveal: false)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-            refreshDailyFilm(allowReveal: false)
-        })
-    }
-
     private var cameraContent: AnyView {
         switch camera.permissionStatus {
         case .denied, .restricted:
             return AnyView(CameraPermissionView(
                 isRestricted: camera.permissionStatus == .restricted,
+                onClose: { appModel.selectedTab = .locker },
                 onLibraryImage: receiveLibraryImage,
                 onError: { appModel.report($0) }
             )
@@ -172,7 +185,8 @@ struct CameraCaptureView: View {
             if captureExperience == .dual {
                 DualCameraPreviewView(manager: camera)
                     .ignoresSafeArea(edges: .top)
-                    .transition(.opacity)
+                    .opacity(dualPreviewIsVisible ? 1 : 0)
+                    .animation(.easeOut(duration: 0.16), value: dualPreviewIsVisible)
                     .accessibilityLabel("見ている景色と、その時の自分のカメラプレビュー")
             } else {
                 CameraPreviewView(session: camera.session)
@@ -180,8 +194,56 @@ struct CameraCaptureView: View {
                     .dailyFilmPreview(dailyFilm)
             }
 
-            if !camera.isSessionRunning {
+
+            if captureExperience == .dual {
+                DualCameraLightControl(
+                    level: camera.lightLevel,
+                    isExpanded: isLightControlVisible,
+                    isEnabled: camera.dualCameraUXState == .ready,
+                    reduceMotion: reduceMotion,
+                    onTap: handleLightControlTap,
+                    onDragChanged: updateLightFromIconDrag,
+                    onDragEnded: finishLightAdjustment,
+                    onSliderChanged: updateLightFromSlider,
+                    onSliderEnded: finishLightAdjustment
+                )
+                .padding(.top, 8)
+                .padding(.trailing, 18)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .zIndex(15)
+            }
+
+            if captureExperience == .dual, isAdjustingLight {
+                LightPercentageHUD(level: camera.lightLevel)
+                    .zIndex(14)
+            }
+
+            if captureExperience == .dual, !dualPreviewIsVisible {
+                DualCameraPreparingSurface(showProgress: dualShowsProgress)
+                    .transition(.opacity)
+                    .zIndex(5)
+            } else if captureExperience == .single, !camera.isSessionRunning {
                 ProgressView().tint(.white)
+            }
+
+            if captureExperience == .dual, dualShowsFailure {
+                VStack(spacing: 14) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 24, weight: .medium))
+                    Text("Camera unavailable")
+                        .font(.system(size: 17, weight: .semibold))
+                    HStack(spacing: 12) {
+                        Button("Close") { appModel.selectedTab = .locker }
+                        if camera.dualCameraUXState != .unsupported {
+                            Button("Retry") { camera.retryDualCamera() }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .foregroundStyle(.white)
+                .padding(22)
+                .background(.black.opacity(0.58), in: RoundedRectangle(cornerRadius: 16))
+                .zIndex(20)
             }
 
             if captureExperience == .dual {
@@ -212,6 +274,7 @@ struct CameraCaptureView: View {
                 Spacer()
                 bottomControls
             }
+            .zIndex(10)
 
             if showFilmReveal && captureExperience == .single {
                 filmReveal
@@ -223,6 +286,77 @@ struct CameraCaptureView: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
                 .animation(.easeOut(duration: 0.16), value: flashOverlay)
+        }
+        .onChange(of: camera.dualCameraUXState) { _, state in
+            if state == .ready { camera.markDualPreviewVisible() }
+        }
+    }
+
+    private var dualPreviewIsVisible: Bool {
+        camera.dualCameraUXState == .ready || camera.dualCameraUXState == .capturing
+    }
+
+    private var dualShowsProgress: Bool {
+        switch camera.dualCameraUXState {
+        case .preparing, .interrupted, .recovering: true
+        default: false
+        }
+    }
+
+    private var dualShowsFailure: Bool {
+        camera.dualCameraUXState == .failed || camera.dualCameraUXState == .unsupported
+    }
+
+    private func showLightControl() {
+        guard camera.dualCameraUXState == .ready else { return }
+        lightDismissTask?.cancel()
+        lightDismissTask = nil
+        lightDragStartLevel = camera.lightLevel
+        let animation = reduceMotion ? nil : Animation.easeOut(duration: 0.16)
+        withAnimation(animation) { isLightControlVisible = true }
+    }
+
+    private func handleLightControlTap() {
+        showLightControl()
+        scheduleLightControlDismissal()
+    }
+
+    private func updateLightFromIconDrag(_ translation: CGSize) {
+        guard camera.dualCameraUXState == .ready else { return }
+        if !isAdjustingLight {
+            lightDragStartLevel = camera.lightLevel
+            showLightControl()
+            isAdjustingLight = true
+        }
+        camera.setLightLevel(lightDragStartLevel - Double(translation.height / 180) * 100)
+    }
+
+    private func updateLightFromSlider(_ level: Double) {
+        guard camera.dualCameraUXState == .ready else { return }
+        lightDismissTask?.cancel()
+        isAdjustingLight = true
+        camera.setLightLevel(level)
+    }
+
+    private func finishLightAdjustment() {
+        guard isLightControlVisible else { return }
+        camera.setLightLevel(camera.lightLevel, isFinal: true)
+        isAdjustingLight = false
+        scheduleLightControlDismissal()
+    }
+
+    private func scheduleLightControlDismissal() {
+        lightDismissTask?.cancel()
+        lightDismissTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(450))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            let animation = reduceMotion ? nil : Animation.easeIn(duration: 0.22)
+            withAnimation(animation) { isLightControlVisible = false }
+            lightDismissTask = nil
         }
     }
 
@@ -307,8 +441,8 @@ struct CameraCaptureView: View {
                         }
                     }
                     .buttonStyle(ShutterButtonStyle())
-                    .disabled(camera.isCapturing || !camera.isSessionRunning)
-                    .opacity(camera.isSessionRunning ? 1 : 0.5)
+                    .disabled(!camera.canCapture)
+                    .opacity(camera.canCapture ? 1 : 0.5)
                     .accessibilityLabel(captureExperience == .dual ? "景色と自分を同時に撮影" : "写真を撮影")
             }
         }
@@ -358,7 +492,7 @@ struct CameraCaptureView: View {
     }
 
     private func activateDualMode() {
-        camera.prepareDualCamera { started in
+        camera.startDualSession { started in
             guard !started else { return }
             if reduceMotion { captureExperience = .single }
             else { withAnimation(.easeInOut(duration: 0.2)) { captureExperience = .single } }
@@ -367,8 +501,7 @@ struct CameraCaptureView: View {
 
     private func retakeDual() {
         guard !isSavingDualMemory else { return }
-        camera.clearDualCapture()
-        activateDualMode()
+        camera.retakeDualCapture()
     }
 
     private func closeDualReview() {
@@ -568,6 +701,230 @@ private struct CameraErrorAlertModifier: ViewModifier {
         } message: {
             Text(errorMessage ?? "")
         }
+    }
+}
+
+private struct CameraAppearanceEvents: ViewModifier {
+    let onAppear: () -> Void
+    let onDisappear: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear(perform: onAppear)
+            .onDisappear(perform: onDisappear)
+    }
+}
+
+private struct CameraStateEvents: ViewModifier {
+    let capturedImage: UIImage?
+    let permissionStatus: AVAuthorizationStatus
+    let scenePhase: ScenePhase
+    let onCapturedImage: (UIImage?) -> Void
+    let onPermission: (AVAuthorizationStatus) -> Void
+    let onScenePhase: (ScenePhase) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: capturedImage) { _, image in onCapturedImage(image) }
+            .onChange(of: permissionStatus) { _, status in onPermission(status) }
+            .onChange(of: scenePhase) { _, phase in onScenePhase(phase) }
+    }
+}
+
+private struct CameraCalendarEvents: ViewModifier {
+    let onRefresh: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+                onRefresh()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                onRefresh()
+            }
+    }
+}
+
+private struct DualCameraPreparingSurface: View {
+    let showProgress: Bool
+
+    var body: some View {
+        ZStack {
+            Color(red: 18 / 255, green: 22 / 255, blue: 24 / 255)
+                .ignoresSafeArea()
+
+            LinearGradient(
+                colors: [.white.opacity(0.035), .clear, .black.opacity(0.12)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            if showProgress {
+                ProgressView()
+                    .tint(.white.opacity(0.82))
+                    .scaleEffect(0.82)
+                    .accessibilityLabel("カメラを準備しています")
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct DualCameraLightControl: View {
+    let level: Double
+    let isExpanded: Bool
+    let isEnabled: Bool
+    let reduceMotion: Bool
+    let onTap: () -> Void
+    let onDragChanged: (CGSize) -> Void
+    let onDragEnded: () -> Void
+    let onSliderChanged: (Double) -> Void
+    let onSliderEnded: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Button(action: onTap) {
+                Image(systemName: "sun.max")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(.white.opacity(isEnabled ? 0.94 : 0.48))
+                    .frame(width: 44, height: 44)
+                    .background(.black.opacity(0.24), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEnabled)
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 2)
+                    .onChanged { onDragChanged($0.translation) }
+                    .onEnded { _ in onDragEnded() }
+            )
+            .accessibilityLabel("明るさを調整")
+            .accessibilityValue("\(Int(level.rounded()))パーセント")
+            .accessibilityAdjustableAction { direction in
+                guard isEnabled else { return }
+                switch direction {
+                case .increment: onSliderChanged(min(100, level + 5))
+                case .decrement: onSliderChanged(max(0, level - 5))
+                @unknown default: return
+                }
+                onSliderEnded()
+            }
+
+            if isExpanded {
+                VerticalLightSlider(
+                    level: level,
+                    onChanged: onSliderChanged,
+                    onEnded: onSliderEnded
+                )
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+                )
+            }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isExpanded)
+        .allowsHitTesting(isEnabled)
+    }
+}
+
+private struct VerticalLightSlider: View {
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    let level: Double
+    let onChanged: (Double) -> Void
+    let onEnded: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let travel = max(1, proxy.size.height - 30)
+            let fraction = min(1, max(0, level / 100))
+            let handleY = 15 + CGFloat(1 - fraction) * travel
+
+            ZStack(alignment: .top) {
+                Capsule()
+                    .fill(.white.opacity(0.42))
+                    .frame(width: 2, height: travel)
+                    .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+
+                Capsule()
+                    .fill(.white.opacity(0.76))
+                    .frame(width: 2, height: max(0, proxy.size.height - 15 - handleY))
+                    .position(
+                        x: proxy.size.width / 2,
+                        y: handleY + max(0, proxy.size.height - 15 - handleY) / 2
+                    )
+
+                Capsule()
+                    .fill(.white.opacity(0.55))
+                    .frame(width: 8, height: 1)
+                    .position(x: proxy.size.width / 2, y: 15 + travel * 0.5)
+
+                Text("100")
+                    .font(.system(size: 7, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.54))
+                    .position(x: 8, y: 10)
+
+                Text("0")
+                    .font(.system(size: 7, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.54))
+                    .position(x: 8, y: proxy.size.height - 10)
+
+                Circle()
+                    .fill(Color.white.opacity(0.94))
+                    .frame(width: 24, height: 24)
+                    .shadow(color: .black.opacity(0.22), radius: 4, y: 2)
+                    .position(
+                        x: proxy.size.width / 2,
+                        y: handleY
+                    )
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
+                        let percentage = (1 - Double((value.location.y - 15) / travel)) * 100
+                        onChanged(min(100, max(0, percentage)))
+                    }
+                    .onEnded { _ in onEnded() }
+            )
+        }
+        .frame(width: 44, height: verticalSizeClass == .compact ? 156 : 180)
+        .padding(.vertical, 4)
+        .background(.ultraThinMaterial, in: Capsule())
+        .background(.black.opacity(0.20), in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.16), lineWidth: 0.5))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("明るさ")
+        .accessibilityValue("\(Int(level.rounded()))パーセント")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onChanged(min(100, level + 5))
+            case .decrement: onChanged(max(0, level - 5))
+            @unknown default: return
+            }
+            onEnded()
+        }
+    }
+}
+
+private struct LightPercentageHUD: View {
+    let level: Double
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text("LIGHT")
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(1.8)
+                .foregroundStyle(.white.opacity(0.68))
+            Text("\(Int(level.rounded()))%")
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.94))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.black.opacity(0.30), in: RoundedRectangle(cornerRadius: 12))
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
     }
 }
 
