@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct LockerHomeView: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
@@ -11,6 +12,12 @@ struct LockerHomeView: View {
     let onCode: () -> Void
     let onSettings: () -> Void
     @State private var appeared = false
+    @StateObject private var lockerResurfacingCoordinator = LockerResurfacingCoordinator()
+
+    private var resurfacedMemory: MemoryRecord? {
+        guard let id = lockerResurfacingCoordinator.presentedMemoryID else { return nil }
+        return memoryRepository.memories.first(where: { $0.id == id })
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -36,6 +43,7 @@ struct LockerHomeView: View {
                     LockerFrameView(
                         lockerColor: Color(lockUHex: settingsRepository.settings.lockerColorHex)
                     )
+                    .environmentObject(lockerResurfacingCoordinator)
                     .opacity(appModel.lockerDoorState.isOpenOrOpening ? 1 : 0.12)
                     .blur(radius: appModel.lockerDoorState == .closed ? 1.5 : 0)
                     .animation(
@@ -49,6 +57,33 @@ struct LockerHomeView: View {
 
                     LockerDoorView()
                         .zIndex(10)
+
+                    if let memory = resurfacedMemory {
+                        Color.black.opacity(0.12)
+                            .contentShape(Rectangle())
+                            .onTapGesture { lockerResurfacingCoordinator.close() }
+                            .transition(.opacity)
+                            .zIndex(50)
+
+                        LockerResurfacedMemoryCard(
+                            memory: memory,
+                            referenceDate: demoClock.now,
+                            onClose: { lockerResurfacingCoordinator.close() },
+                            onEngaged: {
+                                lockerResurfacingCoordinator.recordPresentedReflection(at: demoClock.now)
+                            },
+                            onViewMemory: {
+                                lockerResurfacingCoordinator.recordPresentedReflection(at: demoClock.now)
+                                lockerResurfacingCoordinator.close()
+                                appModel.peekMemory = memory
+                                appModel.selectedTab = .peek
+                            }
+                        )
+                        .environmentObject(memoryRepository)
+                        .frame(width: min(lockerWidth * 0.80, 340))
+                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                        .zIndex(51)
+                    }
                 }
                 .frame(width: lockerWidth, height: lockerHeight)
                 .animation(.easeOut(duration: 0.22), value: isOpen)
@@ -68,8 +103,113 @@ struct LockerHomeView: View {
                 } else {
                     withAnimation(.easeOut(duration: 0.45)) { appeared = true }
                 }
+                refreshLockerResurfacing()
+            }
+            .onChange(of: memoryRepository.memories.count) { _, _ in refreshLockerResurfacing() }
+            .onChange(of: demoClock.now) { _, _ in refreshLockerResurfacing() }
+            .animation(.easeOut(duration: 0.23), value: lockerResurfacingCoordinator.presentedMemoryID)
+        }
+    }
+
+    private func refreshLockerResurfacing() {
+        let growth = LockerGrowthGenerator().state(memories: memoryRepository.memories)
+        lockerResurfacingCoordinator.refresh(
+            date: demoClock.now,
+            memories: memoryRepository.memories,
+            growthStage: growth.stage
+        )
+    }
+}
+
+private struct LockerResurfacedMemoryCard: View {
+    @EnvironmentObject private var memoryRepository: MemoryRepository
+    @State private var image: UIImage?
+    let memory: MemoryRecord
+    let referenceDate: Date
+    let onClose: () -> Void
+    let onEngaged: () -> Void
+    let onViewMemory: () -> Void
+
+    private var daysAgo: Int {
+        max(1, Calendar.autoupdatingCurrent.dateComponents(
+            [.day],
+            from: Calendar.autoupdatingCurrent.startOfDay(for: memory.memoryDate),
+            to: Calendar.autoupdatingCurrent.startOfDay(for: referenceDate)
+        ).day ?? 1)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                Group {
+                    if let image {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    } else {
+                        Color(red: 205/255, green: 216/255, blue: 220/255)
+                            .overlay(ProgressView().tint(.white.opacity(0.72)))
+                    }
+                }
+                .aspectRatio(0.88, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .clipped()
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .frame(width: 44, height: 44)
+                        .background(.black.opacity(0.14), in: Circle())
+                }
+                .accessibilityLabel("閉じる")
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(memory.memoryDate.formatted(.dateTime.month(.abbreviated).day()))
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    Spacer()
+                    Text("\(daysAgo)日前")
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundStyle(Color.black.opacity(0.42))
+                }
+                if let note = memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
+                    Text(note)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(Color.black.opacity(0.62))
+                        .lineLimit(3)
+                }
+                Button("Memoryを見る", action: onViewMemory)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.black.opacity(0.54))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, 3)
+            }
+            .foregroundStyle(Color.black.opacity(0.72))
+            .padding(.horizontal, 14)
+            .padding(.top, 11)
+            .padding(.bottom, 14)
+        }
+        .background(Color(red: 246/255, green: 244/255, blue: 238/255))
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .shadow(color: .black.opacity(0.13), radius: 10, y: 6)
+        .task(id: memory.id) {
+            image = await memoryRepository.imageAsync(
+                for: memory,
+                purpose: .detail,
+                targetPointSize: CGSize(width: 340, height: 390)
+            )
+        }
+        .task(id: "reflection-\(memory.id.uuidString)") {
+            do {
+                try await Task.sleep(for: .seconds(2.5))
+                guard !Task.isCancelled else { return }
+                onEngaged()
+            } catch {
+                // Closing the card cancels the one-shot dwell task; cancellation is expected.
             }
         }
+        .onDisappear { image = nil }
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -228,6 +368,11 @@ private struct LockerInteriorSurface: View {
 
                 InteriorLightFalloff(side: side, ceiling: ceiling, floor: floor)
                 InteriorHardwareOverlay(side: side, ceiling: ceiling, floor: floor)
+
+                LockerGrowthDecorationLayer()
+                    .padding(.horizontal, side + 1)
+                    .padding(.top, ceiling)
+                    .padding(.bottom, floor)
 
                 LockerInteriorContent()
                     .padding(.horizontal, side + 1)

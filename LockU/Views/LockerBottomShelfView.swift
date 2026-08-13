@@ -21,32 +21,773 @@ struct LockerBottomShelfView: View {
     }
 }
 
-private struct LockerShelfObjectLayer: View {
+struct LockerGrowthDecorationLayer: View {
+    @EnvironmentObject private var memoryRepository: MemoryRepository
+    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var demoClock: LockUDemoClock
+    @EnvironmentObject private var resurfacingCoordinator: LockerResurfacingCoordinator
+    @State private var growthState = LockerGrowthState.fresh
+
     var body: some View {
         GeometryReader { proxy in
-            let width = proxy.size.width
-            let height = proxy.size.height
-            let baseline = height - 1
-
+            let configuration = LockerItemThemeConfiguration.theme(
+                settingsRepository.settings.appearance.itemTheme
+            )
             ZStack(alignment: .topLeading) {
-                LockerBookStack()
-                    .frame(width: width * 0.29, height: min(height * 0.90, 76))
-                    .position(x: width * 0.16, y: baseline - min(height * 0.90, 76) * 0.5)
-
-                LockerSmallBottle()
-                    .frame(width: width * 0.075, height: min(height * 0.62, 49))
-                    .position(x: width * 0.49, y: baseline - min(height * 0.62, 49) * 0.5)
-
-                LockerSmallCase()
-                    .frame(width: width * 0.13, height: min(height * 0.31, 25))
-                    .position(x: width * 0.57, y: baseline - min(height * 0.31, 25) * 0.5)
-
-                LockerFabricPouch()
-                    .frame(width: width * 0.25, height: min(height * 0.36, 29))
-                    .position(x: width * 0.81, y: baseline - min(height * 0.36, 29) * 0.5)
+                ForEach(growthState.decorations) { decoration in
+                    growthTrace(
+                        decoration,
+                        configuration: configuration,
+                        containerSize: proxy.size
+                    )
+                    .position(
+                        x: proxy.size.width * CGFloat(decoration.normalizedPosition.x),
+                        y: proxy.size.height * CGFloat(decoration.normalizedPosition.y)
+                    )
+                    .rotationEffect(.degrees(decoration.rotation))
+                    .scaleEffect(decoration.scale)
+                }
             }
         }
-        .accessibilityLabel("教科書、ボトル、小物ケース、布のポーチ")
+        .onAppear(perform: refreshGrowthState)
+        .onChange(of: memoryRepository.memories.count) { _, _ in refreshGrowthState() }
+    }
+
+    @ViewBuilder
+    private func growthTrace(
+        _ decoration: LockerGrowthDecoration,
+        configuration: LockerItemThemeConfiguration,
+        containerSize: CGSize
+    ) -> some View {
+        let trace = LockerGrowthTraceView(
+            decoration: decoration,
+            configuration: configuration,
+            containerSize: containerSize,
+            reflectionMetadata: decoration.role == .resurfacing
+                ? resurfacingCoordinator.candidateReflectionTrace
+                : nil
+        )
+        if decoration.role == .resurfacing, resurfacingCoordinator.candidateMemoryID != nil {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                resurfacingCoordinator.presentCandidate(from: memoryRepository, at: demoClock.now)
+            } label: {
+                trace
+                    .shadow(color: .black.opacity(0.045), radius: 2, y: 1)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(LockerGrowthTraceButtonStyle())
+            .accessibilityLabel("過去の思い出を開く")
+        } else {
+            trace
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func refreshGrowthState() {
+        let next = LockerGrowthGenerator().state(memories: memoryRepository.memories)
+        guard next != growthState else { return }
+        growthState = next
+    }
+}
+
+private struct LockerGrowthTraceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+private struct LockerGrowthTraceView: View {
+    let decoration: LockerGrowthDecoration
+    let configuration: LockerItemThemeConfiguration
+    let containerSize: CGSize
+    let reflectionMetadata: MemoryReflectionTraceMetadata?
+
+    private var palette: LockerItemPalette { configuration.palette }
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            traceContent
+            if let reflectionMetadata {
+                ReflectionTraceView(
+                    metadata: reflectionMetadata,
+                    configuration: configuration,
+                    referenceSize: traceReferenceSize
+                )
+            }
+        }
+    }
+
+    private var traceReferenceSize: CGSize {
+        switch decoration.type {
+        case .miniPhoto: CGSize(width: containerSize.width * 0.115, height: containerSize.width * 0.135)
+        case .memo: CGSize(width: containerSize.width * 0.10, height: containerSize.width * 0.075)
+        default: CGSize(width: 44, height: 44)
+        }
+    }
+
+    @ViewBuilder
+    private var traceContent: some View {
+        switch decoration.type {
+        case .tape:
+            Rectangle()
+                .fill(palette.primary.opacity(0.42))
+                .frame(width: containerSize.width * 0.105, height: max(6, containerSize.width * 0.022))
+                .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.14)).frame(height: 0.6) }
+        case .sticker:
+            Text(configuration.minorMark)
+                .font(.system(size: max(9, containerSize.width * 0.045), weight: .regular, design: .rounded))
+                .foregroundStyle(palette.accent.opacity(0.48))
+                .padding(2)
+                .background(palette.surface.opacity(0.30), in: Circle())
+        case .miniPhoto:
+            GrowthMiniPhoto(configuration: configuration)
+                .frame(width: containerSize.width * 0.115, height: containerSize.width * 0.135)
+        case .memo:
+            VStack(spacing: 2) {
+                Text("remember")
+                Rectangle().fill(palette.dark.opacity(0.13)).frame(width: 18, height: 0.6)
+                Rectangle().fill(palette.dark.opacity(0.10)).frame(width: 13, height: 0.6)
+            }
+            .font(.system(size: 4.5, weight: .regular, design: .serif))
+            .foregroundStyle(palette.dark.opacity(0.42))
+            .frame(width: containerSize.width * 0.10, height: containerSize.width * 0.075)
+            .background(palette.surface.opacity(0.66))
+        case .wear:
+            GrowthShelfWear(color: palette.dark)
+                .frame(width: containerSize.width * 0.14, height: 8)
+        case .tag:
+            EmptyView()
+        }
+    }
+}
+
+private struct ReflectionTraceView: View {
+    let metadata: MemoryReflectionTraceMetadata
+    let configuration: LockerItemThemeConfiguration
+    let referenceSize: CGSize
+
+    private var palette: LockerItemPalette { configuration.palette }
+
+    @ViewBuilder
+    var body: some View {
+        switch metadata.traceStyle {
+        case .dateTape:
+            Text(metadata.firstReflectedAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits)))
+                .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(palette.dark.opacity(0.55))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(width: max(22, referenceSize.width * 0.48), height: 10)
+                .background(palette.surface.opacity(0.82))
+                .rotationEffect(.degrees(-3))
+                .offset(x: 3, y: 2)
+        case .pencilMark:
+            PencilReflectionMark(color: palette.dark)
+                .frame(width: 18, height: 8)
+                .offset(x: 2, y: -1)
+        case .tinyStar:
+            Text("☆")
+                .font(.system(size: 9, weight: .regular))
+                .foregroundStyle(palette.accent.opacity(0.72))
+                .offset(x: 2, y: 1)
+        case .cornerFold:
+            CornerFoldTrace(color: palette.surface)
+                .frame(width: 8, height: 8)
+                .offset(x: 1, y: 1)
+        case .softCheck:
+            Text("✓")
+                .font(.system(size: 8, weight: .light, design: .serif))
+                .foregroundStyle(palette.dark.opacity(0.48))
+                .rotationEffect(.degrees(-8))
+                .offset(x: 2, y: 1)
+        }
+    }
+}
+
+private struct PencilReflectionMark: View {
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            var path = Path()
+            path.move(to: CGPoint(x: 1, y: size.height * 0.62))
+            path.addQuadCurve(
+                to: CGPoint(x: size.width - 1, y: size.height * 0.42),
+                control: CGPoint(x: size.width * 0.48, y: size.height * 0.78)
+            )
+            context.stroke(path, with: .color(color.opacity(0.34)), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct CornerFoldTrace: View {
+    let color: Color
+
+    var body: some View {
+        TriangleFoldShape()
+            .fill(color.opacity(0.82))
+            .overlay(TriangleFoldShape().stroke(.black.opacity(0.07), lineWidth: 0.5))
+    }
+}
+
+private struct TriangleFoldShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            path.closeSubpath()
+        }
+    }
+}
+
+private struct GrowthMiniPhoto: View {
+    let configuration: LockerItemThemeConfiguration
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                Rectangle().fill(configuration.palette.surface.opacity(0.78))
+                LockerThemePhoto(style: configuration.photoStyle, palette: configuration.palette)
+                    .padding(.horizontal, 3)
+                    .padding(.top, 3)
+                    .padding(.bottom, 8)
+                Rectangle()
+                    .fill(configuration.palette.primary.opacity(0.46))
+                    .frame(width: proxy.size.width * 0.54, height: 5)
+                    .offset(y: -2)
+            }
+            .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
+        }
+    }
+}
+
+private struct GrowthShelfWear: View {
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<3 {
+                var path = Path()
+                let y = size.height * (0.28 + CGFloat(index) * 0.22)
+                path.move(to: CGPoint(x: size.width * (0.08 + CGFloat(index) * 0.11), y: y))
+                path.addQuadCurve(
+                    to: CGPoint(x: size.width * (0.72 + CGFloat(index) * 0.06), y: y + 0.5),
+                    control: CGPoint(x: size.width * 0.46, y: y - 1)
+                )
+                context.stroke(path, with: .color(color.opacity(0.07)), lineWidth: 0.55)
+            }
+        }
+    }
+}
+
+private struct LockerShelfObjectLayer: View {
+    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var demoClock: LockUDemoClock
+    @State private var dailyVariation = LockerDailyVariation.base()
+
+    var body: some View {
+        GeometryReader { proxy in
+            let configuration = LockerItemThemeConfiguration.theme(
+                settingsRepository.settings.appearance.itemTheme
+            )
+            LockerShelfDecorationsView(
+                configuration: configuration,
+                dailyVariation: dailyVariation,
+                metrics: LockerShelfLayoutMetrics(containerSize: proxy.size)
+            )
+        }
+        .animation(.easeInOut(duration: 0.22), value: settingsRepository.settings.appearance.itemTheme)
+        .onAppear(perform: refreshDailyVariation)
+        .onChange(of: settingsRepository.settings.appearance.itemTheme) { _, _ in refreshDailyVariation() }
+        .onChange(of: demoClock.now) { _, _ in refreshDailyVariation() }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+
+    private func refreshDailyVariation() {
+        let next = LockerDailyVariationGenerator().variation(
+            for: demoClock.now,
+            theme: settingsRepository.settings.appearance.itemTheme
+        )
+        guard next != dailyVariation else { return }
+        dailyVariation = next
+    }
+}
+
+private struct LockerItemPalette {
+    let primary: Color
+    let secondary: Color
+    let accent: Color
+    let neutral: Color
+    let surface: Color
+    let dark: Color
+    let glassTint: Color
+    let flower: Color
+
+    static let blush = LockerItemPalette(
+        primary: Color(red: 231/255, green: 195/255, blue: 197/255),
+        secondary: Color(red: 239/255, green: 217/255, blue: 216/255),
+        accent: Color(red: 217/255, green: 210/255, blue: 227/255),
+        neutral: Color(red: 190/255, green: 183/255, blue: 175/255),
+        surface: Color(red: 243/255, green: 237/255, blue: 228/255),
+        dark: Color(red: 80/255, green: 81/255, blue: 84/255),
+        glassTint: Color(red: 222/255, green: 215/255, blue: 210/255),
+        flower: Color(red: 235/255, green: 200/255, blue: 197/255)
+    )
+
+    static let blue = LockerItemPalette(
+        primary: Color(red: 185/255, green: 205/255, blue: 213/255),
+        secondary: Color(red: 214/255, green: 225/255, blue: 228/255),
+        accent: Color(red: 100/255, green: 118/255, blue: 126/255),
+        neutral: Color(red: 187/255, green: 195/255, blue: 197/255),
+        surface: Color(red: 244/255, green: 241/255, blue: 234/255),
+        dark: Color(red: 70/255, green: 81/255, blue: 87/255),
+        glassTint: Color(red: 206/255, green: 222/255, blue: 227/255),
+        flower: Color(red: 242/255, green: 241/255, blue: 234/255)
+    )
+
+    static let sage = LockerItemPalette(
+        primary: Color(red: 195/255, green: 201/255, blue: 182/255),
+        secondary: Color(red: 216/255, green: 220/255, blue: 207/255),
+        accent: Color(red: 222/255, green: 208/255, blue: 164/255),
+        neutral: Color(red: 183/255, green: 181/255, blue: 170/255),
+        surface: Color(red: 240/255, green: 234/255, blue: 221/255),
+        dark: Color(red: 83/255, green: 88/255, blue: 80/255),
+        glassTint: Color(red: 211/255, green: 220/255, blue: 207/255),
+        flower: Color(red: 226/255, green: 211/255, blue: 159/255)
+    )
+
+    static let aoharu = LockerItemPalette(
+        primary: Color(red: 175/255, green: 203/255, blue: 213/255),
+        secondary: Color(red: 207/255, green: 224/255, blue: 229/255),
+        accent: Color(red: 230/255, green: 199/255, blue: 200/255),
+        neutral: Color(red: 132/255, green: 151/255, blue: 158/255),
+        surface: Color(red: 241/255, green: 236/255, blue: 226/255),
+        dark: Color(red: 70/255, green: 82/255, blue: 88/255),
+        glassTint: Color(red: 207/255, green: 224/255, blue: 229/255),
+        flower: Color(red: 244/255, green: 241/255, blue: 234/255)
+    )
+}
+
+enum LockerFlowerStyle: Equatable, Sendable { case tulip, whiteTulip, daisy, paleYellowDaisy, paleTulip }
+enum LockerPhotoStyle: Equatable, Sendable {
+    case sunset, clearSky, greenField, summerSky
+    case softCloud, sunlight, classroomWindow, warmCloud
+    case deepBlue, cityLights, moonGlow, summerTree
+}
+
+private struct LockerItemThemeConfiguration {
+    let palette: LockerItemPalette
+    let flowerStyle: LockerFlowerStyle
+    let photoStyle: LockerPhotoStyle
+    let notebookTitle: String
+    let minorMark: String
+    let perfumeLabel: String
+    let cameraButtonColor: Color
+
+    static func theme(_ theme: LockerItemTheme) -> LockerItemThemeConfiguration {
+        switch theme {
+        case .blush:
+            LockerItemThemeConfiguration(palette: .blush, flowerStyle: .tulip, photoStyle: .sunset, notebookTitle: "MEMORY\nNOTE", minorMark: "♡", perfumeLabel: "BREEZE", cameraButtonColor: LockerItemPalette.blush.accent)
+        case .blue:
+            LockerItemThemeConfiguration(palette: .blue, flowerStyle: .daisy, photoStyle: .clearSky, notebookTitle: "MEMORY\nNOTE", minorMark: "☁", perfumeLabel: "BREEZE", cameraButtonColor: LockerItemPalette.blue.neutral)
+        case .sage:
+            LockerItemThemeConfiguration(palette: .sage, flowerStyle: .paleTulip, photoStyle: .greenField, notebookTitle: "MEMORY\nNOTE", minorMark: "⌁", perfumeLabel: "MOMENT", cameraButtonColor: LockerItemPalette.sage.accent)
+        case .aoharu:
+            LockerItemThemeConfiguration(palette: .aoharu, flowerStyle: .daisy, photoStyle: .summerSky, notebookTitle: "SUMMER\nNOTES", minorMark: "✦", perfumeLabel: "DAYLIGHT", cameraButtonColor: LockerItemPalette.aoharu.accent)
+        }
+    }
+}
+
+private struct LockerShelfLayoutMetrics {
+    let size: CGSize
+    let baseline: CGFloat
+
+    init(containerSize: CGSize) {
+        size = containerSize
+        baseline = containerSize.height - 1
+    }
+
+    var notebookSize: CGSize { CGSize(width: size.width * 0.22, height: min(size.height * 0.92, size.width * 0.20)) }
+    var cameraSize: CGSize { CGSize(width: size.width * 0.24, height: min(size.height * 0.56, size.width * 0.105)) }
+    var vaseSize: CGSize { CGSize(width: size.width * 0.10, height: min(size.height * 0.91, size.width * 0.18)) }
+    var perfumeSize: CGSize { CGSize(width: size.width * 0.10, height: min(size.height * 0.66, size.width * 0.125)) }
+    var frameSize: CGSize { CGSize(width: size.width * 0.17, height: min(size.height * 0.76, size.width * 0.15)) }
+
+    func position(x: CGFloat, itemSize: CGSize, lift: CGFloat = 0) -> CGPoint {
+        CGPoint(x: size.width * x, y: baseline - itemSize.height * 0.5 - lift)
+    }
+}
+
+private struct LockerShelfDecorationsView: View {
+    let configuration: LockerItemThemeConfiguration
+    let dailyVariation: LockerDailyVariation
+    let metrics: LockerShelfLayoutMetrics
+
+    private var palette: LockerItemPalette { configuration.palette }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            MemoryNotebookView(
+                configuration: configuration,
+                dailyDetail: dailyVariation.notebookDetail
+            )
+                .frame(width: metrics.notebookSize.width, height: metrics.notebookSize.height)
+                .rotationEffect(.degrees(-6 + dailyVariation.notebookPose.rotationDelta), anchor: .bottom)
+                .position(metrics.position(x: 0.16, itemSize: metrics.notebookSize, lift: 1))
+                .offset(x: CGFloat(dailyVariation.notebookPose.xOffset), y: CGFloat(dailyVariation.notebookPose.yOffset))
+                .zIndex(1)
+
+            MiniPhotoFrameView(
+                configuration: configuration,
+                dailyPhotoStyle: dailyVariation.framePhotoStyle
+            )
+                .frame(width: metrics.frameSize.width, height: metrics.frameSize.height)
+                .rotationEffect(.degrees(4 + dailyVariation.framePose.rotationDelta), anchor: .bottom)
+                .position(metrics.position(x: 0.84, itemSize: metrics.frameSize, lift: 1))
+                .offset(x: CGFloat(dailyVariation.framePose.xOffset), y: CGFloat(dailyVariation.framePose.yOffset))
+                .zIndex(1)
+
+            FlowerVaseView(
+                configuration: configuration,
+                dailyFlowerStyle: dailyVariation.flowerStyle
+            )
+                .frame(width: metrics.vaseSize.width, height: metrics.vaseSize.height)
+                .rotationEffect(.degrees(-1), anchor: .bottom)
+                .position(metrics.position(x: 0.56, itemSize: metrics.vaseSize))
+                .zIndex(2)
+
+            PerfumeBottleView(
+                configuration: configuration,
+                dailyLabel: dailyVariation.perfumeLabel
+            )
+                .frame(width: metrics.perfumeSize.width, height: metrics.perfumeSize.height)
+                .rotationEffect(.degrees(1), anchor: .bottom)
+                .position(metrics.position(x: 0.69, itemSize: metrics.perfumeSize))
+                .zIndex(2)
+
+            PastelCameraView(
+                configuration: configuration,
+                dailyAccentEnabled: dailyVariation.cameraAccentEnabled
+            )
+                .frame(width: metrics.cameraSize.width, height: metrics.cameraSize.height)
+                .rotationEffect(.degrees(2 + dailyVariation.cameraPose.rotationDelta), anchor: .bottom)
+                .position(metrics.position(x: 0.35, itemSize: metrics.cameraSize, lift: -1))
+                .offset(x: CGFloat(dailyVariation.cameraPose.xOffset), y: CGFloat(dailyVariation.cameraPose.yOffset))
+                .zIndex(3)
+        }
+    }
+}
+
+private struct MemoryNotebookView: View {
+    let configuration: LockerItemThemeConfiguration
+    let dailyDetail: String?
+    private var palette: LockerItemPalette { configuration.palette }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(palette.neutral.opacity(0.45))
+                    .offset(x: 2, y: 1.5)
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(
+                        LinearGradient(
+                            colors: [palette.primary.opacity(0.94), palette.primary, palette.primary.opacity(0.82)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(alignment: .leading) {
+                        VStack(spacing: max(1.4, proxy.size.height * 0.045)) {
+                            ForEach(0..<9, id: \.self) { _ in
+                                Capsule().fill(palette.dark.opacity(0.46)).frame(width: 4.5, height: 1)
+                            }
+                        }
+                        .offset(x: -2)
+                    }
+                    .overlay {
+                        VStack(spacing: 1) {
+                            Text(configuration.notebookTitle)
+                                .multilineTextAlignment(.center)
+                            Text(dailyDetail ?? configuration.minorMark)
+                                .font(.system(size: 6, weight: .regular))
+                                .foregroundStyle(palette.accent.opacity(0.74))
+                        }
+                        .font(.system(size: 5.5, weight: .medium, design: .serif))
+                        .tracking(0.8)
+                        .foregroundStyle(palette.dark.opacity(0.62))
+                        .fixedSize()
+                    }
+                    .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.18)).frame(height: 0.7).padding(.horizontal, 4) }
+            }
+            .shadow(color: .black.opacity(0.09), radius: 4, y: 3)
+            .overlay(alignment: .bottom) { ContactShadow(width: proxy.size.width * 0.78, opacity: 0.08) }
+        }
+    }
+}
+
+private struct PastelCameraView: View {
+    let configuration: LockerItemThemeConfiguration
+    let dailyAccentEnabled: Bool
+    private var palette: LockerItemPalette { configuration.palette }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(
+                        LinearGradient(
+                            colors: [palette.secondary, palette.secondary.opacity(0.94), palette.neutral.opacity(0.72)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(.white.opacity(0.34)).frame(height: 1).padding(.horizontal, 5)
+                    }
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(palette.primary.opacity(0.76))
+                    .frame(width: proxy.size.width * 0.28, height: proxy.size.height * 0.17)
+                    .position(x: proxy.size.width * 0.22, y: proxy.size.height * 0.19)
+                Circle()
+                    .fill(configuration.cameraButtonColor.opacity(dailyAccentEnabled ? 0.96 : 0.72))
+                    .frame(width: dailyAccentEnabled ? 4.2 : 3.5, height: dailyAccentEnabled ? 4.2 : 3.5)
+                    .position(x: proxy.size.width * 0.83, y: proxy.size.height * 0.16)
+                ZStack {
+                    Circle().fill(palette.neutral.opacity(0.72))
+                    Circle().stroke(.white.opacity(0.55), lineWidth: 1).padding(2)
+                    Circle().fill(palette.dark.opacity(0.94)).padding(5)
+                    Circle().fill(
+                        RadialGradient(
+                            colors: [Color(red: 72/255, green: 93/255, blue: 105/255), palette.dark, .black.opacity(0.94)],
+                            center: UnitPoint(x: 0.38, y: 0.32),
+                            startRadius: 1,
+                            endRadius: 14
+                        )
+                    ).padding(8)
+                    Ellipse().fill(.white.opacity(0.23)).frame(width: 10, height: 5).offset(x: -3, y: -4).rotationEffect(.degrees(-18))
+                }
+                .frame(width: proxy.size.height * 0.84, height: proxy.size.height * 0.84)
+                .position(x: proxy.size.width * 0.58, y: proxy.size.height * 0.52)
+                Text("LU")
+                    .font(.system(size: 5, weight: .medium))
+                    .foregroundStyle(palette.dark.opacity(0.58))
+                    .position(x: proxy.size.width * 0.18, y: proxy.size.height * 0.72)
+            }
+            .shadow(color: .black.opacity(0.11), radius: 5, y: 4)
+            .overlay(alignment: .bottom) { ContactShadow(width: proxy.size.width * 0.70, opacity: 0.11) }
+        }
+    }
+}
+
+private struct FlowerVaseView: View {
+    let configuration: LockerItemThemeConfiguration
+    let dailyFlowerStyle: LockerFlowerStyle?
+    private var palette: LockerItemPalette { configuration.palette }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .bottom) {
+                Capsule()
+                    .fill(Color(red: 94/255, green: 116/255, blue: 91/255).opacity(0.82))
+                    .frame(width: 1.6, height: proxy.size.height * 0.66)
+                    .rotationEffect(.degrees(3), anchor: .bottom)
+                    .offset(x: 1, y: -proxy.size.height * 0.25)
+                FlowerHead(style: dailyFlowerStyle ?? configuration.flowerStyle, palette: palette)
+                    .frame(width: proxy.size.width * 0.62, height: proxy.size.height * 0.23)
+                    .rotationEffect(.degrees(-6))
+                    .offset(x: 2, y: -proxy.size.height * 0.76)
+                Capsule()
+                    .fill(Color(red: 121/255, green: 142/255, blue: 110/255).opacity(0.70))
+                    .frame(width: proxy.size.width * 0.42, height: 4)
+                    .rotationEffect(.degrees(-25))
+                    .offset(x: -3, y: -proxy.size.height * 0.48)
+                VaseGlassShape()
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.52), palette.glassTint.opacity(0.25), .white.opacity(0.16)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .overlay(VaseGlassShape().stroke(.white.opacity(0.42), lineWidth: 0.7))
+                    .frame(width: proxy.size.width * 0.58, height: proxy.size.height * 0.43)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .shadow(color: .black.opacity(0.09), radius: 4, y: 3)
+            .overlay(alignment: .bottom) { ContactShadow(width: proxy.size.width * 0.55, opacity: 0.09) }
+        }
+    }
+}
+
+private struct PerfumeBottleView: View {
+    let configuration: LockerItemThemeConfiguration
+    let dailyLabel: String?
+    private var palette: LockerItemPalette { configuration.palette }
+
+    var body: some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(palette.primary.opacity(0.82))
+                    .frame(width: proxy.size.width * 0.48, height: proxy.size.height * 0.18)
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.58), palette.glassTint.opacity(0.27), .white.opacity(0.18)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(.white.opacity(0.42), lineWidth: 0.7))
+                    .overlay {
+                        Text(dailyLabel ?? configuration.perfumeLabel)
+                            .font(.system(size: 3.8, weight: .medium, design: .serif))
+                            .tracking(0.35)
+                            .foregroundStyle(palette.dark.opacity(0.56))
+                            .padding(.horizontal, 3)
+                            .padding(.vertical, 2)
+                            .background(palette.secondary.opacity(0.70))
+                    }
+            }
+            .shadow(color: .black.opacity(0.09), radius: 4, y: 3)
+            .overlay(alignment: .bottom) { ContactShadow(width: proxy.size.width * 0.72, opacity: 0.08) }
+        }
+    }
+}
+
+private struct MiniPhotoFrameView: View {
+    let configuration: LockerItemThemeConfiguration
+    let dailyPhotoStyle: LockerPhotoStyle?
+    private var palette: LockerItemPalette { configuration.palette }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(palette.surface)
+                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(.white.opacity(0.50), lineWidth: 1.2))
+                LockerThemePhoto(style: dailyPhotoStyle ?? configuration.photoStyle, palette: palette)
+                    .padding(proxy.size.width * 0.13)
+                    .overlay(alignment: .topTrailing) {
+                        Ellipse().fill(.white.opacity(0.48)).frame(width: proxy.size.width * 0.28, height: proxy.size.height * 0.12).offset(x: -7, y: 8)
+                    }
+            }
+            .shadow(color: .black.opacity(0.08), radius: 4, y: 3)
+            .overlay(alignment: .bottom) { ContactShadow(width: proxy.size.width * 0.72, opacity: 0.07) }
+        }
+    }
+}
+
+private struct FlowerHead: View {
+    let style: LockerFlowerStyle
+    let palette: LockerItemPalette
+
+    var body: some View {
+        switch style {
+        case .tulip, .whiteTulip, .paleTulip:
+            ZStack {
+                Ellipse().fill(style == .whiteTulip ? palette.surface : palette.flower)
+                Ellipse().fill(.white.opacity(0.18)).frame(width: 7, height: 3).offset(x: -2, y: -2)
+            }
+            .clipShape(UnevenFlowerShape())
+        case .daisy, .paleYellowDaisy:
+            ZStack {
+                ForEach(0..<6, id: \.self) { index in
+                    Capsule()
+                        .fill(palette.flower)
+                        .frame(width: 5, height: 12)
+                        .offset(y: -4)
+                        .rotationEffect(.degrees(Double(index) * 60))
+                }
+                Circle()
+                    .fill(style == .paleYellowDaisy ? Color(red: 222/255, green: 208/255, blue: 164/255) : palette.accent.opacity(0.88))
+                    .frame(width: 5, height: 5)
+            }
+        }
+    }
+}
+
+private struct LockerThemePhoto: View {
+    let style: LockerPhotoStyle
+    let palette: LockerItemPalette
+
+    private var colors: [Color] {
+        switch style {
+        case .sunset: [palette.secondary.opacity(0.84), palette.primary.opacity(0.56), palette.glassTint]
+        case .clearSky: [palette.glassTint, palette.primary.opacity(0.78), palette.surface]
+        case .greenField: [palette.glassTint, palette.secondary, palette.primary.opacity(0.76)]
+        case .summerSky: [Color(red: 202/255, green: 225/255, blue: 234/255), palette.primary, palette.surface]
+        case .softCloud: [palette.surface, palette.glassTint.opacity(0.82), palette.primary.opacity(0.50)]
+        case .sunlight: [palette.surface, Color(red: 239/255, green: 222/255, blue: 182/255), palette.glassTint]
+        case .classroomWindow: [palette.glassTint, palette.neutral.opacity(0.68), palette.surface]
+        case .warmCloud: [palette.secondary, palette.accent.opacity(0.54), palette.surface]
+        case .deepBlue: [Color(red: 96/255, green: 122/255, blue: 139/255), palette.glassTint, palette.surface.opacity(0.78)]
+        case .cityLights: [Color(red: 111/255, green: 129/255, blue: 141/255), palette.accent.opacity(0.56), palette.surface]
+        case .moonGlow: [Color(red: 126/255, green: 145/255, blue: 158/255), palette.surface, palette.glassTint]
+        case .summerTree: [palette.glassTint, Color(red: 169/255, green: 185/255, blue: 157/255), palette.surface]
+        }
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+            .overlay(alignment: (style == .greenField || style == .summerTree) ? .bottom : .topTrailing) {
+                if style == .greenField || style == .summerTree {
+                    Ellipse().fill(palette.primary.opacity(0.52)).frame(width: 44, height: 18).offset(y: 8)
+                } else {
+                    Ellipse().fill(.white.opacity(style == .summerSky ? 0.62 : 0.46)).frame(width: 17, height: 6).offset(x: -5, y: 7)
+                }
+            }
+            .saturation(0.82)
+            .blur(radius: 0.22)
+    }
+}
+
+private struct UnevenFlowerShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+            path.addCurve(to: CGPoint(x: rect.minX, y: rect.height * 0.25), control1: CGPoint(x: rect.width * 0.22, y: rect.height * 0.90), control2: CGPoint(x: rect.minX, y: rect.height * 0.55))
+            path.addCurve(to: CGPoint(x: rect.midX, y: rect.height * 0.20), control1: CGPoint(x: rect.width * 0.18, y: 0), control2: CGPoint(x: rect.width * 0.38, y: rect.height * 0.12))
+            path.addCurve(to: CGPoint(x: rect.maxX, y: rect.height * 0.22), control1: CGPoint(x: rect.width * 0.66, y: rect.height * 0.04), control2: CGPoint(x: rect.width * 0.88, y: 0))
+            path.addCurve(to: CGPoint(x: rect.midX, y: rect.maxY), control1: CGPoint(x: rect.maxX, y: rect.height * 0.62), control2: CGPoint(x: rect.width * 0.78, y: rect.height * 0.90))
+            path.closeSubpath()
+        }
+    }
+}
+
+private struct ContactShadow: View {
+    let width: CGFloat
+    let opacity: Double
+
+    var body: some View {
+        Ellipse()
+            .fill(.black.opacity(opacity))
+            .frame(width: width, height: 4)
+            .blur(radius: 1.8)
+            .offset(y: 2)
+    }
+}
+
+private struct VaseGlassShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.width * 0.34, y: 0))
+            path.addLine(to: CGPoint(x: rect.width * 0.66, y: 0))
+            path.addLine(to: CGPoint(x: rect.width * 0.72, y: rect.height * 0.20))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.88, y: rect.height), control: CGPoint(x: rect.width * 0.84, y: rect.height * 0.60))
+            path.addLine(to: CGPoint(x: rect.width * 0.12, y: rect.height))
+            path.addQuadCurve(to: CGPoint(x: rect.width * 0.28, y: rect.height * 0.20), control: CGPoint(x: rect.width * 0.16, y: rect.height * 0.60))
+            path.closeSubpath()
+        }
     }
 }
 

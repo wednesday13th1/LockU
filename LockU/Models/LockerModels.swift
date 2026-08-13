@@ -115,6 +115,16 @@ enum LockerBackgroundStyle: String, Codable, CaseIterable, Identifiable, Sendabl
     }
 }
 
+enum LockerItemTheme: String, Codable, CaseIterable, Identifiable, Sendable {
+    case blush
+    case blue
+    case sage
+    case aoharu
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
 struct LockerAppearanceSettings: Codable, Equatable, Sendable {
     var collageStyle: LockerCollageStyle
     var frameStyle: LockerFrameStyle
@@ -122,18 +132,20 @@ struct LockerAppearanceSettings: Codable, Equatable, Sendable {
     var featuredVideoMemoryID: UUID?
     var dailyVariationEnabled: Bool
     var backgroundStyle: LockerBackgroundStyle
+    var itemTheme: LockerItemTheme
 
     enum CodingKeys: String, CodingKey {
-        case collageStyle, frameStyle, filterStyle, featuredVideoMemoryID, dailyVariationEnabled, backgroundStyle
+        case collageStyle, frameStyle, filterStyle, featuredVideoMemoryID, dailyVariationEnabled, backgroundStyle, itemTheme
     }
 
-    init(collageStyle: LockerCollageStyle, frameStyle: LockerFrameStyle, filterStyle: LockerFilterStyle, featuredVideoMemoryID: UUID?, dailyVariationEnabled: Bool, backgroundStyle: LockerBackgroundStyle = .clearBlue) {
+    init(collageStyle: LockerCollageStyle, frameStyle: LockerFrameStyle, filterStyle: LockerFilterStyle, featuredVideoMemoryID: UUID?, dailyVariationEnabled: Bool, backgroundStyle: LockerBackgroundStyle = .clearBlue, itemTheme: LockerItemTheme = .aoharu) {
         self.collageStyle = collageStyle
         self.frameStyle = frameStyle
         self.filterStyle = filterStyle
         self.featuredVideoMemoryID = featuredVideoMemoryID
         self.dailyVariationEnabled = dailyVariationEnabled
         self.backgroundStyle = backgroundStyle
+        self.itemTheme = itemTheme
     }
 
     init(from decoder: Decoder) throws {
@@ -144,7 +156,8 @@ struct LockerAppearanceSettings: Codable, Equatable, Sendable {
         featuredVideoMemoryID = try container.decodeIfPresent(UUID.self, forKey: .featuredVideoMemoryID)
         dailyVariationEnabled = try container.decodeIfPresent(Bool.self, forKey: .dailyVariationEnabled) ?? true
         backgroundStyle = (try? container.decodeIfPresent(LockerBackgroundStyle.self, forKey: .backgroundStyle)) ?? .clearBlue
+        itemTheme = (try? container.decodeIfPresent(LockerItemTheme.self, forKey: .itemTheme)) ?? .aoharu
     }
 
-    static let `default` = LockerAppearanceSettings(collageStyle: .balanced, frameStyle: .mixed, filterStyle: .clear, featuredVideoMemoryID: nil, dailyVariationEnabled: true, backgroundStyle: .clearBlue)
+    static let `default` = LockerAppearanceSettings(collageStyle: .balanced, frameStyle: .mixed, filterStyle: .clear, featuredVideoMemoryID: nil, dailyVariationEnabled: true, backgroundStyle: .clearBlue, itemTheme: .aoharu)
 }

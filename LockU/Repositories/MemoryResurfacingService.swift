@@ -46,6 +46,43 @@ nonisolated struct MemoryResurfacingService {
         return MemoryResurfacingResult(memory: randomPast, reason: .pastRandom)
     }
 
+    /// Locker-wall entry point. It keeps the existing cooldown semantics while preferring
+    /// human-scale revisit windows instead of selecting a visually random Memory.
+    func lockerCandidate(
+        for date: Date,
+        from memories: [MemoryRecord],
+        excluding recentIDs: Set<UUID>,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> MemoryRecord? {
+        let today = calendar.startOfDay(for: date)
+        let eligible = memories.filter { memory in
+            let day = calendar.startOfDay(for: memory.memoryDate)
+            return day < today
+                && !recentIDs.contains(memory.id)
+                && isOutsideRevisitCooldown(memory, today: today, calendar: calendar)
+        }
+        guard !eligible.isEmpty else { return nil }
+
+        let daySeed = stableDaySeed(today, calendar: calendar)
+        let windows = prioritizedWindows(daySeed: daySeed)
+        for window in windows {
+            let candidates = eligible.filter { memory in
+                let age = calendar.dateComponents(
+                    [.day],
+                    from: calendar.startOfDay(for: memory.memoryDate),
+                    to: today
+                ).day ?? 0
+                return window.contains(age)
+            }
+            if let selected = stableSelection(candidates, daySeed: daySeed) { return selected }
+        }
+
+        let older = eligible.filter {
+            (calendar.dateComponents([.day], from: calendar.startOfDay(for: $0.memoryDate), to: today).day ?? 0) >= 5
+        }
+        return stableSelection(older, daySeed: daySeed)
+    }
+
     private func anniversaryCandidate(for today: Date, from memories: [MemoryRecord], calendar: Calendar) -> MemoryRecord? {
         let todayComponents = calendar.dateComponents([.month, .day], from: today)
         return memories
@@ -85,6 +122,26 @@ nonisolated struct MemoryResurfacingService {
     private func stableScore(for id: UUID, daySeed: UInt64) -> UInt64 {
         id.uuidString.utf8.reduce(14_695_981_039_346_656_037 ^ daySeed) { value, byte in
             (value ^ UInt64(byte)) &* 1_099_511_628_211
+        }
+    }
+
+    private func stableSelection(_ memories: [MemoryRecord], daySeed: UInt64) -> MemoryRecord? {
+        memories.min { stableScore(for: $0.id, daySeed: daySeed) < stableScore(for: $1.id, daySeed: daySeed) }
+    }
+
+    private func stableDaySeed(_ date: Date, calendar: Calendar) -> UInt64 {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return UInt64((components.year ?? 0) * 10_000 + (components.month ?? 0) * 100 + (components.day ?? 0))
+    }
+
+    private func prioritizedWindows(daySeed: UInt64) -> [ClosedRange<Int>] {
+        let seven = 5...9
+        let fourteen = 11...17
+        let thirty = 25...35
+        switch daySeed % 4 {
+        case 0: return [fourteen, seven, thirty]
+        case 1: return [thirty, seven, fourteen]
+        default: return [seven, fourteen, thirty]
         }
     }
 

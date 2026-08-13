@@ -43,12 +43,29 @@ final class CameraPreviewUIView: UIView {
 struct DualCameraPreviewView: UIViewRepresentable {
     @ObservedObject var manager: CameraSessionManager
 
+    final class Coordinator {
+        weak var view: DualCameraPreviewUIView?
+        var attachmentID: UUID?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeUIView(context: Context) -> DualCameraPreviewUIView {
         let view = DualCameraPreviewUIView(session: manager.dualSession)
-        manager.connectDualPreview(backLayer: view.backLayer, frontLayer: view.frontLayer)
-        view.installDisconnectHandler { [weak manager, weak view] in
+        context.coordinator.view = view
+        context.coordinator.attachmentID = manager.connectDualPreview(
+            backLayer: view.backLayer,
+            frontLayer: view.frontLayer,
+            previewID: view.diagnosticID
+        )
+        view.installDisconnectHandler { [weak manager, weak view] attachmentID in
             guard let manager, let view else { return }
-            manager.disconnectDualPreview(backLayer: view.backLayer, frontLayer: view.frontLayer)
+            manager.disconnectDualPreview(
+                backLayer: view.backLayer,
+                frontLayer: view.frontLayer,
+                attachmentID: attachmentID,
+                previewID: view.diagnosticID
+            )
         }
         return view
     }
@@ -57,15 +74,21 @@ struct DualCameraPreviewView: UIViewRepresentable {
         uiView.updateFrames()
     }
 
-    static func dismantleUIView(_ uiView: DualCameraPreviewUIView, coordinator: ()) {
-        uiView.disconnectPreview()
+    static func dismantleUIView(_ uiView: DualCameraPreviewUIView, coordinator: Coordinator) {
+        guard coordinator.view === uiView, let attachmentID = coordinator.attachmentID else { return }
+        uiView.diagnosticLog("DISCONNECT")
+        // The controller verifies both the attachment token and lifecycle generation. A stale
+        // SwiftUI host can therefore never detach the replacement preview.
+        uiView.detachPreview(attachmentID: attachmentID)
+        coordinator.attachmentID = nil
+        coordinator.view = nil
     }
 }
 
 final class DualCameraPreviewUIView: UIView {
     let backLayer: AVCaptureVideoPreviewLayer
     let frontLayer: AVCaptureVideoPreviewLayer
-    private let diagnosticID = String(UUID().uuidString.prefix(4))
+    let diagnosticID = String(UUID().uuidString.prefix(4))
     private var lastReportedZeroFrame: Bool?
 
     init(session: AVCaptureMultiCamSession) {
@@ -88,15 +111,14 @@ final class DualCameraPreviewUIView: UIView {
         #endif
     }
 
-    private var disconnectHandler: (() -> Void)?
+    private var disconnectHandler: ((UUID) -> Void)?
 
-    func installDisconnectHandler(_ handler: @escaping () -> Void) {
+    func installDisconnectHandler(_ handler: @escaping (UUID) -> Void) {
         disconnectHandler = handler
     }
 
-    func disconnectPreview() {
-        diagnosticLog("DISCONNECT")
-        disconnectHandler?()
+    func detachPreview(attachmentID: UUID) {
+        disconnectHandler?(attachmentID)
         disconnectHandler = nil
     }
 
@@ -129,7 +151,7 @@ final class DualCameraPreviewUIView: UIView {
         }
     }
 
-    private func diagnosticLog(_ event: String, detail: String = "") {
+    func diagnosticLog(_ event: String, detail: String = "") {
         #if DEBUG
         print("[DualCamera][Preview][\(diagnosticID)][\(event)] \(detail)")
         #endif

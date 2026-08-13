@@ -400,19 +400,22 @@ final class CameraSessionManager: ObservableObject {
     }
 
     func startDualSession(completion: (@MainActor (Bool) -> Void)? = nil) {
-        dualCameraLog("PERMISSION_CHECK status=\(AVCaptureDevice.authorizationStatus(for: .video).rawValue)")
+        dualCameraLog("OPEN_REQUEST")
         switch dualSessionState {
         case .running:
+            dualCameraLog("OPEN_IGNORED_ALREADY_ACTIVE state=running")
             completion?(true)
             return
         case .requestingPermission, .configuring, .ready, .starting:
-            dualCameraLog("duplicate start ignored state=\(dualSessionState)")
+            dualCameraLog("OPEN_IGNORED_ALREADY_ACTIVE state=\(dualSessionState)")
             return
         default:
             break
         }
 
+        dualCameraLog("OPEN_ACCEPTED")
         let authorization = AVCaptureDevice.authorizationStatus(for: .video)
+        dualCameraLog("PERMISSION_CHECK status=\(authorization.rawValue)")
         permissionStatus = authorization
         switch authorization {
         case .authorized:
@@ -561,12 +564,36 @@ final class CameraSessionManager: ObservableObject {
         dualController.retry()
     }
 
-    func connectDualPreview(backLayer: AVCaptureVideoPreviewLayer, frontLayer: AVCaptureVideoPreviewLayer) {
-        dualController.connectPreview(backLayer: backLayer, frontLayer: frontLayer)
+    @discardableResult
+    func connectDualPreview(
+        backLayer: AVCaptureVideoPreviewLayer,
+        frontLayer: AVCaptureVideoPreviewLayer,
+        previewID: String
+    ) -> UUID {
+        let attachmentID = UUID()
+        dualController.connectPreview(
+            backLayer: backLayer,
+            frontLayer: frontLayer,
+            attachmentID: attachmentID,
+            previewID: previewID,
+            generation: dualOperationGeneration
+        )
+        return attachmentID
     }
 
-    func disconnectDualPreview(backLayer: AVCaptureVideoPreviewLayer, frontLayer: AVCaptureVideoPreviewLayer) {
-        dualController.disconnectPreview(backLayer: backLayer, frontLayer: frontLayer)
+    func disconnectDualPreview(
+        backLayer: AVCaptureVideoPreviewLayer,
+        frontLayer: AVCaptureVideoPreviewLayer,
+        attachmentID: UUID,
+        previewID: String
+    ) {
+        dualController.disconnectPreview(
+            backLayer: backLayer,
+            frontLayer: frontLayer,
+            attachmentID: attachmentID,
+            previewID: previewID,
+            generation: dualOperationGeneration
+        )
     }
 
     func setApplicationActive(_ isActive: Bool) {
@@ -643,6 +670,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
     private var timeoutWorkItem: DispatchWorkItem?
     private var previewConnections: [AVCaptureConnection] = []
     private var pendingPreviewLayers: DualPreviewLayers?
+    private var activePreviewAttachmentID: UUID?
     private weak var connectedBackLayer: AVCaptureVideoPreviewLayer?
     private weak var connectedFrontLayer: AVCaptureVideoPreviewLayer?
     private var wantsToRun = false
@@ -790,17 +818,6 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         sessionQueue.async { [weak self] in
             guard let self else { return }
             self.wantsToRun = true
-            guard self.isConfigured else {
-                self.debugLog("start requested before configuration completed", isError: true)
-                Task { @MainActor in completion(false) }
-                return
-            }
-            guard self.previewConnections.count == 2 else {
-                self.debugLog("start requested before both previews were connected", isError: true)
-                self.dumpSessionState(prefix: "not ready")
-                Task { @MainActor in completion(false) }
-                return
-            }
             guard !self.session.isRunning else {
                 Task { @MainActor in completion(true) }
                 return
@@ -809,29 +826,42 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
                 self.debugLog("duplicate start ignored")
                 return
             }
-            self.isStarting = true
             self.pendingStartCompletion = completion
-            defer { self.isStarting = false }
-            self.publishState(.starting)
-            self.publishHealth(.starting)
-            self.sessionStartRequestedAt = DispatchTime.now().uptimeNanoseconds
-            self.debugLog("START_REQUEST")
-            self.dumpSessionState(prefix: "before startRunning")
-            self.session.startRunning()
-            let running = self.session.isRunning
-            self.publishState(running ? .running : .failed)
-            if running { self.validateHealthOrScheduleTimeout() }
-            else {
-                self.publishHealth(.degraded)
-                self.performRecovery(reason: "startRunning returned false")
+            guard self.isConfigured else {
+                self.debugLog("START_WAITING_FOR_CONFIGURATION")
+                return
             }
-            self.debugLog(running ? "session started" : "session failed to start", isError: !running)
-            if running {
-                let pending = self.pendingStartCompletion
-                self.pendingStartCompletion = nil
-                Task { @MainActor in pending?(true) }
+            guard self.previewConnections.count == 2 else {
+                self.debugLog("START_WAITING_FOR_PREVIEW")
+                return
             }
+            self.startWhenReady()
         }
+    }
+
+    private func startWhenReady() {
+        guard wantsToRun, cameraScreenActive, isConfigured,
+              previewConnections.count == 2, !session.isRunning, !isStarting else { return }
+        isStarting = true
+        defer { isStarting = false }
+        publishState(.starting)
+        publishHealth(.starting)
+        sessionStartRequestedAt = DispatchTime.now().uptimeNanoseconds
+        debugLog("START_REQUEST")
+        dumpSessionState(prefix: "before startRunning")
+        session.startRunning()
+        let running = session.isRunning
+        publishState(running ? .running : .failed)
+        if running {
+            validateHealthOrScheduleTimeout()
+            let pending = pendingStartCompletion
+            pendingStartCompletion = nil
+            Task { @MainActor in pending?(true) }
+        } else {
+            publishHealth(.degraded)
+            performRecovery(reason: "startRunning returned false")
+        }
+        debugLog(running ? "session started" : "session failed to start", isError: !running)
     }
 
     func stop(completion: @escaping @MainActor () -> Void) {
@@ -1126,7 +1156,15 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         do {
             if recoveryAttempt == 2 || !hasValidConfiguration || previewConnections.count != 2 {
                 let previewLayers = connectedBackLayer.flatMap { back in
-                    connectedFrontLayer.map { front in DualPreviewLayers(back: back, front: front) }
+                    connectedFrontLayer.map { front in
+                        DualPreviewLayers(
+                            back: back,
+                            front: front,
+                            attachmentID: activePreviewAttachmentID ?? UUID(),
+                            previewID: "preserved",
+                            generation: lifecycleGeneration
+                        )
+                    }
                 } ?? pendingPreviewLayers
                 resetConfiguration()
                 pendingPreviewLayers = previewLayers
@@ -1210,10 +1248,30 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         }
     }
 
-    func connectPreview(backLayer: AVCaptureVideoPreviewLayer, frontLayer: AVCaptureVideoPreviewLayer) {
-        let layers = DualPreviewLayers(back: backLayer, front: frontLayer)
+    func connectPreview(
+        backLayer: AVCaptureVideoPreviewLayer,
+        frontLayer: AVCaptureVideoPreviewLayer,
+        attachmentID: UUID,
+        previewID: String,
+        generation: Int
+    ) {
+        let layers = DualPreviewLayers(
+            back: backLayer,
+            front: frontLayer,
+            attachmentID: attachmentID,
+            previewID: previewID,
+            generation: generation
+        )
         sessionQueue.async { [weak self, layers] in
             guard let self else { return }
+            guard generation == self.lifecycleGeneration, self.cameraScreenActive else {
+                self.debugLog("PREVIEW_ATTACH_IGNORED_STALE preview=\(previewID) generation=\(generation)")
+                return
+            }
+            self.debugLog("PREVIEW_ATTACH preview=\(previewID) generation=\(generation)")
+            if let activeID = self.activePreviewAttachmentID, activeID != attachmentID {
+                self.removeCurrentPreviewConnections()
+            }
             self.pendingPreviewLayers = layers
             self.connectPendingPreviewIfPossible()
         }
@@ -1237,41 +1295,55 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         previewConnections = [front, back]
         connectedBackLayer = layers.back
         connectedFrontLayer = layers.front
+        activePreviewAttachmentID = layers.attachmentID
         pendingPreviewLayers = nil
-        debugLog("CONNECTIONS_READY")
+        debugLog("CONNECTIONS_READY preview=\(layers.previewID) generation=\(layers.generation)")
+        sessionQueue.async { [weak self] in self?.startWhenReady() }
     }
 
-    func disconnectPreview(backLayer: AVCaptureVideoPreviewLayer, frontLayer: AVCaptureVideoPreviewLayer) {
-        let layers = DualPreviewLayers(back: backLayer, front: frontLayer)
+    func disconnectPreview(
+        backLayer: AVCaptureVideoPreviewLayer,
+        frontLayer: AVCaptureVideoPreviewLayer,
+        attachmentID: UUID,
+        previewID: String,
+        generation: Int
+    ) {
+        let layers = DualPreviewLayers(
+            back: backLayer,
+            front: frontLayer,
+            attachmentID: attachmentID,
+            previewID: previewID,
+            generation: generation
+        )
         sessionQueue.async { [weak self, layers] in
             guard let self else { return }
-            if self.pendingPreviewLayers?.back === layers.back,
-               self.pendingPreviewLayers?.front === layers.front {
+            guard generation == self.lifecycleGeneration,
+                  self.activePreviewAttachmentID == attachmentID || self.pendingPreviewLayers?.attachmentID == attachmentID else {
+                self.debugLog("PREVIEW_DETACH_IGNORED_STALE preview=\(previewID) generation=\(generation)")
+                return
+            }
+            self.debugLog("PREVIEW_DETACH preview=\(previewID) generation=\(generation)")
+            if self.pendingPreviewLayers?.attachmentID == attachmentID {
                 self.pendingPreviewLayers = nil
             }
-            guard self.connectedBackLayer === layers.back,
+            guard self.activePreviewAttachmentID == attachmentID,
+                  self.connectedBackLayer === layers.back,
                   self.connectedFrontLayer === layers.front else { return }
 
-            let shouldRestart = self.wantsToRun
-            if self.session.isRunning {
-                self.publishState(.stopping)
-                self.session.stopRunning()
-            }
-            self.session.beginConfiguration()
-            for connection in self.previewConnections where self.session.connections.contains(where: { $0 === connection }) {
-                self.session.removeConnection(connection)
-            }
-            self.previewConnections = []
-            self.connectedBackLayer = nil
-            self.connectedFrontLayer = nil
-            self.session.commitConfiguration()
-            self.connectPendingPreviewIfPossible()
-            if shouldRestart, self.previewConnections.count == 2, !self.session.isRunning {
-                self.publishState(.starting)
-                self.session.startRunning()
-                self.publishState(self.session.isRunning ? .running : .failed)
-            }
+            self.removeCurrentPreviewConnections()
         }
+    }
+
+    private func removeCurrentPreviewConnections() {
+        session.beginConfiguration()
+        for connection in previewConnections where session.connections.contains(where: { $0 === connection }) {
+            session.removeConnection(connection)
+        }
+        previewConnections = []
+        connectedBackLayer = nil
+        connectedFrontLayer = nil
+        activePreviewAttachmentID = nil
+        session.commitConfiguration()
     }
 
     private func configureSession() throws {
@@ -1442,7 +1514,15 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
     private func resetConfiguration(preservingPendingPreview: Bool = false) {
         let preservedPreview = preservingPendingPreview
             ? connectedBackLayer.flatMap { back in
-                connectedFrontLayer.map { front in DualPreviewLayers(back: back, front: front) }
+                connectedFrontLayer.map { front in
+                    DualPreviewLayers(
+                        back: back,
+                        front: front,
+                        attachmentID: activePreviewAttachmentID ?? UUID(),
+                        previewID: "preserved",
+                        generation: lifecycleGeneration
+                    )
+                }
             } ?? pendingPreviewLayers
             : nil
         session.beginConfiguration()
@@ -1452,6 +1532,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         pendingPreviewLayers = preservedPreview
         connectedBackLayer = nil
         connectedFrontLayer = nil
+        activePreviewAttachmentID = nil
         session.commitConfiguration()
         isConfigured = false
     }
@@ -1586,10 +1667,22 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
 private nonisolated final class DualPreviewLayers: @unchecked Sendable {
     let back: AVCaptureVideoPreviewLayer
     let front: AVCaptureVideoPreviewLayer
+    let attachmentID: UUID
+    let previewID: String
+    let generation: Int
 
-    init(back: AVCaptureVideoPreviewLayer, front: AVCaptureVideoPreviewLayer) {
+    init(
+        back: AVCaptureVideoPreviewLayer,
+        front: AVCaptureVideoPreviewLayer,
+        attachmentID: UUID = UUID(),
+        previewID: String = "preserved",
+        generation: Int = 0
+    ) {
         self.back = back
         self.front = front
+        self.attachmentID = attachmentID
+        self.previewID = previewID
+        self.generation = generation
     }
 }
 

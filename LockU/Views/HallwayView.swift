@@ -142,6 +142,13 @@ private struct LockerSettingsSheet: View {
                     Picker("Filter", selection: $appearance.filterStyle) {
                         ForEach(LockerFilterStyle.allCases) { Text($0.title).tag($0) }
                     }
+                    Picker("Shelf Mood", selection: $appearance.itemTheme) {
+                        ForEach(LockerItemTheme.allCases) { theme in
+                            Text(theme.title)
+                                .tag(theme)
+                                .accessibilityLabel("\(theme.title) theme")
+                        }
+                    }
                     Picker("Featured Video", selection: $appearance.featuredVideoMemoryID) {
                         Text("Automatic — Latest Memory").tag(UUID?.none)
                         ForEach(memoryRepository.memories) { memory in
