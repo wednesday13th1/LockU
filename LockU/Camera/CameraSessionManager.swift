@@ -212,8 +212,12 @@ nonisolated struct DualCameraDiagnosticsSnapshot: Sendable {
 }
 
 nonisolated struct DualCameraCaptureResult: @unchecked Sendable {
+    let captureID: UUID
+    let requestedAt: Date
     let frontImage: UIImage
     let backImage: UIImage
+    let frontCompletedAt: Date
+    let backCompletedAt: Date
 }
 
 @MainActor
@@ -231,7 +235,6 @@ final class CameraSessionManager: ObservableObject {
     @Published private(set) var dualSessionState: DualCameraSessionState = .idle
     @Published private(set) var dualCameraHealth: DualCameraHealth = .unknown
     @Published private(set) var dualCapturedImages: DualCameraCaptureResult?
-    @Published private(set) var lightLevel: Double = 50
 
     let session: AVCaptureSession
     let dualSession: AVCaptureMultiCamSession
@@ -269,16 +272,6 @@ final class CameraSessionManager: ObservableObject {
 
     func markDualPreviewVisible() {
         dualCameraLog("PREVIEW_VISIBLE health=\(dualCameraHealth)")
-    }
-
-    func setLightLevel(_ level: Double, isFinal: Bool = false) {
-        let clamped = level.isFinite ? min(100, max(0, level)) : 50
-        lightLevel = clamped
-        guard sessionMode == .dual,
-              isApplicationActive,
-              isCameraScreenActive,
-              !isCapturing else { return }
-        dualController.setLightLevel(clamped, generation: dualOperationGeneration, force: isFinal)
     }
 
     init() {
@@ -336,7 +329,7 @@ final class CameraSessionManager: ObservableObject {
     func startSession() {
         guard permissionStatus == .authorized else { return }
         if sessionMode == .dual {
-            dualController.start { [weak self] running in
+            dualController.start(generation: dualOperationGeneration) { [weak self] running in
                 self?.dualSessionState = running ? .running : .failed
             }
             return
@@ -351,6 +344,13 @@ final class CameraSessionManager: ObservableObject {
     }
 
     func stopSession() {
+        if sessionMode == .dual {
+            dualOperationGeneration &+= 1
+            dualController.updateDiagnosticContext(
+                generation: dualOperationGeneration,
+                screenActive: false
+            )
+        }
         controller.stop { [weak self] in
             self?.isSessionRunning = false
         }
@@ -432,12 +432,14 @@ final class CameraSessionManager: ObservableObject {
                     self.dualCameraLog("permission authorized")
                     self.startAuthorizedDualSession(completion: completion)
                 } else {
+                    self.dualCameraLog("FALLBACK reason=permission generation=\(generation)")
                     self.dualSessionState = .failed
                     self.errorMessage = LockUCameraError.cameraPermissionDenied.localizedDescription
                     completion?(false)
                 }
             }
         case .denied, .restricted:
+            dualCameraLog("FALLBACK reason=permission generation=\(dualOperationGeneration)")
             dualSessionState = .failed
             errorMessage = LockUCameraError.cameraPermissionDenied.localizedDescription
             completion?(false)
@@ -454,6 +456,7 @@ final class CameraSessionManager: ObservableObject {
             return
         }
         guard supportsDualCamera else {
+            dualCameraLog("FALLBACK reason=unsupported generation=\(dualOperationGeneration)")
             dualSessionState = .unsupported
             errorMessage = "Dual Cameraはこの端末では利用できません。通常のカメラに切り替えました。"
             sessionMode = .single
@@ -462,6 +465,9 @@ final class CameraSessionManager: ObservableObject {
             return
         }
         let generation = dualOperationGeneration
+        // Claim the open synchronously on MainActor before the asynchronous single-camera stop.
+        // This closes the small window where a second SwiftUI lifecycle callback could be accepted.
+        dualSessionState = .configuring
         controller.stop { [weak self] in
             guard let self else { return }
             guard generation == self.dualOperationGeneration, self.isApplicationActive, self.isCameraScreenActive else {
@@ -469,9 +475,8 @@ final class CameraSessionManager: ObservableObject {
                 return
             }
             self.isSessionRunning = false
-            self.dualSessionState = .configuring
             self.dualCameraLog("configuring")
-            self.dualController.configure { [weak self] result in
+            self.dualController.configure(generation: generation) { [weak self] result in
                 guard let self else { return }
                 guard generation == self.dualOperationGeneration, self.isApplicationActive, self.isCameraScreenActive else {
                     self.dualController.stop { }
@@ -482,7 +487,7 @@ final class CameraSessionManager: ObservableObject {
                 case .success:
                     self.sessionMode = .dual
                     self.dualSessionState = .ready
-                    self.dualController.start { [weak self] running in
+                    self.dualController.start(generation: generation) { [weak self] running in
                         guard let self else { return }
                         guard generation == self.dualOperationGeneration,
                               self.isApplicationActive,
@@ -492,9 +497,16 @@ final class CameraSessionManager: ObservableObject {
                             return
                         }
                         self.dualSessionState = running ? .running : .failed
+                        if !running {
+                            self.dualCameraLog("FALLBACK reason=startupFailure generation=\(generation)")
+                            self.sessionMode = .single
+                            self.errorMessage = "Dual Cameraを開始できませんでした。通常のカメラで撮影できます。"
+                            self.configureAndStart()
+                        }
                         completion?(running)
                     }
                 case .failure:
+                    self.dualCameraLog("FALLBACK reason=configurationFailure generation=\(generation)")
                     self.dualSessionState = .failed
                     self.sessionMode = .single
                     self.errorMessage = "Dual Cameraを開始できませんでした。通常のカメラで撮影できます。"
@@ -507,6 +519,7 @@ final class CameraSessionManager: ObservableObject {
 
     func stopDualSession() {
         dualOperationGeneration &+= 1
+        dualController.updateDiagnosticContext(generation: dualOperationGeneration, screenActive: isCameraScreenActive && isApplicationActive)
         dualSessionState = .stopping
         dualController.stop { [weak self] in
             guard let self else { return }
@@ -518,6 +531,7 @@ final class CameraSessionManager: ObservableObject {
 
     func useSingleCamera() {
         dualOperationGeneration &+= 1
+        dualController.updateDiagnosticContext(generation: dualOperationGeneration, screenActive: isCameraScreenActive && isApplicationActive)
         dualSessionState = .stopping
         dualController.stop { [weak self] in
             guard let self else { return }
@@ -535,13 +549,14 @@ final class CameraSessionManager: ObservableObject {
         isCapturing = true
         dualCapturedImages = nil
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        dualController.capture { [weak self] result in
+        let captureID = UUID()
+        let requestedAt = Date()
+        dualController.capture(captureID: captureID, requestedAt: requestedAt) { [weak self] result in
             guard let self else { return }
             self.isCapturing = false
             switch result {
             case .success(let capture):
                 self.dualCapturedImages = capture
-                self.stopDualSession()
             case .failure(let error):
                 self.errorMessage = error.localizedDescription
             }
@@ -555,13 +570,16 @@ final class CameraSessionManager: ObservableObject {
     func retakeDualCapture() {
         guard sessionMode == .dual else { return }
         dualCapturedImages = nil
-        startDualSession()
+        if dualSessionState != .running { startDualSession() }
     }
 
     func retryDualCamera() {
         guard isApplicationActive, isCameraScreenActive, dualCameraHealth == .unavailable else { return }
-        dualCameraHealth = .recovering
-        dualController.retry()
+        dualOperationGeneration &+= 1
+        dualCameraHealth = .unknown
+        dualSessionState = .stopped
+        dualController.updateDiagnosticContext(generation: dualOperationGeneration, screenActive: true)
+        startDualSession()
     }
 
     @discardableResult
@@ -608,7 +626,6 @@ final class CameraSessionManager: ObservableObject {
     func setCameraScreenActive(_ isActive: Bool) {
         if isActive, !isCameraScreenActive {
             diagnosticSessionID = UUID()
-            lightLevel = 50
             dualCameraLog("OPEN")
         } else if !isActive, isCameraScreenActive {
             dualCameraLog("CLOSE")
@@ -619,7 +636,6 @@ final class CameraSessionManager: ObservableObject {
         }
         dualController.updateDiagnosticContext(generation: dualOperationGeneration, screenActive: isCameraScreenActive && isApplicationActive)
         dualController.updateDiagnosticSession(id: diagnosticSessionID, isOpen: isActive)
-        if isActive { dualController.setLightLevel(50, generation: dualOperationGeneration, force: true) }
     }
 
     func retake() {
@@ -664,7 +680,10 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
     private var isConfiguring = false
     private var isStarting = false
     private var activeCaptureID: UUID?
+    private var activeCaptureRequestedAt: Date?
+    private var activeCaptureGeneration: Int?
     private var pendingImages: [CameraSide: UIImage] = [:]
+    private var captureResultTimestamps: [CameraSide: Date] = [:]
     private var delegates: [CameraSide: DualPhotoDelegate] = [:]
     private var captureCompletion: (@MainActor (Result<DualCameraCaptureResult, Error>) -> Void)?
     private var timeoutWorkItem: DispatchWorkItem?
@@ -685,6 +704,10 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
     private var pendingStartCompletion: (@MainActor (Bool) -> Void)?
     private var configurationStartedAt: UInt64?
     private var sessionStartRequestedAt: UInt64?
+    private var configuredGeneration: Int?
+    private var startAttemptGeneration: Int?
+    private var configurationCountForGeneration = 0
+    private var startCountForGeneration = 0
     private var lifecycleGeneration = 0
     private var cameraScreenActive = false
     private var diagnosticSessionID = "----"
@@ -748,19 +771,18 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         healthHandler = handler
     }
 
-    func retry() {
-        sessionQueue.async { [weak self] in
-            guard let self else { return }
-            self.wantsToRun = true
-            self.recoveryAttempt = max(0, self.maximumRecoveryAttempts - 1)
-            self.performRecovery(reason: "user retry")
-        }
-    }
-
     func updateDiagnosticContext(generation: Int, screenActive: Bool) {
         sessionQueue.async { [weak self] in
-            self?.lifecycleGeneration = generation
-            self?.cameraScreenActive = screenActive
+            guard let self else { return }
+            if generation != self.lifecycleGeneration {
+                self.configuredGeneration = nil
+                self.startAttemptGeneration = nil
+                self.pendingStartCompletion = nil
+                self.configurationCountForGeneration = 0
+                self.startCountForGeneration = 0
+            }
+            self.lifecycleGeneration = generation
+            self.cameraScreenActive = screenActive
         }
     }
 
@@ -785,10 +807,30 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         }
     }
 
-    func configure(completion: @escaping @MainActor (Result<Void, Error>) -> Void) {
+    func configure(generation: Int, completion: @escaping @MainActor (Result<Void, Error>) -> Void) {
         sessionQueue.async { [weak self] in
             guard let self else { return }
+            guard generation == self.lifecycleGeneration, self.cameraScreenActive else { return }
+            guard self.configuredGeneration != generation else {
+                self.debugLog("CONFIGURE_IGNORED_ALREADY_COMPLETED generation=\(generation)")
+                Task { @MainActor in completion(.success(())) }
+                return
+            }
+            self.configurationCountForGeneration += 1
+            self.debugLog("CONFIGURATION_COUNT value=\(self.configurationCountForGeneration) generation=\(generation)")
+            #if DEBUG
+            assert(self.configurationCountForGeneration == 1, "Dual Camera configured more than once in one generation")
+            #endif
+            guard self.state == .stopped || self.state == .idle || self.state == .failed else {
+                self.debugLog("CONFIGURE_IGNORED_INVALID_STATE state=\(self.state) generation=\(generation)", isError: true)
+                Task { @MainActor in completion(.failure(LockUCameraError.dualCaptureFailed)) }
+                return
+            }
             if self.isConfigured {
+                self.configuredGeneration = generation
+                self.publishState(.ready)
+                self.debugLog("CONFIGURE_REUSED_VALID_TOPOLOGY generation=\(generation)")
+                self.connectPendingPreviewIfPossible()
                 Task { @MainActor in completion(.success(())) }
                 return
             }
@@ -800,6 +842,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             do {
                 try self.configureSession()
                 self.isConfigured = true
+                self.configuredGeneration = generation
                 self.connectPendingPreviewIfPossible()
                 self.logCosts()
                 self.logConfigurationFingerprint()
@@ -814,9 +857,14 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         }
     }
 
-    func start(completion: @escaping @MainActor (Bool) -> Void) {
+    func start(generation: Int, completion: @escaping @MainActor (Bool) -> Void) {
         sessionQueue.async { [weak self] in
             guard let self else { return }
+            guard generation == self.lifecycleGeneration, self.cameraScreenActive else { return }
+            guard self.startAttemptGeneration != generation else {
+                self.debugLog("START_IGNORED_ALREADY_ATTEMPTED generation=\(generation)")
+                return
+            }
             self.wantsToRun = true
             guard !self.session.isRunning else {
                 Task { @MainActor in completion(true) }
@@ -827,6 +875,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
                 return
             }
             self.pendingStartCompletion = completion
+            self.startAttemptGeneration = generation
             guard self.isConfigured else {
                 self.debugLog("START_WAITING_FOR_CONFIGURATION")
                 return
@@ -835,19 +884,25 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
                 self.debugLog("START_WAITING_FOR_PREVIEW")
                 return
             }
-            self.startWhenReady()
+            self.startWhenReady(generation: generation)
         }
     }
 
-    private func startWhenReady() {
+    private func startWhenReady(generation: Int? = nil) {
+        let expectedGeneration = generation ?? startAttemptGeneration
+        guard expectedGeneration == lifecycleGeneration else { return }
         guard wantsToRun, cameraScreenActive, isConfigured,
               previewConnections.count == 2, !session.isRunning, !isStarting else { return }
         isStarting = true
+        startCountForGeneration += 1
+        #if DEBUG
+        assert(startCountForGeneration == 1, "Dual Camera startRunning called more than once in one generation")
+        #endif
         defer { isStarting = false }
         publishState(.starting)
         publishHealth(.starting)
         sessionStartRequestedAt = DispatchTime.now().uptimeNanoseconds
-        debugLog("START_REQUEST")
+        debugLog("START_RUNNING count=\(startCountForGeneration) generation=\(lifecycleGeneration)")
         dumpSessionState(prefix: "before startRunning")
         session.startRunning()
         let running = session.isRunning
@@ -859,7 +914,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             Task { @MainActor in pending?(true) }
         } else {
             publishHealth(.degraded)
-            performRecovery(reason: "startRunning returned false")
+            failPipeline(reason: "SESSION_NOT_RUNNING", generation: lifecycleGeneration)
         }
         debugLog(running ? "session started" : "session failed to start", isError: !running)
     }
@@ -903,13 +958,9 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             guard let self,
                   self.wantsToRun,
                   self.cameraScreenActive,
-                  self.isConfigured,
                   !self.session.isRunning else { return }
             self.debugLog("INTERRUPTION_ENDED")
-            self.publishState(.starting)
-            self.session.startRunning()
-            self.publishState(self.session.isRunning ? .running : .failed)
-            if self.session.isRunning { self.validateHealthOrScheduleTimeout() }
+            self.failPipeline(reason: "interruption ended; reopen required", generation: self.lifecycleGeneration)
         }
     }
 
@@ -928,9 +979,10 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
                 return
             }
             guard self.wantsToRun, self.cameraScreenActive else { return }
-            // Media-services reset invalidates the old input/connection graph.
-            self.resetConfiguration(preservingPendingPreview: true)
-            self.performRecovery(reason: "mediaServicesWereReset")
+            // A media-services reset invalidates this generation. Reopen owns a fresh attempt;
+            // this callback never rebuilds topology in-place.
+            self.isConfigured = false
+            self.failPipeline(reason: "mediaServicesWereReset", generation: self.lifecycleGeneration)
         }
     }
 
@@ -1095,6 +1147,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
 
     private func validateHealthOrScheduleTimeout() {
         guard wantsToRun else { return }
+        let generation = lifecycleGeneration
         if isDualCameraUsable {
             cancelHealthValidation()
             recoveryAttempt = 0
@@ -1111,7 +1164,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.healthValidationWorkItem = nil
-            guard self.wantsToRun else { return }
+            guard self.wantsToRun, generation == self.lifecycleGeneration else { return }
             if self.isDualCameraUsable {
                 self.recoveryAttempt = 0
                 self.publishHealth(.healthy)
@@ -1121,7 +1174,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             } else {
                 self.publishHealth(.degraded)
                 self.logDiagnostics(reason: "startup health timeout")
-                self.performRecovery(reason: "startup health timeout")
+                self.failPipeline(reason: "START_TIMEOUT", generation: generation)
             }
         }
         healthValidationWorkItem = workItem
@@ -1133,74 +1186,18 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         healthValidationWorkItem = nil
     }
 
-    private func performRecovery(reason: String) {
-        guard wantsToRun, cameraScreenActive, !isRecovering else { return }
-        guard recoveryAttempt < maximumRecoveryAttempts else {
-            cancelHealthValidation()
-            publishState(.failed)
-            publishHealth(.unavailable)
-            dumpFailureContext(reason: "\(reason); recovery limit reached")
-            let pending = pendingStartCompletion
-            pendingStartCompletion = nil
-            Task { @MainActor in pending?(false) }
+    private func failPipeline(reason: String, generation: Int) {
+        guard generation == lifecycleGeneration else {
+            debugLog("STALE_FAILURE_IGNORED reason=\(reason) generation=\(generation)")
             return
         }
-
-        isRecovering = true
-        recoveryAttempt += 1
-        publishHealth(.recovering)
         cancelHealthValidation()
-        defer { isRecovering = false }
-
-        if session.isRunning { session.stopRunning() }
-        do {
-            if recoveryAttempt == 2 || !hasValidConfiguration || previewConnections.count != 2 {
-                let previewLayers = connectedBackLayer.flatMap { back in
-                    connectedFrontLayer.map { front in
-                        DualPreviewLayers(
-                            back: back,
-                            front: front,
-                            attachmentID: activePreviewAttachmentID ?? UUID(),
-                            previewID: "preserved",
-                            generation: lifecycleGeneration
-                        )
-                    }
-                } ?? pendingPreviewLayers
-                resetConfiguration()
-                pendingPreviewLayers = previewLayers
-                try configureSession()
-                isConfigured = true
-                connectPendingPreviewIfPossible()
-                logConfigurationFingerprint()
-            }
-            guard hasValidConfiguration, previewConnections.count == 2 else {
-                throw LockUCameraError.dualCaptureFailed
-            }
-            publishState(.starting)
-            session.startRunning()
-            publishState(session.isRunning ? .running : .failed)
-            if session.isRunning {
-                let pending = pendingStartCompletion
-                pendingStartCompletion = nil
-                Task { @MainActor in pending?(true) }
-                validateHealthOrScheduleTimeout()
-            }
-            else { publishHealth(.degraded) }
-        } catch {
-            isConfigured = false
-            publishState(.failed)
-            publishHealth(recoveryAttempt >= maximumRecoveryAttempts ? .unavailable : .degraded)
-            dumpFailureContext(reason: "\(reason); \(error.localizedDescription)")
-            if recoveryAttempt < maximumRecoveryAttempts {
-                sessionQueue.async { [weak self] in
-                    self?.performRecovery(reason: "recovery retry after failure")
-                }
-            } else {
-                let pending = pendingStartCompletion
-                pendingStartCompletion = nil
-                Task { @MainActor in pending?(false) }
-            }
-        }
+        publishState(.failed)
+        publishHealth(.unavailable)
+        dumpFailureContext(reason: "\(reason); generation=\(generation)")
+        let pending = pendingStartCompletion
+        pendingStartCompletion = nil
+        Task { @MainActor in pending?(false) }
     }
 
     private var hasValidConfiguration: Bool {
@@ -1211,7 +1208,11 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             && session.outputs.contains(where: { $0 === backOutput })
     }
 
-    func capture(completion: @escaping @MainActor (Result<DualCameraCaptureResult, Error>) -> Void) {
+    func capture(
+        captureID: UUID,
+        requestedAt: Date,
+        completion: @escaping @MainActor (Result<DualCameraCaptureResult, Error>) -> Void
+    ) {
         sessionQueue.async { [weak self] in
             guard let self else { return }
             guard self.isConfigured, self.health == .healthy, self.activeCaptureID == nil else {
@@ -1221,10 +1222,12 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
                 Task { @MainActor in completion(.failure(LockUCameraError.dualCaptureFailed)) }
                 return
             }
-            let captureID = UUID()
             self.activeCaptureID = captureID
-            self.debugLog("CAPTURE_REQUEST id=\(captureID.uuidString.prefix(4))")
+            self.activeCaptureRequestedAt = requestedAt
+            self.activeCaptureGeneration = self.lifecycleGeneration
+            self.debugLog("CAPTURE_BEGIN capture=\(captureID.uuidString.prefix(4))")
             self.pendingImages = [:]
+            self.captureResultTimestamps = [:]
             self.captureCompletion = completion
 
             let frontDelegate = DualPhotoDelegate(captureID: captureID, side: .front) { [weak self] id, side, result in
@@ -1236,7 +1239,9 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             self.delegates = [.front: frontDelegate, .back: backDelegate]
             self.prepareConnection(self.frontOutput.connection(with: .video))
             self.prepareConnection(self.backOutput.connection(with: .video))
+            self.debugLog("FRONT_CAPTURE_REQUEST capture=\(captureID.uuidString.prefix(4))")
             self.frontOutput.capturePhoto(with: AVCapturePhotoSettings(), delegate: frontDelegate)
+            self.debugLog("BACK_CAPTURE_REQUEST capture=\(captureID.uuidString.prefix(4))")
             self.backOutput.capturePhoto(with: AVCapturePhotoSettings(), delegate: backDelegate)
 
             let timeout = DispatchWorkItem { [weak self] in
@@ -1244,7 +1249,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
                 self?.cancelCapture(with: LockUCameraError.dualCaptureFailed, notify: true)
             }
             self.timeoutWorkItem = timeout
-            self.sessionQueue.asyncAfter(deadline: .now() + 6, execute: timeout)
+            self.sessionQueue.asyncAfter(deadline: .now() + 4, execute: timeout)
         }
     }
 
@@ -1347,9 +1352,9 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
     }
 
     private func configureSession() throws {
-        debugLog("isMultiCamSupported: \(AVCaptureMultiCamSession.isMultiCamSupported)")
+        debugLog("MULTICAM_SUPPORTED value=\(AVCaptureMultiCamSession.isMultiCamSupported)")
         guard AVCaptureMultiCamSession.isMultiCamSupported else { throw LockUCameraError.cameraUnavailable }
-        debugLog("CONFIG_BEGIN")
+        debugLog("CONFIGURE_BEGIN generation=\(lifecycleGeneration)")
         debugLog(
             "CONFIG tier=\(configurationTier.rawValue) lowPower=\(ProcessInfo.processInfo.isLowPowerModeEnabled)"
         )
@@ -1370,9 +1375,9 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             throw LockUCameraError.cannotAddInput
         }
         session.addInputWithNoConnections(frontInput)
-        debugLog("INPUT_FRONT_ADDED")
+        debugLog("FRONT_INPUT_CONNECTED")
         session.addInputWithNoConnections(backInput)
-        debugLog("INPUT_BACK_ADDED")
+        debugLog("BACK_INPUT_CONNECTED")
         guard session.canAddOutput(frontOutput) else {
             debugLog("cannot add front photo output", isError: true)
             throw LockUCameraError.cannotAddOutput
@@ -1382,12 +1387,13 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             throw LockUCameraError.cannotAddOutput
         }
         session.addOutputWithNoConnections(frontOutput)
-        debugLog("OUTPUT_FRONT_ADDED")
+        debugLog("FRONT_OUTPUT_ADDED")
         session.addOutputWithNoConnections(backOutput)
-        debugLog("OUTPUT_BACK_ADDED")
+        debugLog("BACK_OUTPUT_ADDED")
 
         try connect(input: frontInput, output: frontOutput, position: .front)
         try connect(input: backInput, output: backOutput, position: .back)
+        debugLog("OUTPUTS_CONNECTED")
         frontOutput.maxPhotoQualityPrioritization = .balanced
         backOutput.maxPhotoQualityPrioritization = .balanced
     }
@@ -1410,7 +1416,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             throw LockUCameraError.cameraUnavailable
         }
         debugLog(
-            "CONFIG device position=\(position == .front ? "front" : "back") " +
+            "\(position == .front ? "FRONT_DEVICE_READY" : "BACK_DEVICE_READY") " +
             "type=\(device.deviceType.rawValue)"
         )
         do { return try AVCaptureDeviceInput(device: device) }
@@ -1455,6 +1461,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         }
         configureVideoConnection(connection, mirrored: mirrored)
         session.addConnection(connection)
+        debugLog(mirrored ? "FRONT_PREVIEW_CONNECTED" : "BACK_PREVIEW_CONNECTED")
         return connection
     }
 
@@ -1469,30 +1476,56 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
     }
 
     private func receive(captureID: UUID, side: CameraSide, result: Result<UIImage, Error>) {
+        let completedAt = Date()
         sessionQueue.async { [weak self] in
-            guard let self, self.activeCaptureID == captureID else { return }
+            guard let self,
+                  self.activeCaptureID == captureID,
+                  self.activeCaptureGeneration == self.lifecycleGeneration else { return }
             switch result {
-            case .failure:
+            case .failure(let error):
+                self.debugLog(
+                    "\(side == .front ? "FRONT" : "BACK")_CAPTURE_RESULT capture=\(captureID.uuidString.prefix(4)) success=false error=\(error.localizedDescription)"
+                )
                 self.cancelCapture(with: LockUCameraError.dualCaptureFailed, notify: true)
             case .success(let image):
-                self.debugLog(side == .front ? "front captured" : "back captured")
+                self.debugLog(
+                    "\(side == .front ? "FRONT" : "BACK")_CAPTURE_RESULT capture=\(captureID.uuidString.prefix(4)) success=true"
+                )
                 self.pendingImages[side] = image
+                self.captureResultTimestamps[side] = completedAt
                 guard let front = self.pendingImages[.front], let back = self.pendingImages[.back] else { return }
+                guard let requestedAt = self.activeCaptureRequestedAt,
+                      let frontCompletedAt = self.captureResultTimestamps[.front],
+                      let backCompletedAt = self.captureResultTimestamps[.back] else {
+                    self.cancelCapture(with: LockUCameraError.dualCaptureFailed, notify: true)
+                    return
+                }
                 self.timeoutWorkItem?.cancel()
                 self.timeoutWorkItem = nil
                 self.delegates = [:]
                 self.processingQueue.async {
                     let result = DualCameraCaptureResult(
+                        captureID: captureID,
+                        requestedAt: requestedAt,
                         frontImage: front.lockUNormalized().lockUDownsampled(maxDimension: 2400),
-                        backImage: back.lockUNormalized().lockUDownsampled(maxDimension: 2400)
+                        backImage: back.lockUNormalized().lockUDownsampled(maxDimension: 2400),
+                        frontCompletedAt: frontCompletedAt,
+                        backCompletedAt: backCompletedAt
                     )
                     self.sessionQueue.async {
-                        guard self.activeCaptureID == captureID else { return }
+                        guard self.activeCaptureID == captureID,
+                              self.activeCaptureGeneration == self.lifecycleGeneration else { return }
                         self.activeCaptureID = nil
+                        self.activeCaptureRequestedAt = nil
+                        self.activeCaptureGeneration = nil
                         self.pendingImages = [:]
+                        self.captureResultTimestamps = [:]
                         let completion = self.captureCompletion
                         self.captureCompletion = nil
-                        self.debugLog("CAPTURE_COMPLETE id=\(captureID.uuidString.prefix(4))")
+                        let deltaMilliseconds = abs(frontCompletedAt.timeIntervalSince(backCompletedAt)) * 1_000
+                        self.debugLog(
+                            "CAPTURE_FINALIZED capture=\(captureID.uuidString.prefix(4)) deltaMs=\(Int(deltaMilliseconds.rounded()))"
+                        )
                         Task { @MainActor in completion?(.success(result)) }
                     }
                 }
@@ -1504,7 +1537,10 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         timeoutWorkItem?.cancel()
         timeoutWorkItem = nil
         activeCaptureID = nil
+        activeCaptureRequestedAt = nil
+        activeCaptureGeneration = nil
         pendingImages = [:]
+        captureResultTimestamps = [:]
         delegates = [:]
         let completion = captureCompletion
         captureCompletion = nil

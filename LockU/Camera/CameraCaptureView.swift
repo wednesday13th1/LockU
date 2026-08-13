@@ -24,10 +24,18 @@ struct CameraCaptureView: View {
     @State private var captureHasDailyFilm = false
     @State private var captureExperience: LockUCaptureExperience = .single
     @State private var isSavingDualMemory = false
-    @State private var isLightControlVisible = false
+    @State private var lightLevel: Double = 0.5
     @State private var isAdjustingLight = false
-    @State private var lightDragStartLevel: Double = 50
-    @State private var lightDismissTask: Task<Void, Never>?
+    @State private var showLightHUD = false
+    @State private var hideLightHUDTask: Task<Void, Never>?
+    @State private var secondaryPreviewCorner: DualCameraPiPCorner = .topTrailing
+    @State private var secondaryPreviewDragOffset: CGSize = .zero
+    @State private var isDraggingSecondaryPreview = false
+    @State private var secondaryPreviewSnapToken = 0
+    @State private var dualPresentation: DualCameraPresentation = .backMain
+    @State private var isSwappingDualPresentation = false
+    @State private var dualPresentationSwapToken = 0
+    @State private var swapCompletionTask: Task<Void, Never>?
 
     private let dailyFilmService = DailyFilmService()
     private let revealStore = DailyFilmRevealStore()
@@ -113,10 +121,15 @@ struct CameraCaptureView: View {
         camera.stopSession()
         editor.clear()
         camera.clearDualCapture()
-        lightDismissTask?.cancel()
-        lightDismissTask = nil
-        isLightControlVisible = false
+        hideLightHUDTask?.cancel()
+        hideLightHUDTask = nil
         isAdjustingLight = false
+        showLightHUD = false
+        secondaryPreviewDragOffset = .zero
+        isDraggingSecondaryPreview = false
+        swapCompletionTask?.cancel()
+        swapCompletionTask = nil
+        isSwappingDualPresentation = false
     }
 
     private func handlePermissionChange(_ status: AVAuthorizationStatus) {
@@ -183,8 +196,16 @@ struct CameraCaptureView: View {
     private var liveCamera: some View {
         ZStack {
             if captureExperience == .dual {
-                DualCameraPreviewView(manager: camera)
-                    .ignoresSafeArea(edges: .top)
+                DualCameraPreviewView(
+                    manager: camera,
+                    presentation: dualPresentation,
+                    pipCorner: secondaryPreviewCorner,
+                    pipDragOffset: secondaryPreviewDragOffset,
+                    isDraggingPiP: isDraggingSecondaryPreview,
+                    pipSnapToken: secondaryPreviewSnapToken,
+                    presentationSwapToken: dualPresentationSwapToken
+                )
+                    .ignoresSafeArea()
                     .opacity(dualPreviewIsVisible ? 1 : 0)
                     .animation(.easeOut(duration: 0.16), value: dualPreviewIsVisible)
                     .accessibilityLabel("見ている景色と、その時の自分のカメラプレビュー")
@@ -196,26 +217,34 @@ struct CameraCaptureView: View {
 
 
             if captureExperience == .dual {
-                DualCameraLightControl(
-                    level: camera.lightLevel,
-                    isExpanded: isLightControlVisible,
-                    isEnabled: camera.dualCameraUXState == .ready,
-                    reduceMotion: reduceMotion,
-                    onTap: handleLightControlTap,
-                    onDragChanged: updateLightFromIconDrag,
-                    onDragEnded: finishLightAdjustment,
-                    onSliderChanged: updateLightFromSlider,
-                    onSliderEnded: finishLightAdjustment
-                )
-                .padding(.top, 8)
-                .padding(.trailing, 18)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .zIndex(15)
+                CameraLightEffectView(level: lightLevel)
+                    .zIndex(1)
             }
 
-            if captureExperience == .dual, isAdjustingLight {
-                LightPercentageHUD(level: camera.lightLevel)
-                    .zIndex(14)
+            if captureExperience == .dual {
+                DualCameraPiPDragSurface(
+                    corner: secondaryPreviewCorner,
+                    dragOffset: secondaryPreviewDragOffset,
+                    onDragChanged: handleSecondaryPreviewDragChanged,
+                    onDragEnded: handleSecondaryPreviewDragEnded
+                )
+                .zIndex(6)
+            }
+
+            if captureExperience == .dual {
+                CameraLightHUD(level: lightLevel)
+                    .offset(y: 58)
+                    .opacity(showLightHUD ? 1 : 0)
+                    .scaleEffect(showLightHUD ? 1 : 0.96)
+                    .zIndex(30)
+            }
+
+            if captureExperience == .dual {
+                DualCameraLightControlLayout(
+                    level: $lightLevel,
+                    onEditingChanged: handleLightEditingChanged
+                )
+                .zIndex(10)
             }
 
             if captureExperience == .dual, !dualPreviewIsVisible {
@@ -246,35 +275,12 @@ struct CameraCaptureView: View {
                 .zIndex(20)
             }
 
-            if captureExperience == .dual {
-                Text("WHAT YOU SAW")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.8)
-                    .foregroundStyle(.white.opacity(0.82))
-                    .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 66)
-                    .accessibilityLabel("見ていた景色")
-
-                Text("YOU")
-                    .font(.system(size: 9, weight: .bold))
-                    .tracking(1.4)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(.black.opacity(0.28), in: Capsule())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.top, 91)
-                    .padding(.trailing, 24)
-                    .accessibilityLabel("その時の自分")
-            }
-
             VStack {
                 topControls
                 Spacer()
                 bottomControls
             }
-            .zIndex(10)
+            .zIndex(20)
 
             if showFilmReveal && captureExperience == .single {
                 filmReveal
@@ -282,7 +288,7 @@ struct CameraCaptureView: View {
             }
 
             Color.white
-                .opacity(flashOverlay ? 0.8 : 0)
+                .opacity(flashOverlay ? 0.58 : 0)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
                 .animation(.easeOut(duration: 0.16), value: flashOverlay)
@@ -305,59 +311,6 @@ struct CameraCaptureView: View {
 
     private var dualShowsFailure: Bool {
         camera.dualCameraUXState == .failed || camera.dualCameraUXState == .unsupported
-    }
-
-    private func showLightControl() {
-        guard camera.dualCameraUXState == .ready else { return }
-        lightDismissTask?.cancel()
-        lightDismissTask = nil
-        lightDragStartLevel = camera.lightLevel
-        let animation = reduceMotion ? nil : Animation.easeOut(duration: 0.16)
-        withAnimation(animation) { isLightControlVisible = true }
-    }
-
-    private func handleLightControlTap() {
-        showLightControl()
-        scheduleLightControlDismissal()
-    }
-
-    private func updateLightFromIconDrag(_ translation: CGSize) {
-        guard camera.dualCameraUXState == .ready else { return }
-        if !isAdjustingLight {
-            lightDragStartLevel = camera.lightLevel
-            showLightControl()
-            isAdjustingLight = true
-        }
-        camera.setLightLevel(lightDragStartLevel - Double(translation.height / 180) * 100)
-    }
-
-    private func updateLightFromSlider(_ level: Double) {
-        guard camera.dualCameraUXState == .ready else { return }
-        lightDismissTask?.cancel()
-        isAdjustingLight = true
-        camera.setLightLevel(level)
-    }
-
-    private func finishLightAdjustment() {
-        guard isLightControlVisible else { return }
-        camera.setLightLevel(camera.lightLevel, isFinal: true)
-        isAdjustingLight = false
-        scheduleLightControlDismissal()
-    }
-
-    private func scheduleLightControlDismissal() {
-        lightDismissTask?.cancel()
-        lightDismissTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .milliseconds(450))
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            let animation = reduceMotion ? nil : Animation.easeIn(duration: 0.22)
-            withAnimation(animation) { isLightControlVisible = false }
-            lightDismissTask = nil
-        }
     }
 
     private var topControls: some View {
@@ -426,6 +379,20 @@ struct CameraCaptureView: View {
                     .padding(.horizontal, 22)
                 }
 
+                if captureExperience == .dual {
+                    HStack {
+                        Spacer()
+                        cameraCircleButton(icon: "camera.rotate") {
+                            swapDualPresentation()
+                        }
+                        .rotationEffect(.degrees(dualPresentation == .frontMain ? 160 : 0))
+                        .animation(.easeOut(duration: 0.22), value: dualPresentation)
+                        .disabled(isSwappingDualPresentation || !dualPreviewIsVisible)
+                        .accessibilityLabel("Swap main camera")
+                    }
+                    .padding(.horizontal, 24)
+                }
+
                 Button {
                         flashOverlay = true
                         if captureExperience == .dual { camera.captureDualPhoto() }
@@ -441,8 +408,8 @@ struct CameraCaptureView: View {
                         }
                     }
                     .buttonStyle(ShutterButtonStyle())
-                    .disabled(!camera.canCapture)
-                    .opacity(camera.canCapture ? 1 : 0.5)
+                    .disabled(!camera.canCapture || isSwappingDualPresentation)
+                    .opacity(camera.canCapture && !isSwappingDualPresentation ? 1 : 0.5)
                     .accessibilityLabel(captureExperience == .dual ? "景色と自分を同時に撮影" : "写真を撮影")
             }
         }
@@ -455,6 +422,94 @@ struct CameraCaptureView: View {
                 endPoint: .bottom
             )
         )
+    }
+
+    private func handleLightEditingChanged(_ editing: Bool) {
+        hideLightHUDTask?.cancel()
+        hideLightHUDTask = nil
+
+        if editing {
+            isAdjustingLight = true
+#if DEBUG
+            print("[CameraUI][LIGHT_DRAG_BEGIN]")
+#endif
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
+                showLightHUD = true
+            }
+            return
+        }
+
+        isAdjustingLight = false
+#if DEBUG
+        print("[CameraUI][LIGHT_DRAG_END] value=\(Int((lightLevel * 100).rounded()))")
+#endif
+        hideLightHUDTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(450))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, !isAdjustingLight else { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                showLightHUD = false
+            }
+            hideLightHUDTask = nil
+        }
+    }
+
+    private func handleSecondaryPreviewDragChanged(_ translation: CGSize) {
+        if !isDraggingSecondaryPreview {
+            isDraggingSecondaryPreview = true
+#if DEBUG
+            print("[CameraUI][PIP_DRAG_BEGIN]")
+#endif
+        }
+        secondaryPreviewDragOffset = translation
+    }
+
+    private func handleSecondaryPreviewDragEnded(_ translation: CGSize, layout: DualCameraOverlayLayout) {
+        let sourceCorner = secondaryPreviewCorner
+        let sourceFrame = layout.pipFrame(for: sourceCorner)
+            .offsetBy(dx: translation.width, dy: translation.height)
+        let targetCorner = layout.nearestValidPiPCorner(from: CGPoint(x: sourceFrame.midX, y: sourceFrame.midY))
+
+        secondaryPreviewCorner = targetCorner
+        secondaryPreviewDragOffset = .zero
+        isDraggingSecondaryPreview = false
+        secondaryPreviewSnapToken &+= 1
+
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+#if DEBUG
+        print("[CameraUI][PIP_SNAP] from=\(sourceCorner.rawValue) to=\(targetCorner.rawValue)")
+        print("[CameraUI][PIP_DRAG_END]")
+#endif
+    }
+
+    private func swapDualPresentation() {
+        guard !isSwappingDualPresentation, dualPreviewIsVisible else { return }
+        swapCompletionTask?.cancel()
+        isSwappingDualPresentation = true
+        let source = dualPresentation
+#if DEBUG
+        print("[CameraUI][SWAP_BEGIN] from=\(source.rawValue)")
+#endif
+        dualPresentation = source == .backMain ? .frontMain : .backMain
+        dualPresentationSwapToken &+= 1
+
+        swapCompletionTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(240))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            isSwappingDualPresentation = false
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+#if DEBUG
+            print("[CameraUI][SWAP_END] to=\(dualPresentation.rawValue)")
+#endif
+            swapCompletionTask = nil
+        }
     }
 
     private var captureModeSelector: some View {
@@ -517,7 +572,7 @@ struct CameraCaptureView: View {
             let memory = try memoryRepository.saveDualCameraMemory(
                 frontImage: result.frontImage,
                 backImage: result.backImage,
-                createdAt: .now
+                createdAt: result.requestedAt
             )
             camera.clearDualCapture()
             isSavingDualMemory = false
@@ -771,160 +826,313 @@ private struct DualCameraPreparingSurface: View {
     }
 }
 
-private struct DualCameraLightControl: View {
+private struct CameraLightEffectView: View {
     let level: Double
-    let isExpanded: Bool
-    let isEnabled: Bool
-    let reduceMotion: Bool
-    let onTap: () -> Void
-    let onDragChanged: (CGSize) -> Void
-    let onDragEnded: () -> Void
-    let onSliderChanged: (Double) -> Void
-    let onSliderEnded: () -> Void
+
+    private var normalizedLevel: Double {
+        guard level.isFinite else { return 0.5 }
+        return min(1, max(0, level))
+    }
+
+    private var baseLift: Double {
+        0.035 * pow(normalizedLevel, 1.2)
+    }
+
+    private var softClear: Double {
+        let arrival = smoothStep(from: 0.24, to: 0.68, value: normalizedLevel)
+        let flashTransition = smoothStep(from: 0.70, to: 1, value: normalizedLevel)
+        return arrival * (1 - (flashTransition * 0.28))
+    }
+
+    private var digicamFlash: Double {
+        smoothStep(from: 0.70, to: 1, value: normalizedLevel)
+    }
+
+    private func smoothStep(from lowerBound: Double, to upperBound: Double, value: Double) -> Double {
+        let progress = min(1, max(0, (value - lowerBound) / (upperBound - lowerBound)))
+        return progress * progress * (3 - (2 * progress))
+    }
 
     var body: some View {
-        VStack(spacing: 8) {
-            Button(action: onTap) {
-                Image(systemName: "sun.max")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.white.opacity(isEnabled ? 0.94 : 0.48))
-                    .frame(width: 44, height: 44)
-                    .background(.black.opacity(0.24), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!isEnabled)
-            .highPriorityGesture(
-                DragGesture(minimumDistance: 2)
-                    .onChanged { onDragChanged($0.translation) }
-                    .onEnded { _ in onDragEnded() }
+        ZStack {
+            // A quiet daylight lift that preserves the original preview at low values.
+            LinearGradient(
+                colors: [
+                    .white.opacity(baseLift + (softClear * 0.018)),
+                    .white.opacity(baseLift * 0.72),
+                    .clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
-            .accessibilityLabel("明るさを調整")
-            .accessibilityValue("\(Int(level.rounded()))パーセント")
-            .accessibilityAdjustableAction { direction in
-                guard isEnabled else { return }
-                switch direction {
-                case .increment: onSliderChanged(min(100, level + 5))
-                case .decrement: onSliderChanged(max(0, level - 5))
-                @unknown default: return
-                }
-                onSliderEnded()
-            }
 
-            if isExpanded {
-                VerticalLightSlider(
-                    level: level,
-                    onChanged: onSliderChanged,
-                    onEnded: onSliderEnded
-                )
-                .transition(
-                    reduceMotion
-                        ? .opacity
-                        : .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
-                )
-            }
+            // Clear blue-white air in the middle range, kept below visible color-cast levels.
+            Color(red: 0.86, green: 0.94, blue: 1)
+                .opacity((softClear * 0.014) + (digicamFlash * 0.010))
+                .blendMode(.softLight)
+
+            // A broad highlight reads like compact-camera light without becoming a spotlight.
+            RadialGradient(
+                colors: [
+                    .white.opacity((softClear * 0.026) + (digicamFlash * 0.034)),
+                    .white.opacity(digicamFlash * 0.012),
+                    .clear
+                ],
+                center: UnitPoint(x: 0.34, y: 0.30),
+                startRadius: 8,
+                endRadius: 430
+            )
+            .blendMode(.screen)
+
+            // High-range flash lift stays directional so blacks are not uniformly washed gray.
+            LinearGradient(
+                colors: [
+                    .white.opacity(digicamFlash * 0.036),
+                    Color(red: 0.91, green: 0.96, blue: 1).opacity(digicamFlash * 0.018),
+                    .clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .blendMode(.screen)
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(digicamFlash * 0.010)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .blendMode(.softLight)
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isExpanded)
-        .allowsHitTesting(isEnabled)
+        .ignoresSafeArea(edges: .top)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
-private struct VerticalLightSlider: View {
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    let level: Double
-    let onChanged: (Double) -> Void
-    let onEnded: () -> Void
+private struct DualCameraLightControlLayout: View {
+    @Binding var level: Double
+    let onEditingChanged: (Bool) -> Void
 
     var body: some View {
         GeometryReader { proxy in
-            let travel = max(1, proxy.size.height - 30)
-            let fraction = min(1, max(0, level / 100))
-            let handleY = 15 + CGFloat(1 - fraction) * travel
+            let layout = DualCameraOverlayLayout(
+                bounds: CGRect(origin: .zero, size: proxy.size),
+                safeAreaTop: proxy.safeAreaInsets.top,
+                safeAreaBottom: proxy.safeAreaInsets.bottom
+            )
+
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: layout.lightControlTop)
+                    .allowsHitTesting(false)
+
+                VerticalCameraLightControl(
+                    level: $level,
+                    trackHeight: layout.lightTrackHeight,
+                    onEditingChanged: onEditingChanged
+                )
+
+                Spacer(minLength: 24)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .padding(.trailing, 16)
+        }
+    }
+}
+
+private struct DualCameraPiPDragSurface: View {
+    let corner: DualCameraPiPCorner
+    let dragOffset: CGSize
+    let onDragChanged: (CGSize) -> Void
+    let onDragEnded: (CGSize, DualCameraOverlayLayout) -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let layout = DualCameraOverlayLayout(
+                bounds: CGRect(origin: .zero, size: proxy.size),
+                safeAreaTop: proxy.safeAreaInsets.top,
+                safeAreaBottom: proxy.safeAreaInsets.bottom
+            )
+            let baseFrame = layout.pipFrame(for: corner)
+
+            Color.clear
+                .frame(width: baseFrame.width, height: baseFrame.height)
+                .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .offset(
+                    x: baseFrame.minX + dragOffset.width,
+                    y: baseFrame.minY + dragOffset.height
+                )
+                .gesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                        .onChanged { onDragChanged($0.translation) }
+                        .onEnded { onDragEnded($0.translation, layout) }
+                )
+                .accessibilityLabel("Move secondary camera preview")
+                .accessibilityHint("Drag and release to snap to a safe corner")
+        }
+        .allowsHitTesting(true)
+    }
+}
+
+private struct VerticalCameraLightControl: View {
+    @Binding var level: Double
+    let trackHeight: CGFloat
+    let onEditingChanged: (Bool) -> Void
+    @State private var isDragging = false
+
+    private var percentage: Int {
+        Int((min(1, max(0, level)) * 100).rounded())
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("LIGHT")
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(1.5)
+            Text("\(percentage)%")
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+
+            VerticalLightTrack(
+                level: $level,
+                isDragging: $isDragging,
+                onEditingChanged: onEditingChanged
+            )
+            .frame(width: 44, height: trackHeight)
+
+            Image(systemName: "sun.max.fill")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Color(red: 1, green: 0.91, blue: 0.67))
+
+            Capsule()
+                .fill(.white.opacity(0.14))
+                .frame(width: 34, height: 0.5)
+
+            Button {
+                level = 0.5
+            } label: {
+                VStack(spacing: 1) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("RESET")
+                        .font(.system(size: 8, weight: .semibold))
+                        .tracking(1.1)
+                    Text("50%")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                }
+                .frame(width: 52, height: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Reset camera light")
+            .accessibilityValue("50 percent")
+        }
+        .foregroundStyle(.white.opacity(0.92))
+        .padding(.vertical, 12)
+        .frame(width: 76)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .background(.black.opacity(0.38), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(.white.opacity(0.14), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct VerticalLightTrack: View {
+    @Binding var level: Double
+    @Binding var isDragging: Bool
+    let onEditingChanged: (Bool) -> Void
+
+    private var safeLevel: Double {
+        guard level.isFinite else { return 0.5 }
+        return min(1, max(0, level))
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let trackHeight = max(1, proxy.size.height - 30)
+            let thumbY = 15 + CGFloat(1 - safeLevel) * trackHeight
 
             ZStack(alignment: .top) {
                 Capsule()
-                    .fill(.white.opacity(0.42))
-                    .frame(width: 2, height: travel)
+                    .fill(.black.opacity(0.34))
+                    .frame(width: 7, height: trackHeight)
                     .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
 
                 Capsule()
-                    .fill(.white.opacity(0.76))
-                    .frame(width: 2, height: max(0, proxy.size.height - 15 - handleY))
+                    .fill(Color(red: 1, green: 0.92, blue: 0.70).opacity(0.88))
+                    .frame(width: 7, height: CGFloat(safeLevel) * trackHeight)
                     .position(
                         x: proxy.size.width / 2,
-                        y: handleY + max(0, proxy.size.height - 15 - handleY) / 2
+                        y: thumbY + (CGFloat(safeLevel) * trackHeight / 2)
                     )
-
-                Capsule()
-                    .fill(.white.opacity(0.55))
-                    .frame(width: 8, height: 1)
-                    .position(x: proxy.size.width / 2, y: 15 + travel * 0.5)
-
-                Text("100")
-                    .font(.system(size: 7, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.54))
-                    .position(x: 8, y: 10)
-
-                Text("0")
-                    .font(.system(size: 7, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.54))
-                    .position(x: 8, y: proxy.size.height - 10)
 
                 Circle()
-                    .fill(Color.white.opacity(0.94))
-                    .frame(width: 24, height: 24)
-                    .shadow(color: .black.opacity(0.22), radius: 4, y: 2)
-                    .position(
-                        x: proxy.size.width / 2,
-                        y: handleY
-                    )
+                    .fill(.white.opacity(0.96))
+                    .frame(width: 30, height: 30)
+                    .overlay(Circle().stroke(.black.opacity(0.12), lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
+                    .position(x: proxy.size.width / 2, y: thumbY)
             }
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                    .onChanged { value in
-                        let percentage = (1 - Double((value.location.y - 15) / travel)) * 100
-                        onChanged(min(100, max(0, percentage)))
+                    .onChanged { gesture in
+                        if !isDragging {
+                            isDragging = true
+                            onEditingChanged(true)
+                        }
+                        let normalized = 1 - Double((gesture.location.y - 15) / trackHeight)
+                        level = min(1, max(0, normalized))
                     }
-                    .onEnded { _ in onEnded() }
+                    .onEnded { _ in
+                        guard isDragging else { return }
+                        isDragging = false
+                        onEditingChanged(false)
+                    }
             )
         }
-        .frame(width: 44, height: verticalSizeClass == .compact ? 156 : 180)
-        .padding(.vertical, 4)
-        .background(.ultraThinMaterial, in: Capsule())
-        .background(.black.opacity(0.20), in: Capsule())
-        .overlay(Capsule().stroke(.white.opacity(0.16), lineWidth: 0.5))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("明るさ")
-        .accessibilityValue("\(Int(level.rounded()))パーセント")
+        .accessibilityLabel("Camera light")
+        .accessibilityValue("\(Int((safeLevel * 100).rounded())) percent")
         .accessibilityAdjustableAction { direction in
             switch direction {
-            case .increment: onChanged(min(100, level + 5))
-            case .decrement: onChanged(max(0, level - 5))
-            @unknown default: return
+            case .increment: level = min(1, safeLevel + 0.05)
+            case .decrement: level = max(0, safeLevel - 0.05)
+            @unknown default: break
             }
-            onEnded()
         }
     }
 }
 
-private struct LightPercentageHUD: View {
+private struct CameraLightHUD: View {
     let level: Double
 
+    private var percentage: Int {
+        let safeLevel = level.isFinite ? min(1, max(0, level)) : 0.5
+        return Int((safeLevel * 100).rounded())
+    }
+
     var body: some View {
-        VStack(spacing: 2) {
-            Text("LIGHT")
-                .font(.system(size: 9, weight: .semibold))
-                .tracking(1.8)
-                .foregroundStyle(.white.opacity(0.68))
-            Text("\(Int(level.rounded()))%")
-                .font(.system(size: 28, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.94))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.black.opacity(0.30), in: RoundedRectangle(cornerRadius: 12))
-        .allowsHitTesting(false)
-        .accessibilityElement(children: .combine)
+        Text("\(percentage)%")
+            .font(.system(size: 24, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(.white.opacity(0.96))
+            .frame(width: 92, height: 52)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .background(
+                .black.opacity(0.16),
+                in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(.white.opacity(0.13), lineWidth: 0.5)
+            )
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
