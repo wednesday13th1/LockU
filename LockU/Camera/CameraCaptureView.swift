@@ -23,6 +23,9 @@ struct CameraCaptureView: View {
     @State private var showFilmReveal = false
     @State private var captureHasDailyFilm = false
     @State private var captureExperience: LockUCaptureExperience = .single
+    @State private var isChangingCameraMode = false
+    @State private var selectedMoodEmoji: MemoryMoodEmoji?
+    @State private var memoryNote = ""
     @State private var isSavingDualMemory = false
     @State private var lightLevel: Double = 0.5
     @State private var isAdjustingLight = false
@@ -67,6 +70,8 @@ struct CameraCaptureView: View {
         AnyView(DualCameraReviewView(
             result: result,
             isSaving: isSavingDualMemory,
+            selectedMoodEmoji: $selectedMoodEmoji,
+            memoryNote: $memoryNote,
             onClose: closeDualReview,
             onRetake: retakeDual,
             onSave: { saveDual(result: result) }
@@ -78,6 +83,8 @@ struct CameraCaptureView: View {
             originalImage: original,
             cutoutImage: editor.cutoutImage,
             selectedStyle: $editor.selectedStyle,
+            selectedMoodEmoji: $selectedMoodEmoji,
+            memoryNote: $memoryNote,
             captureMode: reviewMode,
             isExtracting: editor.isExtracting,
             isSaving: isSaving,
@@ -115,12 +122,12 @@ struct CameraCaptureView: View {
     }
 
     private func handleCameraDisappear() {
-        appModel.setCameraPresented(false)
         camera.setCameraScreenActive(false)
         camera.setApplicationActive(false)
         camera.stopSession()
         editor.clear()
         camera.clearDualCapture()
+        clearMemoryExpression()
         hideLightHUDTask?.cancel()
         hideLightHUDTask = nil
         isAdjustingLight = false
@@ -130,6 +137,8 @@ struct CameraCaptureView: View {
         swapCompletionTask?.cancel()
         swapCompletionTask = nil
         isSwappingDualPresentation = false
+        isChangingCameraMode = false
+        appModel.setCameraPresented(false)
     }
 
     private func handlePermissionChange(_ status: AVAuthorizationStatus) {
@@ -142,6 +151,7 @@ struct CameraCaptureView: View {
 
     private func handleCapturedImage(_ image: UIImage?) {
         guard let image else { return }
+        clearMemoryExpression()
         reviewMode = .camera
         let film = dailyFilm
 
@@ -156,6 +166,7 @@ struct CameraCaptureView: View {
     private func handleScenePhaseChange(_ phase: ScenePhase) {
         camera.setApplicationActive(phase == .active)
         guard phase == .active else {
+            isChangingCameraMode = false
             camera.stopSession()
             return
         }
@@ -235,7 +246,7 @@ struct CameraCaptureView: View {
                 CameraLightHUD(level: lightLevel)
                     .offset(y: 58)
                     .opacity(showLightHUD ? 1 : 0)
-                    .scaleEffect(showLightHUD ? 1 : 0.96)
+                    .scaleEffect(reduceMotion ? 1 : (showLightHUD ? 1 : 0.96))
                     .zIndex(30)
             }
 
@@ -292,9 +303,17 @@ struct CameraCaptureView: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
                 .animation(.easeOut(duration: 0.16), value: flashOverlay)
+                .zIndex(40)
         }
         .onChange(of: camera.dualCameraUXState) { _, state in
-            if state == .ready { camera.markDualPreviewVisible() }
+            if state == .ready {
+                camera.markDualPreviewVisible()
+                camera.setDualLightLevel(lightLevel, force: true)
+            }
+        }
+        .onChange(of: lightLevel) { _, level in
+            guard captureExperience == .dual else { return }
+            camera.setDualLightLevel(level)
         }
     }
 
@@ -440,6 +459,7 @@ struct CameraCaptureView: View {
         }
 
         isAdjustingLight = false
+        camera.setDualLightLevel(lightLevel, force: true)
 #if DEBUG
         print("[CameraUI][LIGHT_DRAG_END] value=\(Int((lightLevel * 100).rounded()))")
 #endif
@@ -517,19 +537,34 @@ struct CameraCaptureView: View {
             modeButton("PHOTO", experience: .single)
             modeButton("DUAL", experience: .dual)
         }
-        .disabled(camera.isCapturing)
+        .disabled(camera.isCapturing || isChangingCameraMode)
         .accessibilityElement(children: .contain)
     }
 
     private func modeButton(_ title: String, experience: LockUCaptureExperience) -> some View {
         Button {
-            guard captureExperience != experience else { return }
+            guard captureExperience != experience, !isChangingCameraMode else { return }
+            isChangingCameraMode = true
             if reduceMotion { captureExperience = experience }
             else { withAnimation(.easeInOut(duration: 0.24)) { captureExperience = experience } }
-            if experience == .dual { activateDualMode() }
+            if experience == .dual {
+                camera.startDualSession { started in
+                    if !started, camera.dualCameraUXState == .unsupported {
+                        if reduceMotion { captureExperience = .single }
+                        else {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                captureExperience = .single
+                            }
+                        }
+                    }
+                    isChangingCameraMode = false
+                }
+            }
             else {
                 camera.clearDualCapture()
-                camera.useSingleCamera()
+                camera.useSingleCamera {
+                    isChangingCameraMode = false
+                }
             }
         } label: {
             VStack(spacing: 5) {
@@ -547,21 +582,19 @@ struct CameraCaptureView: View {
     }
 
     private func activateDualMode() {
-        camera.startDualSession { started in
-            guard !started else { return }
-            if reduceMotion { captureExperience = .single }
-            else { withAnimation(.easeInOut(duration: 0.2)) { captureExperience = .single } }
-        }
+        camera.startDualSession()
     }
 
     private func retakeDual() {
         guard !isSavingDualMemory else { return }
+        clearMemoryExpression()
         camera.retakeDualCapture()
     }
 
     private func closeDualReview() {
         guard !isSavingDualMemory else { return }
         camera.clearDualCapture()
+        clearMemoryExpression()
         appModel.selectedTab = .locker
     }
 
@@ -572,11 +605,19 @@ struct CameraCaptureView: View {
             let memory = try memoryRepository.saveDualCameraMemory(
                 frontImage: result.frontImage,
                 backImage: result.backImage,
-                createdAt: result.requestedAt
+                createdAt: result.requestedAt,
+                memoryNote: memoryNote,
+                moodEmoji: selectedMoodEmoji?.rawValue
             )
             camera.clearDualCapture()
+            clearMemoryExpression()
             isSavingDualMemory = false
-            appModel.selectedCapturedImage = memoryRepository.image(for: memory)
+            let ritualImage = memoryRepository.image(
+                for: memory,
+                purpose: .detail,
+                targetPointSize: CGSize(width: 320, height: 320)
+            ) ?? result.backImage.lockUDownsampled(maxDimension: 640)
+            appModel.beginPlacementRitual(memory: memory, displayImage: ritualImage)
             appModel.lockerDoorState = .open
             appModel.selectedTab = .locker
         } catch {
@@ -586,18 +627,13 @@ struct CameraCaptureView: View {
     }
 
     private var alreadyCapturedView: some View {
-        VStack(spacing: 16) {
-            Circle()
-                .fill(LockUDesign.Color.accent)
-                .frame(width: 68, height: 68)
-                .overlay {
-                    Image(systemName: "checkmark")
-                        .font(.title.bold())
-                        .foregroundStyle(.white)
-                }
-                .shadow(color: LockUDesign.Color.accent.opacity(0.22), radius: 14, y: 7)
+        VStack(spacing: 18) {
             if let memory = memoryRepository.memories.first,
-               let image = memoryRepository.image(for: memory) {
+               let image = memoryRepository.image(
+                    for: memory,
+                    purpose: .detail,
+                    targetPointSize: CGSize(width: 128, height: 145)
+               ) {
                 VStack(spacing: 0) {
                     Image(uiImage: image)
                         .resizable()
@@ -612,23 +648,14 @@ struct CameraCaptureView: View {
                 .shadow(color: .black.opacity(0.045), radius: 3, y: 1)
                 .shadow(color: .black.opacity(0.08), radius: 14, y: 7)
             }
-            Text("今日の思い出")
-                .font(LockUDesign.Typography.screenTitle)
-            Text("ロッカーに追加されました！")
-                .font(LockUDesign.Typography.body)
-                .foregroundStyle(LockUDesign.Color.textSecondary)
-            Button("ロッカーを見る") {
+            Text("今日も残った。")
+                .font(LockUDesign.Typography.sectionTitle)
+                .foregroundStyle(LockUDesign.Color.schoolNavy)
+            Button("ロッカーへ戻る") {
                 appModel.lockerDoorState = .open
                 appModel.selectedTab = .locker
             }
             .buttonStyle(LockUPrimaryButtonStyle())
-            Button("思い出を見る") {
-                appModel.selectedTab = .book
-            }
-            .buttonStyle(LockUSecondaryButtonStyle())
-            Text("明日もお楽しみに！")
-                .font(LockUDesign.Typography.caption)
-                .foregroundStyle(LockUDesign.Color.textSecondary)
         }
         .padding(24)
         .frame(maxWidth: 380)
@@ -650,6 +677,7 @@ struct CameraCaptureView: View {
 
     private func receiveLibraryImage(_ image: UIImage) {
         camera.stopSession()
+        clearMemoryExpression()
         reviewMode = .photoLibrary
         captureHasDailyFilm = false
         editor.reset(with: image)
@@ -659,12 +687,14 @@ struct CameraCaptureView: View {
         editor.clear()
         camera.capturedImage = nil
         captureHasDailyFilm = false
+        clearMemoryExpression()
         camera.startSession()
     }
 
     private func closeEditor() {
         editor.clear()
         camera.capturedImage = nil
+        clearMemoryExpression()
         appModel.selectedTab = .locker
     }
 
@@ -673,14 +703,16 @@ struct CameraCaptureView: View {
         let imageStyle = editor.selectedStyle
         isSaving = true
         do {
-            _ = try memoryRepository.saveImage(
+            let memory = try memoryRepository.saveImage(
                 image,
                 createdAt: .now,
                 filterID: nil,
                 weather: nil,
                 captureMode: reviewMode,
                 imageStyle: imageStyle,
-                dailyFilm: captureHasDailyFilm && reviewMode == .camera ? dailyFilm : nil
+                dailyFilm: captureHasDailyFilm && reviewMode == .camera ? dailyFilm : nil,
+                memoryNote: memoryNote,
+                moodEmoji: selectedMoodEmoji?.rawValue
             )
             if imageStyle == .cutout {
                 do {
@@ -696,14 +728,21 @@ struct CameraCaptureView: View {
             }
             camera.capturedImage = nil
             editor.clear()
+            clearMemoryExpression()
             isSaving = false
-            appModel.selectedCapturedImage = image
+            let ritualImage = image.lockUDownsampled(maxDimension: 640)
+            appModel.beginPlacementRitual(memory: memory, displayImage: ritualImage)
             appModel.lockerDoorState = .open
             appModel.selectedTab = .locker
         } catch {
             isSaving = false
             appModel.report(error)
         }
+    }
+
+    private func clearMemoryExpression() {
+        selectedMoodEmoji = nil
+        memoryNote = ""
     }
 
     private var filmReveal: some View {
@@ -1139,6 +1178,8 @@ private struct CameraLightHUD: View {
 private struct DualCameraReviewView: View {
     let result: DualCameraCaptureResult
     let isSaving: Bool
+    @Binding var selectedMoodEmoji: MemoryMoodEmoji?
+    @Binding var memoryNote: String
     let onClose: () -> Void
     let onRetake: () -> Void
     let onSave: () -> Void
@@ -1201,23 +1242,31 @@ private struct DualCameraReviewView: View {
 
                 Spacer()
 
-                VStack(spacing: 12) {
-                    Button("撮り直す", action: onRetake)
-                        .buttonStyle(LockUSecondaryButtonStyle())
-                        .disabled(isSaving)
-                    Button(action: onSave) {
-                        if isSaving {
-                            HStack(spacing: 8) { ProgressView(); Text("保存しています…") }
-                        } else {
-                            Text("ロッカーに残す")
+                ScrollView {
+                    VStack(spacing: 12) {
+                        MemoryExpressionEditor(
+                            selectedMoodEmoji: $selectedMoodEmoji,
+                            memoryNote: $memoryNote
+                        )
+                        Button("撮り直す", action: onRetake)
+                            .buttonStyle(LockUSecondaryButtonStyle())
+                            .disabled(isSaving)
+                        Button(action: onSave) {
+                            if isSaving {
+                                HStack(spacing: 8) { ProgressView(); Text("保存しています…") }
+                            } else {
+                                Text("ロッカーに残す")
+                            }
                         }
+                        .buttonStyle(LockUPrimaryButtonStyle())
+                        .disabled(isSaving)
                     }
-                    .buttonStyle(LockUPrimaryButtonStyle())
-                    .disabled(isSaving)
+                    .padding(.horizontal, 22)
+                    .padding(.bottom, 28)
                 }
-                .padding(.horizontal, 22)
-                .padding(.bottom, 28)
+                .scrollDismissesKeyboard(.interactively)
                 .background(LinearGradient(colors: [.clear, .black.opacity(0.68)], startPoint: .top, endPoint: .bottom))
+                .frame(maxHeight: 390)
             }
         }
     }
@@ -1236,6 +1285,8 @@ private struct ShutterButtonStyle: ButtonStyle {
         originalImage: UIImage(systemName: "photo") ?? UIImage(),
         cutoutImage: nil,
         selectedStyle: .constant(.original),
+        selectedMoodEmoji: .constant(nil),
+        memoryNote: .constant(""),
         captureMode: .camera,
         isExtracting: false,
         isSaving: false,
@@ -1252,6 +1303,8 @@ private struct ShutterButtonStyle: ButtonStyle {
         originalImage: UIImage(systemName: "photo") ?? UIImage(),
         cutoutImage: nil,
         selectedStyle: .constant(.original),
+        selectedMoodEmoji: .constant(nil),
+        memoryNote: .constant(""),
         captureMode: .photoLibrary,
         isExtracting: true,
         isSaving: false,
@@ -1268,6 +1321,8 @@ private struct ShutterButtonStyle: ButtonStyle {
         originalImage: UIImage(systemName: "photo") ?? UIImage(),
         cutoutImage: nil,
         selectedStyle: .constant(.original),
+        selectedMoodEmoji: .constant(nil),
+        memoryNote: .constant(""),
         captureMode: .camera,
         isExtracting: false,
         isSaving: false,

@@ -14,11 +14,6 @@ struct LockerHomeView: View {
     @State private var appeared = false
     @StateObject private var lockerResurfacingCoordinator = LockerResurfacingCoordinator()
 
-    private var resurfacedMemory: MemoryRecord? {
-        guard let id = lockerResurfacingCoordinator.presentedMemoryID else { return nil }
-        return memoryRepository.memories.first(where: { $0.id == id })
-    }
-
     var body: some View {
         GeometryReader { proxy in
             let isOpen = appModel.lockerDoorState.isOpenOrOpening
@@ -58,32 +53,6 @@ struct LockerHomeView: View {
                     LockerDoorView()
                         .zIndex(10)
 
-                    if let memory = resurfacedMemory {
-                        Color.black.opacity(0.12)
-                            .contentShape(Rectangle())
-                            .onTapGesture { lockerResurfacingCoordinator.close() }
-                            .transition(.opacity)
-                            .zIndex(50)
-
-                        LockerResurfacedMemoryCard(
-                            memory: memory,
-                            referenceDate: demoClock.now,
-                            onClose: { lockerResurfacingCoordinator.close() },
-                            onEngaged: {
-                                lockerResurfacingCoordinator.recordPresentedReflection(at: demoClock.now)
-                            },
-                            onViewMemory: {
-                                lockerResurfacingCoordinator.recordPresentedReflection(at: demoClock.now)
-                                lockerResurfacingCoordinator.close()
-                                appModel.peekMemory = memory
-                                appModel.selectedTab = .peek
-                            }
-                        )
-                        .environmentObject(memoryRepository)
-                        .frame(width: min(lockerWidth * 0.80, 340))
-                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                        .zIndex(51)
-                    }
                 }
                 .frame(width: lockerWidth, height: lockerHeight)
                 .animation(.easeOut(duration: 0.22), value: isOpen)
@@ -107,7 +76,7 @@ struct LockerHomeView: View {
             }
             .onChange(of: memoryRepository.memories.count) { _, _ in refreshLockerResurfacing() }
             .onChange(of: demoClock.now) { _, _ in refreshLockerResurfacing() }
-            .animation(.easeOut(duration: 0.23), value: lockerResurfacingCoordinator.presentedMemoryID)
+            .animation(.easeOut(duration: 0.23), value: lockerResurfacingCoordinator.candidateMemoryID)
         }
     }
 
@@ -142,7 +111,13 @@ private struct LockerResurfacedMemoryCard: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
                 Group {
-                    if let image {
+                    if memory.isDualCameraMemory {
+                        DualMemoryImageSurface(
+                            memory: memory,
+                            purpose: .detail,
+                            targetPointSize: CGSize(width: 340, height: 390)
+                        )
+                    } else if let image {
                         Image(uiImage: image).resizable().scaledToFill()
                     } else {
                         Color(red: 205/255, green: 216/255, blue: 220/255)
@@ -164,6 +139,9 @@ private struct LockerResurfacedMemoryCard: View {
             }
 
             VStack(alignment: .leading, spacing: 5) {
+                if let emoji = memory.moodEmoji {
+                    Text(emoji).font(.system(size: 22))
+                }
                 HStack(alignment: .firstTextBaseline) {
                     Text(memory.memoryDate.formatted(.dateTime.month(.abbreviated).day()))
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -373,6 +351,8 @@ private struct LockerInteriorSurface: View {
                     .padding(.horizontal, side + 1)
                     .padding(.top, ceiling)
                     .padding(.bottom, floor)
+                    .saturation(0.62)
+                    .opacity(0.34)
 
                 LockerInteriorContent()
                     .padding(.horizontal, side + 1)
@@ -395,12 +375,21 @@ struct LockerInteriorBackground: View {
 
     var body: some View {
         LinearGradient(colors: style.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+            .overlay(LinearGradient(colors: [Color(red: 214/255, green: 239/255, blue: 246/255).opacity(0.16), .clear, Color(red: 250/255, green: 241/255, blue: 218/255).opacity(0.07)], startPoint: .topLeading, endPoint: .bottomTrailing))
             .overlay {
                 Canvas { context, size in
                     for index in 0..<18 {
                         let x = CGFloat((index * 47) % 101) / 101 * size.width
                         let y = CGFloat((index * 71) % 103) / 103 * size.height
                         context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 0.7, height: 0.7)), with: .color(.white.opacity(0.035)))
+                    }
+                    for index in 0..<7 {
+                        let x = CGFloat((index * 37 + 11) % 97) / 97 * size.width
+                        let y = CGFloat((index * 61 + 19) % 101) / 101 * size.height
+                        var scratch = Path()
+                        scratch.move(to: CGPoint(x: x, y: y))
+                        scratch.addLine(to: CGPoint(x: x + 5 + CGFloat(index % 3) * 2, y: y + 0.6))
+                        context.stroke(scratch, with: .color(.white.opacity(0.045)), lineWidth: 0.55)
                     }
                 }
             }

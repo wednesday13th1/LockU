@@ -63,10 +63,14 @@ nonisolated struct MemoryResurfacingService {
         }
         guard !eligible.isEmpty else { return nil }
 
+        let dailyCaptures = eligible.filter { $0.origin == .dailyCapture }
+        let nonSeed = eligible.filter { $0.origin != .seedImport }
+        let preferred = !dailyCaptures.isEmpty ? dailyCaptures : (!nonSeed.isEmpty ? nonSeed : eligible)
+
         let daySeed = stableDaySeed(today, calendar: calendar)
         let windows = prioritizedWindows(daySeed: daySeed)
         for window in windows {
-            let candidates = eligible.filter { memory in
+            let candidates = preferred.filter { memory in
                 let age = calendar.dateComponents(
                     [.day],
                     from: calendar.startOfDay(for: memory.memoryDate),
@@ -77,7 +81,7 @@ nonisolated struct MemoryResurfacingService {
             if let selected = stableSelection(candidates, daySeed: daySeed) { return selected }
         }
 
-        let older = eligible.filter {
+        let older = preferred.filter {
             (calendar.dateComponents([.day], from: calendar.startOfDay(for: $0.memoryDate), to: today).day ?? 0) >= 5
         }
         return stableSelection(older, daySeed: daySeed)
@@ -126,7 +130,15 @@ nonisolated struct MemoryResurfacingService {
     }
 
     private func stableSelection(_ memories: [MemoryRecord], daySeed: UInt64) -> MemoryRecord? {
-        memories.min { stableScore(for: $0.id, daySeed: daySeed) < stableScore(for: $1.id, daySeed: daySeed) }
+        memories.min { lhs, rhs in
+            if lhs.revisitCount != rhs.revisitCount { return lhs.revisitCount < rhs.revisitCount }
+            switch (lhs.lastRevisitedAt, rhs.lastRevisitedAt) {
+            case (nil, .some): return true
+            case (.some, nil): return false
+            case let (.some(left), .some(right)) where left != right: return left < right
+            default: return stableScore(for: lhs.id, daySeed: daySeed) < stableScore(for: rhs.id, daySeed: daySeed)
+            }
+        }
     }
 
     private func stableDaySeed(_ date: Date, calendar: Calendar) -> UInt64 {

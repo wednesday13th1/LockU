@@ -243,6 +243,7 @@ final class CameraSessionManager: ObservableObject {
     private var isApplicationActive = true
     private var isCameraScreenActive = false
     private var dualOperationGeneration = 0
+    private var isDualLifecycleInvalidated = false
     private var diagnosticSessionID = UUID()
 
     var supportsDualCamera: Bool { AVCaptureMultiCamSession.isMultiCamSupported }
@@ -327,11 +328,9 @@ final class CameraSessionManager: ObservableObject {
     }
 
     func startSession() {
-        guard permissionStatus == .authorized else { return }
+        guard permissionStatus == .authorized, isApplicationActive, isCameraScreenActive else { return }
         if sessionMode == .dual {
-            dualController.start(generation: dualOperationGeneration) { [weak self] running in
-                self?.dualSessionState = running ? .running : .failed
-            }
+            startDualSession()
             return
         }
         if !isConfigured {
@@ -344,13 +343,6 @@ final class CameraSessionManager: ObservableObject {
     }
 
     func stopSession() {
-        if sessionMode == .dual {
-            dualOperationGeneration &+= 1
-            dualController.updateDiagnosticContext(
-                generation: dualOperationGeneration,
-                screenActive: false
-            )
-        }
         controller.stop { [weak self] in
             self?.isSessionRunning = false
         }
@@ -401,6 +393,11 @@ final class CameraSessionManager: ObservableObject {
 
     func startDualSession(completion: (@MainActor (Bool) -> Void)? = nil) {
         dualCameraLog("OPEN_REQUEST")
+        if dualCameraHealth == .unavailable || dualSessionState == .failed {
+            dualCameraLog("OPEN_IGNORED_RETRY_REQUIRED generation=\(dualOperationGeneration)")
+            completion?(false)
+            return
+        }
         switch dualSessionState {
         case .running:
             dualCameraLog("OPEN_IGNORED_ALREADY_ACTIVE state=running")
@@ -414,6 +411,7 @@ final class CameraSessionManager: ObservableObject {
         }
 
         dualCameraLog("OPEN_ACCEPTED")
+        isDualLifecycleInvalidated = false
         let authorization = AVCaptureDevice.authorizationStatus(for: .video)
         dualCameraLog("PERMISSION_CHECK status=\(authorization.rawValue)")
         permissionStatus = authorization
@@ -467,6 +465,7 @@ final class CameraSessionManager: ObservableObject {
         let generation = dualOperationGeneration
         // Claim the open synchronously on MainActor before the asynchronous single-camera stop.
         // This closes the small window where a second SwiftUI lifecycle callback could be accepted.
+        sessionMode = .dual
         dualSessionState = .configuring
         controller.stop { [weak self] in
             guard let self else { return }
@@ -485,7 +484,6 @@ final class CameraSessionManager: ObservableObject {
                 }
                 switch result {
                 case .success:
-                    self.sessionMode = .dual
                     self.dualSessionState = .ready
                     self.dualController.start(generation: generation) { [weak self] running in
                         guard let self else { return }
@@ -499,18 +497,16 @@ final class CameraSessionManager: ObservableObject {
                         self.dualSessionState = running ? .running : .failed
                         if !running {
                             self.dualCameraLog("FALLBACK reason=startupFailure generation=\(generation)")
-                            self.sessionMode = .single
-                            self.errorMessage = "Dual Cameraを開始できませんでした。通常のカメラで撮影できます。"
-                            self.configureAndStart()
+                            self.dualCameraHealth = .unavailable
+                            self.errorMessage = "Dual Cameraを開始できませんでした。Retryでもう一度お試しください。"
                         }
                         completion?(running)
                     }
                 case .failure:
                     self.dualCameraLog("FALLBACK reason=configurationFailure generation=\(generation)")
                     self.dualSessionState = .failed
-                    self.sessionMode = .single
-                    self.errorMessage = "Dual Cameraを開始できませんでした。通常のカメラで撮影できます。"
-                    self.configureAndStart()
+                    self.dualCameraHealth = .unavailable
+                    self.errorMessage = "Dual Cameraを準備できませんでした。Retryでもう一度お試しください。"
                     completion?(false)
                 }
             }
@@ -518,8 +514,7 @@ final class CameraSessionManager: ObservableObject {
     }
 
     func stopDualSession() {
-        dualOperationGeneration &+= 1
-        dualController.updateDiagnosticContext(generation: dualOperationGeneration, screenActive: isCameraScreenActive && isApplicationActive)
+        invalidateDualLifecycle(reason: "explicit dual stop")
         dualSessionState = .stopping
         dualController.stop { [weak self] in
             guard let self else { return }
@@ -529,15 +524,15 @@ final class CameraSessionManager: ObservableObject {
         }
     }
 
-    func useSingleCamera() {
-        dualOperationGeneration &+= 1
-        dualController.updateDiagnosticContext(generation: dualOperationGeneration, screenActive: isCameraScreenActive && isApplicationActive)
+    func useSingleCamera(completion: (@MainActor () -> Void)? = nil) {
+        invalidateDualLifecycle(reason: "dual to photo")
         dualSessionState = .stopping
         dualController.stop { [weak self] in
             guard let self else { return }
             self.sessionMode = .single
             self.dualSessionState = .stopped
             self.startSession()
+            completion?()
         }
     }
 
@@ -557,6 +552,7 @@ final class CameraSessionManager: ObservableObject {
             switch result {
             case .success(let capture):
                 self.dualCapturedImages = capture
+                self.pauseDualSessionForReview()
             case .failure(let error):
                 self.errorMessage = error.localizedDescription
             }
@@ -570,16 +566,45 @@ final class CameraSessionManager: ObservableObject {
     func retakeDualCapture() {
         guard sessionMode == .dual else { return }
         dualCapturedImages = nil
-        if dualSessionState != .running { startDualSession() }
+        invalidateDualLifecycle(reason: "dual retake")
+        let generation = dualOperationGeneration
+        dualSessionState = .stopping
+        dualController.stop { [weak self] in
+            guard let self,
+                  generation == self.dualOperationGeneration,
+                  self.isApplicationActive,
+                  self.isCameraScreenActive else { return }
+            self.dualSessionState = .stopped
+            self.startDualSession()
+        }
     }
 
     func retryDualCamera() {
         guard isApplicationActive, isCameraScreenActive, dualCameraHealth == .unavailable else { return }
-        dualOperationGeneration &+= 1
+        invalidateDualLifecycle(reason: "user retry")
+        let generation = dualOperationGeneration
         dualCameraHealth = .unknown
-        dualSessionState = .stopped
-        dualController.updateDiagnosticContext(generation: dualOperationGeneration, screenActive: true)
-        startDualSession()
+        dualSessionState = .stopping
+        dualController.updateDiagnosticContext(generation: generation, screenActive: true)
+        dualController.stop { [weak self] in
+            guard let self,
+                  generation == self.dualOperationGeneration,
+                  self.isApplicationActive,
+                  self.isCameraScreenActive else { return }
+            self.dualSessionState = .stopped
+            self.startDualSession()
+        }
+    }
+
+    /// UI-facing authority for dual-camera exposure. The controller owns device access and
+    /// throttles physical exposure updates without rebuilding the capture session.
+    func setDualLightLevel(_ normalizedLevel: Double, force: Bool = false) {
+        let safeLevel = normalizedLevel.isFinite ? min(1, max(0, normalizedLevel)) : 0.5
+        dualController.setLightLevel(
+            safeLevel * 100,
+            generation: dualOperationGeneration,
+            force: force
+        )
     }
 
     @discardableResult
@@ -615,12 +640,17 @@ final class CameraSessionManager: ObservableObject {
     }
 
     func setApplicationActive(_ isActive: Bool) {
+        guard isApplicationActive != isActive else { return }
         isApplicationActive = isActive
         permissionStatus = AVCaptureDevice.authorizationStatus(for: .video)
         if !isActive {
-            dualOperationGeneration &+= 1
+            invalidateDualLifecycle(reason: "application inactive")
+        } else {
+            dualController.updateDiagnosticContext(
+                generation: dualOperationGeneration,
+                screenActive: isCameraScreenActive
+            )
         }
-        dualController.updateDiagnosticContext(generation: dualOperationGeneration, screenActive: isCameraScreenActive && isApplicationActive)
     }
 
     func setCameraScreenActive(_ isActive: Bool) {
@@ -632,9 +662,13 @@ final class CameraSessionManager: ObservableObject {
         }
         isCameraScreenActive = isActive
         if !isActive {
-            dualOperationGeneration &+= 1
+            invalidateDualLifecycle(reason: "camera screen closed")
+        } else {
+            dualController.updateDiagnosticContext(
+                generation: dualOperationGeneration,
+                screenActive: isApplicationActive
+            )
         }
-        dualController.updateDiagnosticContext(generation: dualOperationGeneration, screenActive: isCameraScreenActive && isApplicationActive)
         dualController.updateDiagnosticSession(id: diagnosticSessionID, isOpen: isActive)
     }
 
@@ -644,12 +678,14 @@ final class CameraSessionManager: ObservableObject {
     }
 
     private func configureAndStart() {
+        guard isApplicationActive, isCameraScreenActive else { return }
         guard !isConfigured else {
             startSession()
             return
         }
         controller.configure(position: currentPosition) { [weak self] result in
             guard let self else { return }
+            guard self.isApplicationActive, self.isCameraScreenActive else { return }
             switch result {
             case .success:
                 self.isConfigured = true
@@ -658,6 +694,29 @@ final class CameraSessionManager: ObservableObject {
                 self.errorMessage = error.localizedDescription
             }
         }
+    }
+
+    private func pauseDualSessionForReview() {
+        dualSessionState = .stopping
+        dualController.stop { [weak self] in
+            guard let self, self.dualCapturedImages != nil else { return }
+            self.isSessionRunning = false
+            self.dualSessionState = .stopped
+        }
+    }
+
+    private func invalidateDualLifecycle(reason: String) {
+        guard !isDualLifecycleInvalidated else {
+            dualCameraLog("INVALIDATE_IGNORED reason=\(reason) generation=\(dualOperationGeneration)")
+            return
+        }
+        dualOperationGeneration &+= 1
+        isDualLifecycleInvalidated = true
+        dualCameraLog("INVALIDATE reason=\(reason) generation=\(dualOperationGeneration)")
+        dualController.updateDiagnosticContext(
+            generation: dualOperationGeneration,
+            screenActive: isCameraScreenActive && isApplicationActive
+        )
     }
 
     private func dualCameraLog(_ message: String) {
@@ -775,6 +834,10 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         sessionQueue.async { [weak self] in
             guard let self else { return }
             if generation != self.lifecycleGeneration {
+                self.wantsToRun = false
+                self.isStarting = false
+                self.cancelHealthValidation()
+                self.cancelCapture(with: LockUCameraError.dualCaptureFailed, notify: false)
                 self.configuredGeneration = nil
                 self.startAttemptGeneration = nil
                 self.pendingStartCompletion = nil
@@ -826,13 +889,17 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
                 Task { @MainActor in completion(.failure(LockUCameraError.dualCaptureFailed)) }
                 return
             }
-            if self.isConfigured {
+            if self.isConfigured && self.hasValidConfiguration {
                 self.configuredGeneration = generation
                 self.publishState(.ready)
                 self.debugLog("CONFIGURE_REUSED_VALID_TOPOLOGY generation=\(generation)")
                 self.connectPendingPreviewIfPossible()
                 Task { @MainActor in completion(.success(())) }
                 return
+            }
+            if self.isConfigured || !self.session.inputs.isEmpty || !self.session.outputs.isEmpty {
+                self.debugLog("CONFIGURE_DISCARDING_INVALID_TOPOLOGY generation=\(generation)", isError: true)
+                self.resetConfiguration(preservingPendingPreview: true)
             }
             guard !self.isConfiguring else { return }
             self.isConfiguring = true
@@ -1298,6 +1365,11 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             return
         }
         previewConnections = [front, back]
+        #if DEBUG
+        assert(previewConnections.count == 2, "Dual Camera must own exactly two preview connections")
+        assert(session.inputs.count == 2, "Dual Camera topology contains duplicate inputs")
+        assert(session.outputs.count == 2, "Dual Camera topology contains duplicate outputs")
+        #endif
         connectedBackLayer = layers.back
         connectedFrontLayer = layers.front
         activePreviewAttachmentID = layers.attachmentID
@@ -1349,6 +1421,9 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         connectedFrontLayer = nil
         activePreviewAttachmentID = nil
         session.commitConfiguration()
+        #if DEBUG
+        assert(previewConnections.count <= 2, "Dual Camera preview connection count exceeded two")
+        #endif
     }
 
     private func configureSession() throws {

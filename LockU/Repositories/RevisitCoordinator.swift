@@ -121,6 +121,13 @@ final class RevisitCoordinator: ObservableObject {
         presentation = makePresentation(from: result, now: now)
     }
 
+    func present(memory: MemoryRecord, now: Date = .now) {
+        presentation = makePresentation(
+            from: MemoryResurfacingResult(memory: memory, reason: .pastRandom),
+            now: now
+        )
+    }
+
     private func makePresentation(
         from result: MemoryResurfacingResult,
         now: Date
@@ -149,8 +156,8 @@ final class RevisitCoordinator: ObservableObject {
     private func eyebrowText(for reason: MemoryResurfacingReason) -> String {
         switch reason {
         case .anniversary: "ON THIS DAY"
-        case .forgotten: "YOU FORGOT THIS ONE."
-        case .pastRandom: "FROM A WHILE AGO"
+        case .forgotten: "A MEMORY RETURNED"
+        case .pastRandom: "FROM THEN"
         }
     }
 
@@ -167,6 +174,14 @@ final class RevisitCoordinator: ObservableObject {
         }
         if daysAgo == 0 { return "Today" }
         if daysAgo == 1 { return "1 day ago" }
+        if daysAgo >= 365 {
+            let years = max(1, calendar.dateComponents([.year], from: capturedAt, to: today).year ?? 1)
+            return years == 1 ? "1 year ago" : "\(years) years ago"
+        }
+        if daysAgo >= 60 {
+            let months = max(2, calendar.dateComponents([.month], from: capturedAt, to: today).month ?? 2)
+            return "\(months) months ago"
+        }
         return "\(daysAgo) days ago"
     }
 }

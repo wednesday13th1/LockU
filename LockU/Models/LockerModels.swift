@@ -26,6 +26,42 @@ nonisolated struct LockerPlacement: Codable, Hashable, Sendable {
     var zIndex: Int
 }
 
+nonisolated struct LockerTextDecoration: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    var text: String
+    var normalizedX: Double
+    var normalizedY: Double
+    var scale: Double
+    var rotationDegrees: Double
+    let createdAt: Date
+}
+
+nonisolated enum LockerMemoryPlacementKind: String, Codable, Sendable { case automatic, userAdded }
+
+nonisolated struct LockerMemoryPlacement: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let memoryID: UUID
+    var normalizedX: Double
+    var normalizedY: Double
+    var scale: Double
+    var rotationDegrees: Double
+    var zIndex: Int
+    let kind: LockerMemoryPlacementKind
+    let createdAt: Date
+}
+
+nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendable {
+    static let recordID = UUID(uuidString: "CB786E9A-61C8-4C2A-A654-701BE0F547C8")!
+    let id: UUID
+    var drawingFileName: String?
+    var drawingReferenceWidth: Double?
+    var drawingReferenceHeight: Double?
+    var texts: [LockerTextDecoration]
+    var memoryPlacements: [LockerMemoryPlacement]
+
+    static let empty = LockerCanvasMetadata(id: recordID, drawingFileName: nil, drawingReferenceWidth: nil, drawingReferenceHeight: nil, texts: [], memoryPlacements: [])
+}
+
 nonisolated struct LockerDecoration: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let createdAt: Date

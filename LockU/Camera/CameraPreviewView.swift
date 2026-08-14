@@ -259,6 +259,17 @@ final class DualCameraPreviewUIView: UIView {
         updateFrames()
     }
 
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        setNeedsLayout()
+        if window != nil { updateFrames() }
+    }
+
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        setNeedsLayout()
+    }
+
     func setPiPPlacement(
         presentation: DualCameraPresentation,
         corner: DualCameraPiPCorner,
@@ -279,6 +290,16 @@ final class DualCameraPreviewUIView: UIView {
     }
 
     func updateFrames(animatePiP: Bool = false) {
+        guard bounds.width > 0, bounds.height > 0 else {
+            if lastReportedZeroFrame != true {
+                lastReportedZeroFrame = true
+                diagnosticLog(
+                    "ZERO_FRAME",
+                    detail: "back=\(backLayer.frame) front=\(frontLayer.frame) window=\(window != nil)"
+                )
+            }
+            return
+        }
         let layout = DualCameraOverlayLayout(
             bounds: bounds,
             safeAreaTop: safeAreaInsets.top,

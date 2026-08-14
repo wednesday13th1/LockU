@@ -21,6 +21,27 @@ enum LockerDoorState: Equatable {
     }
 }
 
+enum MemoryPlacementRitualPhase: Equatable {
+    case preparing, paperizing, moving, settling, completed
+}
+
+struct MemoryPlacementRitualDestination: Equatable {
+    let frame: CGRect
+    let rotationDegrees: Double
+    let frameStyle: LockerFrameStyle
+}
+
+struct MemoryPlacementRitualSession: Identifiable {
+    let id: UUID
+    let memoryID: UUID
+    let image: UIImage
+    let moodEmoji: String?
+    let memoryNote: String?
+    let createdAt: Date
+    var phase: MemoryPlacementRitualPhase
+    var destination: MemoryPlacementRitualDestination?
+}
+
 @MainActor
 final class LockUAppModel: ObservableObject {
     @Published var selectedTab: LockUTab = .locker
@@ -29,6 +50,7 @@ final class LockUAppModel: ObservableObject {
     @Published var lockerDoorState: LockerDoorState = .closed
     @Published var isCameraPresented = false
     @Published var selectedCapturedImage: UIImage?
+    @Published private(set) var placementRitual: MemoryPlacementRitualSession?
     @Published var cameraPermissionDenied = false
     @Published var peekMemory: MemoryRecord?
     @Published private(set) var bootState: AppBootState = .launching
@@ -41,6 +63,7 @@ final class LockUAppModel: ObservableObject {
     let backgroundRepository: BackgroundRepository
     let revisitCoordinator: RevisitCoordinator
     let reflectionRepository: MemoryReflectionRepository
+    let lockerCanvasRepository: LockerCanvasRepository
     let demoClock: LockUDemoClock
     let storageMode: StorageMode
     private let dependencies: LockUDependencyContainer
@@ -60,6 +83,7 @@ final class LockUAppModel: ObservableObject {
         backgroundRepository = dependencies.backgroundRepository
         revisitCoordinator = RevisitCoordinator()
         reflectionRepository = dependencies.reflectionRepository
+        lockerCanvasRepository = dependencies.lockerCanvasRepository
         demoClock = LockUDemoClock()
         launchLog("APP_LAUNCH")
         Task { @MainActor [weak self] in
@@ -125,6 +149,7 @@ final class LockUAppModel: ObservableObject {
             deferredBootTask?.cancel()
             deferredBootTask = nil
             memoryRepository.releaseRebuildableDisplayResources()
+            lockerCanvasRepository.releaseRebuildableDisplayResources()
         } else {
             scheduleDeferredBoot()
         }
@@ -152,6 +177,39 @@ final class LockUAppModel: ObservableObject {
 
     func report(_ error: Error) {
         presentedError = error.localizedDescription
+    }
+
+    func beginPlacementRitual(memory: MemoryRecord, displayImage: UIImage) {
+        guard placementRitual == nil else { return }
+        placementRitual = MemoryPlacementRitualSession(
+            id: UUID(), memoryID: memory.id,
+            image: displayImage.lockUDownsampled(maxDimension: 640),
+            moodEmoji: memory.moodEmoji, memoryNote: memory.memoryNote,
+            createdAt: memory.createdAt, phase: .preparing, destination: nil
+        )
+    }
+
+    func registerPlacementRitualDestination(memoryID: UUID, destination: MemoryPlacementRitualDestination) {
+        guard var ritual = placementRitual, ritual.memoryID == memoryID, ritual.destination == nil else { return }
+        ritual.destination = destination
+        placementRitual = ritual
+    }
+
+    func setPlacementRitualPhase(_ phase: MemoryPlacementRitualPhase, sessionID: UUID) {
+        guard var ritual = placementRitual, ritual.id == sessionID else { return }
+        ritual.phase = phase
+        placementRitual = ritual
+    }
+
+    func completePlacementRitual(sessionID: UUID) {
+        guard placementRitual?.id == sessionID else { return }
+        placementRitual = nil
+        selectedCapturedImage = nil
+    }
+
+    func isPlacementRitualActive(for memoryID: UUID) -> Bool {
+        guard let ritual = placementRitual else { return false }
+        return ritual.memoryID == memoryID && ritual.phase != .completed
     }
 
     func completeFirstLocker() {
@@ -219,9 +277,16 @@ struct LockURootView: View {
                 .zIndex(LockUSceneTokens.Layer.physical)
 
             if model.selectedTab != .camera && !model.shouldShowFirstLocker {
-                LockUBottomBar(selection: $model.selectedTab)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(LockUSceneTokens.Layer.interface)
+                if model.placementRitual == nil {
+                    LockUBottomBar(selection: $model.selectedTab)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(LockUSceneTokens.Layer.interface)
+                }
+            }
+
+            if model.placementRitual != nil {
+                MemoryPlacementRitualOverlay()
+                    .zIndex(LockUSceneTokens.Layer.interface + 20)
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.selectedTab)
@@ -235,6 +300,7 @@ struct LockURootView: View {
         .environmentObject(model.backgroundRepository)
         .environmentObject(model.revisitCoordinator)
         .environmentObject(model.reflectionRepository)
+        .environmentObject(model.lockerCanvasRepository)
         .environmentObject(model.demoClock)
         .alert(
             "LockU",

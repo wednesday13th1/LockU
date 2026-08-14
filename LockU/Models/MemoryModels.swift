@@ -12,6 +12,36 @@ nonisolated enum MemoryOrigin: String, Codable, Sendable {
     case legacy
 }
 
+nonisolated enum MemoryMoodEmoji: String, Codable, CaseIterable, Identifiable, Sendable {
+    case laugh = "😆"
+    case love = "🫶"
+    case calm = "😌"
+    case emotional = "🥹"
+    case sad = "😭"
+    case tired = "🥱"
+    case frustrated = "😤"
+    case fire = "🔥"
+    case growth = "🌱"
+    case sparkle = "✨"
+
+    var id: String { rawValue }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .laugh: "嬉しい"
+        case .love: "大切"
+        case .calm: "安心"
+        case .emotional: "胸がいっぱい"
+        case .sad: "泣きたい"
+        case .tired: "疲れた"
+        case .frustrated: "悔しい"
+        case .fire: "頑張った"
+        case .growth: "少し成長"
+        case .sparkle: "きらめいた"
+        }
+    }
+}
+
 nonisolated struct MemoryReflection: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let memoryID: UUID
@@ -66,6 +96,7 @@ nonisolated struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
     var videoFileName: String?
     var videoThumbnailFileName: String?
     var memoryNote: String?
+    var moodEmoji: String?
     var dailyFilmIdentifier: String?
     var lastRevisitedAt: Date?
     var revisitCount: Int
@@ -95,6 +126,7 @@ nonisolated struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
         videoFileName: String? = nil,
         videoThumbnailFileName: String? = nil,
         memoryNote: String? = nil,
+        moodEmoji: String? = nil,
         dailyFilmIdentifier: String? = nil,
         lastRevisitedAt: Date? = nil,
         revisitCount: Int = 0
@@ -118,6 +150,7 @@ nonisolated struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
         self.videoFileName = videoFileName
         self.videoThumbnailFileName = videoThumbnailFileName
         self.memoryNote = memoryNote
+        self.moodEmoji = moodEmoji
         self.dailyFilmIdentifier = dailyFilmIdentifier ?? dailyFilmID
         self.lastRevisitedAt = lastRevisitedAt
         self.revisitCount = max(0, revisitCount)
@@ -128,7 +161,7 @@ nonisolated struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id, createdAt, imageFileName, filterID, weather, captureMode, imageFormat, isSubjectCutout, presentationStyle
         case dailyFilmID, dailyFilmName, dailyFilmVersion, frontImageFileName, backImageFileName
-        case videoFileName, videoThumbnailFileName, memoryNote, dailyFilmIdentifier, lastRevisitedAt, revisitCount
+        case videoFileName, videoThumbnailFileName, memoryNote, moodEmoji, dailyFilmIdentifier, lastRevisitedAt, revisitCount
         case origin, importedAt
     }
 
@@ -151,6 +184,7 @@ nonisolated struct MemoryRecord: Codable, Identifiable, Hashable, Sendable {
         videoFileName = try container.decodeIfPresent(String.self, forKey: .videoFileName)
         videoThumbnailFileName = try container.decodeIfPresent(String.self, forKey: .videoThumbnailFileName)
         memoryNote = try container.decodeIfPresent(String.self, forKey: .memoryNote)
+        moodEmoji = try container.decodeIfPresent(String.self, forKey: .moodEmoji)
         dailyFilmIdentifier = try container.decodeIfPresent(String.self, forKey: .dailyFilmIdentifier) ?? dailyFilmID
         lastRevisitedAt = try container.decodeIfPresent(Date.self, forKey: .lastRevisitedAt)
         revisitCount = max(0, try container.decodeIfPresent(Int.self, forKey: .revisitCount) ?? 0)

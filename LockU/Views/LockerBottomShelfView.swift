@@ -9,6 +9,9 @@ struct LockerBottomShelfView: View {
             ZStack(alignment: .topLeading) {
                 LockerShelfObjectLayer()
                     .frame(width: proxy.size.width, height: shelfTopY)
+                    .scaleEffect(0.86, anchor: .bottom)
+                    .saturation(0.58)
+                    .opacity(0.28)
                     .zIndex(50)
 
                 PhysicalMetalShelf()
@@ -24,7 +27,6 @@ struct LockerBottomShelfView: View {
 struct LockerGrowthDecorationLayer: View {
     @EnvironmentObject private var memoryRepository: MemoryRepository
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
-    @EnvironmentObject private var demoClock: LockUDemoClock
     @EnvironmentObject private var resurfacingCoordinator: LockerResurfacingCoordinator
     @State private var growthState = LockerGrowthState.fresh
 
@@ -67,23 +69,9 @@ struct LockerGrowthDecorationLayer: View {
                 ? resurfacingCoordinator.candidateReflectionTrace
                 : nil
         )
-        if decoration.role == .resurfacing, resurfacingCoordinator.candidateMemoryID != nil {
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                resurfacingCoordinator.presentCandidate(from: memoryRepository, at: demoClock.now)
-            } label: {
-                trace
-                    .shadow(color: .black.opacity(0.045), radius: 2, y: 1)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(LockerGrowthTraceButtonStyle())
-            .accessibilityLabel("過去の思い出を開く")
-        } else {
-            trace
-                .accessibilityHidden(true)
-                .allowsHitTesting(false)
-        }
+        trace
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
     }
 
     private func refreshGrowthState() {

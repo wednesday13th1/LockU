@@ -39,7 +39,7 @@ struct LockerInterior: View {
                 if repository.decorations.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "photo.on.rectangle.angled").font(.title)
-                        Text("Your memories live here")
+                        Text("ここから、少しずつ。")
                             .font(.footnote)
                     }
                     .foregroundStyle(.white.opacity(0.55))

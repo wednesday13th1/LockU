@@ -13,7 +13,7 @@ struct CreateMemoryTransaction {
         case .jpeg: fileName = try imageStorage.saveJPEG(request.image, id: id); format = .jpeg
         case .png: fileName = try imageStorage.savePNG(request.image, id: id); format = .png
         }
-        let record = MemoryRecord(id: id, createdAt: request.createdAt, imageFileName: fileName, filterID: request.filterID, weather: request.weather, captureMode: request.captureMode, imageFormat: format, isSubjectCutout: request.imageStyle == .cutout, presentationStyle: DefaultMemoryPresentationPolicy().presentation(for: request.imageStyle, captureMode: request.captureMode), dailyFilmID: request.dailyFilm?.id, dailyFilmName: request.dailyFilm?.name, dailyFilmVersion: request.dailyFilm?.version, backImageFileName: fileName, memoryNote: request.memoryNote, dailyFilmIdentifier: request.dailyFilm?.id, origin: request.origin, importedAt: request.importedAt)
+        let record = MemoryRecord(id: id, createdAt: request.createdAt, imageFileName: fileName, filterID: request.filterID, weather: request.weather, captureMode: request.captureMode, imageFormat: format, isSubjectCutout: request.imageStyle == .cutout, presentationStyle: DefaultMemoryPresentationPolicy().presentation(for: request.imageStyle, captureMode: request.captureMode), dailyFilmID: request.dailyFilm?.id, dailyFilmName: request.dailyFilm?.name, dailyFilmVersion: request.dailyFilm?.version, backImageFileName: fileName, memoryNote: request.memoryNote, moodEmoji: request.moodEmoji, dailyFilmIdentifier: request.dailyFilm?.id, origin: request.origin, importedAt: request.importedAt)
         var updated = existing; updated.append(record); updated.sort { $0.createdAt > $1.createdAt }
         do {
             try metadataStore.save(updated)
@@ -158,6 +158,7 @@ struct CreateDualCameraMemoryTransaction {
         backImage: UIImage,
         createdAt: Date,
         memoryNote: String?,
+        moodEmoji: String?,
         existing: [MemoryRecord]
     ) throws -> (record: MemoryRecord, records: [MemoryRecord]) {
         let id = UUID()
@@ -180,6 +181,7 @@ struct CreateDualCameraMemoryTransaction {
                 frontImageFileName: savedFront,
                 backImageFileName: savedBack,
                 memoryNote: memoryNote,
+                moodEmoji: moodEmoji,
                 origin: .dailyCapture
             )
             var records = existing + [record]

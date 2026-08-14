@@ -61,12 +61,32 @@ struct CaptureMemoryRequest {
     let imageStyle: MemoryImageStyle
     let dailyFilm: DailyFilm?
     let memoryNote: String?
+    let moodEmoji: String?
     let origin: MemoryOrigin
     let importedAt: Date?
 
     func withMemoryNote(_ note: String?) -> Self {
-        Self(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm, memoryNote: note, origin: origin, importedAt: importedAt)
+        Self(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm, memoryNote: note, moodEmoji: moodEmoji, origin: origin, importedAt: importedAt)
     }
+
+    func withMoodEmoji(_ emoji: String?) -> Self {
+        Self(image: image, createdAt: createdAt, filterID: filterID, weather: weather, captureMode: captureMode, imageStyle: imageStyle, dailyFilm: dailyFilm, memoryNote: memoryNote, moodEmoji: emoji, origin: origin, importedAt: importedAt)
+    }
+}
+
+nonisolated enum MemoryMoodEmojiPolicy {
+    static func normalized(_ value: String?) throws -> String? {
+        guard let value else { return nil }
+        guard MemoryMoodEmoji(rawValue: value) != nil else {
+            throw MemoryMoodEmojiError.unsupported
+        }
+        return value
+    }
+}
+
+nonisolated enum MemoryMoodEmojiError: LocalizedError {
+    case unsupported
+    var errorDescription: String? { "選択できない気分です。もう一度選んでください。" }
 }
 
 struct MemoryNotePolicy {
@@ -106,7 +126,9 @@ final class CaptureMemoryWorkflow {
         state = .validating
         do {
             try policy.validateCreation(on: request.createdAt, existing: repository.memories)
-            let validatedRequest = request.withMemoryNote(try MemoryNotePolicy().normalize(request.memoryNote))
+            let validatedRequest = request
+                .withMemoryNote(try MemoryNotePolicy().normalize(request.memoryNote))
+                .withMoodEmoji(try MemoryMoodEmojiPolicy.normalized(request.moodEmoji))
             state = .writingImage
             let record = try repository.createImageRecord(validatedRequest, enforceDailyLimit: false)
             state = .completed

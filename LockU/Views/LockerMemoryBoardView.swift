@@ -6,9 +6,13 @@ struct LockerMemoryBoardView: View {
     @EnvironmentObject private var appModel: LockUAppModel
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
     @EnvironmentObject private var demoClock: LockUDemoClock
+    @EnvironmentObject private var resurfacingCoordinator: LockerResurfacingCoordinator
+    @EnvironmentObject private var revisitCoordinator: RevisitCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var selectedMemoryID: UUID?
+    @State private var presentedThenNowPair: ThenNowMemoryPair?
+    @State private var presentedSelfDiscovery: SelfDiscoveryMoment?
     let appearanceOverride: LockerAppearanceSettings?
 
     init(appearanceOverride: LockerAppearanceSettings? = nil) {
@@ -21,11 +25,34 @@ struct LockerMemoryBoardView: View {
 
     private var recentMemories: [MemoryRecord] {
         let sorted = memoryRepository.memories.sorted { $0.createdAt > $1.createdAt }
+        let base: [MemoryRecord]
         guard let featuredID = appearance.featuredVideoMemoryID,
               let featured = sorted.first(where: { $0.id == featuredID }) else {
-            return Array(sorted.prefix(LockerMemoryLayout.totalVisibleSlotCount))
+            base = Array(sorted.prefix(LockerMemoryLayout.totalVisibleSlotCount))
+            return memoriesReplacingOneStillSlot(in: base)
         }
-        return [featured] + Array(sorted.filter { $0.id != featured.id }.prefix(LockerMemoryLayout.photoSlotCount))
+        base = [featured] + Array(sorted.filter { $0.id != featured.id }.prefix(LockerMemoryLayout.photoSlotCount))
+        return memoriesReplacingOneStillSlot(in: base)
+    }
+
+    private var thenNowPair: ThenNowMemoryPair? {
+        ThenNowPairingService().pair(for: demoClock.now, memories: memoryRepository.memories)
+    }
+
+    private var selfDiscoveryMoment: SelfDiscoveryMoment? {
+        SelfDiscoveryService().moment(for: demoClock.now, memories: memoryRepository.memories)
+    }
+
+    private func memoriesReplacingOneStillSlot(in base: [MemoryRecord]) -> [MemoryRecord] {
+        guard base.count >= LockerMemoryLayout.totalVisibleSlotCount,
+              let candidateID = resurfacingCoordinator.candidateMemoryID,
+              let candidate = memoryRepository.memories.first(where: { $0.id == candidateID }),
+              !base.contains(where: { $0.id == candidateID }) else { return base }
+        var result = base
+        let replacementIndex = min(3, result.count - 1)
+        guard replacementIndex > 0 else { return base }
+        result[replacementIndex] = candidate
+        return result
     }
 
     var body: some View {
@@ -40,7 +67,9 @@ struct LockerMemoryBoardView: View {
                 boardSurface
 
                 if recentMemories.isEmpty {
-                    Color.clear
+                    Text("ここから、少しずつ。")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.48))
                 } else {
                     ForEach(placements) { placement in
                         memoryView(for: placement)
@@ -48,22 +77,84 @@ struct LockerMemoryBoardView: View {
                             .rotationEffect(.degrees(placement.rotation))
                             .position(placement.position)
                             .zIndex(selectedMemoryID == placement.id ? LockUSceneTokens.Layer.memory + 40 : LockUSceneTokens.Layer.memory + placement.zIndex)
-                            .opacity(appeared ? 1 : 0)
+                            .opacity(appModel.isPlacementRitualActive(for: placement.memory.id) ? 0 : (appeared ? 1 : 0))
                             .offset(y: appeared ? 0 : 5)
                             .animation(
                                 reduceMotion ? nil : .easeOut(duration: 0.35).delay(Double(min(placement.index, 8)) * 0.035),
                                 value: appeared
                             )
                             .transition(.scale(scale: 0.98).combined(with: .opacity))
+                            .onAppear {
+                                registerRitualDestination(placement, boardProxy: proxy)
+                            }
                     }
                 }
 
                 LockerDecorationLayer()
                     .zIndex(20)
+
+                LockerCanvasLayer()
+                    .zIndex(80)
+
+                if selfDiscoveryMoment == nil, let pair = thenNowPair {
+                    VStack {
+                        HStack {
+                            Button {
+                                presentedThenNowPair = pair
+                            } label: {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("THEN & NOW").font(.system(size: 9, weight: .semibold)).tracking(1.1)
+                                    Text("この頃と、今").font(.system(size: 8, weight: .regular))
+                                }
+                                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.72))
+                                .padding(.horizontal, 9).padding(.vertical, 6)
+                                .background(LockUDesign.Color.notebookPaper.opacity(0.86), in: RoundedRectangle(cornerRadius: 4))
+                                .rotationEffect(.degrees(-1.2))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Then and Now、この頃と今を見る")
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .padding(8)
+                    .zIndex(90)
+                }
+
+                if let moment = selfDiscoveryMoment {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button {
+                                presentedSelfDiscovery = moment
+                            } label: {
+                                VStack(alignment: .trailing, spacing: 1) {
+                                    Text("こんな日もあった").font(.system(size: 9, weight: .semibold))
+                                    Text("MEMORY × 3").font(.system(size: 7.5, weight: .medium, design: .monospaced)).tracking(0.8)
+                                }
+                                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.70))
+                                .padding(.horizontal, 9).padding(.vertical, 6)
+                                .background(LockUDesign.Color.notebookPaper.opacity(0.84), in: RoundedRectangle(cornerRadius: 4))
+                                .rotationEffect(.degrees(1.1))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("こんな日もあった、3枚のMemoryを見る")
+                        }
+                    }
+                    .padding(8)
+                    .zIndex(90)
+                }
             }
             .padding(.horizontal, max(4, proxy.size.width * 0.025))
             .padding(.vertical, 5)
             .onAppear { appeared = true }
+            .sheet(item: $presentedThenNowPair) { pair in
+                ThenNowView(pair: pair)
+            }
+            .sheet(item: $presentedSelfDiscovery) { moment in
+                SelfDiscoveryView(moment: moment)
+            }
         }
     }
 
@@ -74,6 +165,27 @@ struct LockerMemoryBoardView: View {
             endPoint: .bottomTrailing
         )
         .allowsHitTesting(false)
+    }
+
+    private func registerRitualDestination(_ placement: MemoryWallPlacement, boardProxy: GeometryProxy) {
+        guard appModel.placementRitual?.memoryID == placement.memory.id else { return }
+        let boardFrame = boardProxy.frame(in: .global)
+        let horizontalInset = max(4, boardProxy.size.width * 0.025)
+        let height = placement.width / max(placement.printAspectRatio, 0.1)
+        let frame = CGRect(
+            x: boardFrame.minX + horizontalInset + placement.position.x - placement.width / 2,
+            y: boardFrame.minY + 5 + placement.position.y - height / 2,
+            width: placement.width,
+            height: height
+        )
+        appModel.registerPlacementRitualDestination(
+            memoryID: placement.memory.id,
+            destination: MemoryPlacementRitualDestination(
+                frame: frame,
+                rotationDegrees: placement.rotation,
+                frameStyle: placement.frameStyle
+            )
+        )
     }
 
     @ViewBuilder
@@ -97,6 +209,7 @@ struct LockerMemoryBoardView: View {
                 printAspectRatio: placement.printAspectRatio,
                 tapePaletteIndex: placement.index == 7 ? 2 : (placement.index == 4 ? 0 : 1),
                 isSelected: selectedMemoryID == placement.id,
+                isResurfaced: resurfacingCoordinator.candidateMemoryID == placement.memory.id,
                 onSelect: { select(placement.memory) }
             )
         }
@@ -107,6 +220,11 @@ struct LockerMemoryBoardView: View {
     }
 
     private func select(_ memory: MemoryRecord) {
+        if resurfacingCoordinator.candidateMemoryID == memory.id {
+            revisitCoordinator.present(memory: memory, now: demoClock.now)
+            appModel.selectedTab = .peek
+            return
+        }
         guard memory.isDualCameraMemory else {
             toggleSelection(for: memory.id)
             return
@@ -164,13 +282,13 @@ private struct MemoryWallPlacement: Identifiable {
 
 private struct DeterministicMemoryWallPlacementEngine {
     private let anchors: [CGPoint] = [
-        CGPoint(x: 0.51, y: 0.445),
-        CGPoint(x: 0.225, y: 0.155), CGPoint(x: 0.755, y: 0.185),
-        CGPoint(x: 0.165, y: 0.405), CGPoint(x: 0.815, y: 0.425),
-        CGPoint(x: 0.225, y: 0.705), CGPoint(x: 0.435, y: 0.765), CGPoint(x: 0.785, y: 0.715)
+        CGPoint(x: 0.50, y: 0.43),
+        CGPoint(x: 0.20, y: 0.145), CGPoint(x: 0.78, y: 0.17),
+        CGPoint(x: 0.135, y: 0.42), CGPoint(x: 0.855, y: 0.43),
+        CGPoint(x: 0.20, y: 0.73), CGPoint(x: 0.49, y: 0.79), CGPoint(x: 0.82, y: 0.72)
     ]
-    private let widthFractions: [CGFloat] = [0.315, 0.205, 0.165, 0.155, 0.205, 0.195, 0.155, 0.175]
-    private let rotationPresets: [Double] = [0.2, -1.6, 1.4, -0.7, 1.8, -1.8, 0.9, -1.1]
+    private let widthFractions: [CGFloat] = [0.43, 0.28, 0.23, 0.215, 0.28, 0.27, 0.215, 0.24]
+    private let rotationPresets: [Double] = [-0.4, -3.1, 2.7, -1.8, 3.2, -2.8, 1.9, -2.2]
     private let aspectRatios: [CGFloat] = [0.82, 0.82, 0.74, 0.67, 1.0, 0.86, 0.74, 0.90]
 
     func layout(memories: [MemoryRecord], containerSize: CGSize, appearance: LockerAppearanceSettings, date: Date) -> [MemoryWallPlacement] {
@@ -205,7 +323,9 @@ private struct DeterministicMemoryWallPlacementEngine {
                     y: min(max(anchor.y * containerSize.height + daily.positionOffset.height, halfY * containerSize.height), (1 - halfY) * containerSize.height)
                 ),
                 width: width,
-                rotation: min(max(rotationPresets[presetIndex] + daily.rotationOffset, -2.6), 2.6),
+                rotation: index == 0
+                    ? min(max(rotationPresets[presetIndex] + daily.rotationOffset * 0.3, -1.5), 1.5)
+                    : min(max(rotationPresets[presetIndex] + daily.rotationOffset, -4), 4),
                 zIndex: index == 0 ? 30 : Double(20 + (index % 7)),
                 tapeStyle: index == 0 ? .none : attachment,
                 frameStyle: daily.frameOverride ?? resolvedFrame(appearance.frameStyle, collage: appearance.collageStyle, index: index),
@@ -335,14 +455,18 @@ private struct LivingMemoryView: View {
             appModel.selectedTab = .book
         } label: {
             PolaroidPrint(memory: memory, frameStyle: frameStyle, filterStyle: filterStyle, filterAdjustment: filterAdjustment, isFeatured: true, printAspectRatio: printAspectRatio)
-                .overlay {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.82))
-                        .frame(width: 30, height: 30)
-                        .background(.black.opacity(0.15), in: Circle())
+                .overlay(alignment: .topTrailing) {
+                    HStack(spacing: 3) {
+                        Circle().fill(Color.red.opacity(0.72)).frame(width: 4, height: 4)
+                        Text("REC").font(.system(size: 6.5, weight: .semibold, design: .monospaced)).tracking(0.5)
+                        Image(systemName: "play.fill").font(.system(size: 6, weight: .semibold))
+                    }
+                    .foregroundStyle(.white.opacity(0.84))
+                    .padding(.horizontal, 5).padding(.vertical, 4)
+                    .background(.black.opacity(0.13), in: RoundedRectangle(cornerRadius: 3))
+                    .padding(7)
                 }
-                .shadow(color: .black.opacity(0.10), radius: 3, y: 2)
+                .shadow(color: .black.opacity(0.085), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Latest memory from \(memory.createdAt.formatted(date: .abbreviated, time: .shortened))")
@@ -372,11 +496,21 @@ private struct PolaroidPrint: View {
                 )
 
                 MemoryPhotoSurface(memoryID: memory.id, variant: variant) {
-                    DownsampledMemoryImage(
-                        memory: memory,
-                        purpose: .locker,
-                        targetPointSize: CGSize(width: proxy.size.width, height: photoHeight)
-                    )
+                    Group {
+                        if memory.isDualCameraMemory {
+                            DualMemoryImageSurface(
+                                memory: memory,
+                                purpose: .locker,
+                                targetPointSize: CGSize(width: proxy.size.width, height: photoHeight)
+                            )
+                        } else {
+                            DownsampledMemoryImage(
+                                memory: memory,
+                                purpose: .locker,
+                                targetPointSize: CGSize(width: proxy.size.width, height: photoHeight)
+                            )
+                        }
+                    }
                     .modifier(LockerMemoryFilterModifier(style: filterStyle, adjustment: filterAdjustment))
                 }
                 .frame(width: proxy.size.width - sideMargin * 2, height: photoHeight)
@@ -389,6 +523,12 @@ private struct PolaroidPrint: View {
                             x: sideMargin + variant.dateOffset.width,
                             y: proxy.size.height - bottomMargin * 0.60 + variant.dateOffset.height
                         )
+                }
+
+                if memory.moodEmoji != nil || normalizedNote != nil {
+                    MemoryExpressionMark(memory: memory, frameStyle: frameStyle)
+                        .frame(maxWidth: proxy.size.width * 0.86, alignment: expressionAlignment)
+                        .offset(x: expressionX(sideMargin: sideMargin), y: expressionY(height: proxy.size.height, bottomMargin: bottomMargin))
                 }
             }
             .clipShape(ImperfectPhotoShape())
@@ -408,6 +548,52 @@ private struct PolaroidPrint: View {
         case .thinWhite: 0.025
         case .borderless: 0
         }
+    }
+
+    private var normalizedNote: String? {
+        guard let note = memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else {
+            return nil
+        }
+        return note
+    }
+
+    private var expressionAlignment: Alignment { frameStyle == .borderless ? .trailing : .leading }
+    private func expressionX(sideMargin: CGFloat) -> CGFloat { frameStyle == .borderless ? sideMargin * 0.25 : sideMargin }
+    private func expressionY(height: CGFloat, bottomMargin: CGFloat) -> CGFloat {
+        switch frameStyle {
+        case .polaroid, .mixed: height - max(32, bottomMargin)
+        case .thinWhite, .borderless: 5
+        }
+    }
+}
+
+private struct MemoryExpressionMark: View {
+    let memory: MemoryRecord
+    let frameStyle: LockerFrameStyle
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            if let emoji = memory.moodEmoji {
+                Text(emoji)
+                    .font(.system(size: 20))
+            }
+            if let note = normalizedNote {
+                Text(note)
+                    .font(.system(size: frameStyle == .polaroid || frameStyle == .mixed ? 9.5 : 9, weight: .medium))
+                    .foregroundStyle(frameStyle == .borderless ? Color.white.opacity(0.90) : LockUDesign.Color.softInk.opacity(0.82))
+                    .lineLimit(2)
+                    .shadow(color: frameStyle == .borderless ? .black.opacity(0.20) : .clear, radius: 1, y: 0.5)
+            }
+        }
+        .padding(4)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var normalizedNote: String? {
+        guard let note = memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else {
+            return nil
+        }
+        return note
     }
 }
 
@@ -703,7 +889,10 @@ private enum MemoryDepthLevel {
 
 private struct MemoryPhysicalView: View {
     @EnvironmentObject private var repository: MemoryRepository
+    @EnvironmentObject private var reflectionRepository: MemoryReflectionRepository
+    @EnvironmentObject private var demoClock: LockUDemoClock
     @EnvironmentObject private var appModel: LockUAppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let memory: MemoryRecord
     let role: MemoryVisualRole
     let attachment: MemoryAttachment
@@ -713,6 +902,7 @@ private struct MemoryPhysicalView: View {
     let printAspectRatio: CGFloat
     let tapePaletteIndex: Int
     let isSelected: Bool
+    let isResurfaced: Bool
     let onSelect: () -> Void
 
     private var depth: MemoryDepthLevel {
@@ -723,7 +913,7 @@ private struct MemoryPhysicalView: View {
         PolaroidPrint(memory: memory, frameStyle: frameStyle, filterStyle: filterStyle, filterAdjustment: filterAdjustment, isFeatured: false, printAspectRatio: printAspectRatio)
         .overlay(alignment: .bottomLeading) {
             if frameStyle == .thinWhite || frameStyle == .borderless {
-                Text(memory.createdAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits)))
+                Text(compactDateStamp)
                     .font(.system(size: 6.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.88))
                     .shadow(color: .black.opacity(0.42), radius: 1)
@@ -731,10 +921,55 @@ private struct MemoryPhysicalView: View {
             }
         }
         .overlay(alignment: .top) { attachmentView }
+        .overlay(alignment: .topTrailing) {
+            if reflectionCount > 0 {
+                Text("↺")
+                    .font(.system(size: 7, weight: .medium))
+                    .foregroundStyle(LockUDesign.Color.softInk.opacity(0.42))
+                    .padding(4)
+                    .accessibilityLabel("現在のReflectionがあります")
+                    .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if isResurfaced {
+                Text(resurfacedDateText)
+                    .font(.system(size: 6.5, weight: .semibold, design: .monospaced))
+                    .tracking(0.5)
+                    .foregroundStyle(LockUDesign.Color.softInk.opacity(0.52))
+                    .padding(5)
+                    .accessibilityLabel(resurfacedAccessibilityLabel)
+            }
+        }
+        .saturation(isResurfaced ? 0.90 : 1)
+        .overlay(LockUDesign.Color.cameraCream.opacity(isResurfaced ? 0.035 : 0).allowsHitTesting(false))
         .shadow(color: LockUSceneTokens.Shadow.paper, radius: 2.5, y: 1.5)
         .contentShape(Rectangle())
         .onTapGesture { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onSelect() }
-        .onTapGesture(count: 2) { appModel.selectedTab = .book }
+        .onTapGesture(count: 2) {
+            if !isResurfaced { appModel.selectedTab = .book }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.30), value: reflectionCount)
+    }
+
+    private var resurfacedDaysAgo: Int {
+        max(1, Calendar.autoupdatingCurrent.dateComponents(
+            [.day],
+            from: Calendar.autoupdatingCurrent.startOfDay(for: memory.memoryDate),
+            to: Calendar.autoupdatingCurrent.startOfDay(for: demoClock.now)
+        ).day ?? 1)
+    }
+
+    private var resurfacedDateText: String { "\(resurfacedDaysAgo) DAYS AGO" }
+    private var resurfacedAccessibilityLabel: String { "\(resurfacedDaysAgo)日前に残したMemory" }
+    private var reflectionCount: Int { reflectionRepository.reflections(for: memory.id).count }
+    private var compactDateStamp: String {
+        let components = Calendar.autoupdatingCurrent.dateComponents([.year, .month, .day], from: memory.createdAt)
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        let day = components.day ?? 0
+        if frameStyle == .borderless { return String(format: "%04d %02d %02d", year, month, day) }
+        return String(format: "%02d.%02d.%02d", month, day, year % 100)
     }
 
     @ViewBuilder private var physicalPhoto: some View {

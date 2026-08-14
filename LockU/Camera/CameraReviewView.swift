@@ -5,6 +5,8 @@ struct CameraReviewView: View {
     let originalImage: UIImage
     let cutoutImage: UIImage?
     @Binding var selectedStyle: MemoryImageStyle
+    @Binding var selectedMoodEmoji: MemoryMoodEmoji?
+    @Binding var memoryNote: String
     let captureMode: CaptureMode
     let isExtracting: Bool
     let isSaving: Bool
@@ -22,13 +24,23 @@ struct CameraReviewView: View {
         GeometryReader { proxy in
             ZStack {
                 LockUPageBackground()
-                VStack(spacing: 8) {
-                    reviewHeader
-                    preview
-                        .frame(maxHeight: max(220, proxy.size.height * 0.58))
-                    editingControls
+                VStack(spacing: 0) {
+                    reviewHeader.padding(.horizontal, 16)
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            preview
+                                .frame(minHeight: 220, maxHeight: max(250, proxy.size.height * 0.48))
+                            editingControls
+                            MemoryExpressionEditor(
+                                selectedMoodEmoji: $selectedMoodEmoji,
+                                memoryNote: $memoryNote
+                            )
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 14)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
                 }
-                .padding(.horizontal, 16)
                 .padding(.top, 8)
             }
         }
@@ -206,7 +218,7 @@ struct CameraReviewView: View {
                     ProgressView().tint(.white)
                 } else {
                     Label(
-                        selectedStyle == .cutout ? "ロッカーに追加" : "写真を保存",
+                        "ロッカーに残す",
                         systemImage: "checkmark"
                     )
                 }
@@ -215,6 +227,81 @@ struct CameraReviewView: View {
         }
         .buttonStyle(LockUPrimaryButtonStyle())
         .disabled(isSaving || isExtracting)
-        .accessibilityLabel(selectedStyle == .cutout ? "ロッカーに追加" : "元の写真を保存")
+        .accessibilityLabel("Memoryをロッカーに残す")
+    }
+}
+
+struct MemoryExpressionEditor: View {
+    @Binding var selectedMoodEmoji: MemoryMoodEmoji?
+    @Binding var memoryNote: String
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 5)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("今日の気分をひとつ")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(LockUDesign.Color.textPrimary)
+
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(MemoryMoodEmoji.allCases) { mood in
+                    Button {
+                        selectedMoodEmoji = selectedMoodEmoji == mood ? nil : mood
+                    } label: {
+                        Text(mood.rawValue)
+                            .font(.system(size: 26))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(
+                                selectedMoodEmoji == mood
+                                    ? LockUDesign.Color.cameraCream.opacity(0.78)
+                                    : Color.clear,
+                                in: Circle()
+                            )
+                            .overlay {
+                                Circle().stroke(
+                                    LockUDesign.Color.schoolNavy.opacity(selectedMoodEmoji == mood ? 0.14 : 0),
+                                    lineWidth: 0.8
+                                )
+                            }
+                            .scaleEffect(selectedMoodEmoji == mood ? 1.06 : 1)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(mood.accessibilityLabel)
+                    .accessibilityAddTraits(selectedMoodEmoji == mood ? .isSelected : [])
+                }
+            }
+
+            Text("今日の自分にひとこと")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(LockUDesign.Color.textPrimary)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                TextField("例：今日めっちゃ笑った", text: $memoryNote, axis: .vertical)
+                    .lineLimit(1...2)
+                    .font(LockUDesign.Typography.body)
+                    .foregroundStyle(LockUDesign.Color.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 11)
+                    .background(
+                        LockUDesign.Color.notebookPaper.opacity(0.88),
+                        in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    )
+                    .onChange(of: memoryNote) { _, value in
+                        if value.count > MemoryNotePolicy.maximumLength {
+                            memoryNote = String(value.prefix(MemoryNotePolicy.maximumLength))
+                        }
+                    }
+                    .accessibilityLabel("今日の自分へのひとこと")
+
+                Text("\(memoryNote.count) / \(MemoryNotePolicy.maximumLength)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(LockUDesign.Color.textSecondary)
+            }
+        }
+        .padding(14)
+        .background(
+            LockUDesign.Color.surface.opacity(0.84),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
     }
 }

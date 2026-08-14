@@ -11,6 +11,7 @@ final class LockUDependencyContainer {
     let settingsRepository: LockerSettingsRepository
     let backgroundRepository: BackgroundRepository
     let reflectionRepository: MemoryReflectionRepository
+    let lockerCanvasRepository: LockerCanvasRepository
 
     init(fileManager: FileManager = .default) {
         if let persistentPaths = try? LockUPaths(fileManager: fileManager) {
@@ -24,6 +25,7 @@ final class LockUDependencyContainer {
         settingsRepository = LockerSettingsRepository(paths: paths)
         backgroundRepository = BackgroundRepository(paths: paths)
         reflectionRepository = MemoryReflectionRepository(paths: paths)
+        lockerCanvasRepository = LockerCanvasRepository(paths: paths)
     }
 }
 
@@ -58,6 +60,7 @@ final class LockUBootCoordinator {
         attempt({ try dependencies.decorationRepository.reload() }, success: { availability.decoration = true }, onError: { firstError = firstError ?? $0 })
         await Task.yield()
         dependencies.backgroundRepository.reload(); availability.background = true
+        attempt({ try dependencies.lockerCanvasRepository.reloadMetadata() }, success: {}, onError: { firstError = firstError ?? $0 })
 
         let finalState: AppBootState = availability.isUsable
             ? .ready

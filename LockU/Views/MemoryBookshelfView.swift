@@ -108,7 +108,13 @@ struct MemoryBookshelfView: View {
                         }
                         LockUPhotoCard {
                             Group {
-                                if let image = repository.image(for: memory, purpose: .detail, targetPointSize: CGSize(width: 150, height: 200)) {
+                                if memory.isDualCameraMemory {
+                                    DualMemoryImageSurface(
+                                        memory: memory,
+                                        purpose: .detail,
+                                        targetPointSize: CGSize(width: 150, height: 200)
+                                    )
+                                } else if let image = repository.image(for: memory, purpose: .detail, targetPointSize: CGSize(width: 150, height: 200)) {
                                     Image(uiImage: image)
                                         .resizable()
                                         .scaledToFill()

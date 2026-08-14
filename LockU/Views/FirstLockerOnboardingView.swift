@@ -142,6 +142,7 @@ struct FirstLockerOnboardingView: View {
     @EnvironmentObject private var memoryRepository: MemoryRepository
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
     @State private var step: Step = .memories
+    @State private var introPage = 0
 
     private enum Step { case memories, background, final }
 
@@ -162,37 +163,64 @@ struct FirstLockerOnboardingView: View {
     }
 
     private var intro: some View {
-        VStack(spacing: 18) {
-            Spacer()
+        VStack(spacing: 10) {
+            TabView(selection: $introPage) {
+                onboardingPage(
+                    index: 0,
+                    title: "なんでもない今日も、\n残しておこう。",
+                    subtitle: "誰かに見せるためじゃなく、\n未来の自分のために。"
+                )
+                onboardingPage(
+                    index: 1,
+                    title: "その時の自分も、一緒に。",
+                    subtitle: "楽しい日も、\n疲れた日も、そのままで。"
+                )
+                onboardingPage(
+                    index: 2,
+                    title: "いつか、今日にまた会える。",
+                    subtitle: "忘れた頃に、\n過去の自分をもう一度。"
+                )
+            }
+            .tabViewStyle(.page(indexDisplayMode: .always))
+
+            if introPage < 2 {
+                Button("次へ") {
+                    withAnimation(.easeOut(duration: 0.28)) { introPage += 1 }
+                }
+                .buttonStyle(LockUPrimaryButtonStyle())
+            } else {
+                pickerButton(title: "最初に残しておきたい写真を選ぶ")
+            }
+        }
+        .padding(.horizontal, 28)
+        .padding(.bottom, 28)
+    }
+
+    private func onboardingPage(index: Int, title: String, subtitle: String) -> some View {
+        VStack(spacing: 22) {
             Text("LockU")
-                .font(.system(size: 16, weight: .semibold))
-                .tracking(1.2)
-                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.72))
-            Text("Your locker starts\nwith a few memories.")
-                .font(.system(size: 30, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
+                .tracking(1.4)
+                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.62))
+                .padding(.top, 28)
+            OnboardingLockerJourneyVisual(stage: index)
+                .frame(maxWidth: 280, maxHeight: 350)
+            Text(title)
+                .font(.system(size: 29, weight: .semibold, design: .rounded))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
-            Text("まず、残しておきたい日常を\n少しだけ連れてこよう。")
+            Text(subtitle)
                 .font(LockUDesign.Typography.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(LockUDesign.Color.softInkSecondary)
-            Spacer()
-            pickerButton(title: "写真を選ぶ")
-            Text("0 / \(model.requiredMemoryCount)")
-                .font(LockUDesign.Typography.caption)
-                .foregroundStyle(LockUDesign.Color.softInkSecondary)
-                .accessibilityLabel("\(model.requiredMemoryCount)枚中0枚選択")
-            Text("ロッカーに飾る思い出を\(model.requiredMemoryCount)枚選ぼう")
-                .font(LockUDesign.Typography.caption)
-                .foregroundStyle(LockUDesign.Color.softInkSecondary)
-                .padding(.bottom, 34)
+            Spacer(minLength: 8)
         }
-        .padding(.horizontal, 28)
+        .tag(index)
     }
 
     private var selectionPreview: some View {
         VStack(spacing: 16) {
-            Text("Your memories")
+            Text("最初に残しておきたい写真")
                 .font(LockUDesign.Typography.screenTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
                 .padding(.top, 26)
@@ -221,16 +249,16 @@ struct FirstLockerOnboardingView: View {
                     .foregroundStyle(LockUDesign.Color.warning)
                     .multilineTextAlignment(.center)
             } else if !model.canContinue {
-                Text("あと\(max(0, model.requiredMemoryCount - model.drafts.count))枚選んでください")
+                Text("あと\(max(0, model.requiredMemoryCount - model.drafts.count))枚選べます")
                     .font(LockUDesign.Typography.caption)
                     .foregroundStyle(LockUDesign.Color.softInkSecondary)
             }
 
-            Button("Continue") { step = .background }
+            Button("次へ") { step = .final }
                 .buttonStyle(LockUPrimaryButtonStyle())
                 .disabled(!model.canContinue)
                 .opacity(model.canContinue ? 1 : 0.42)
-                .accessibilityHint("背景選択へ進みます")
+                .accessibilityHint("最初のLocker確認へ進みます")
 
             pickerButton(title: "写真を追加・変更")
         }
@@ -240,7 +268,7 @@ struct FirstLockerOnboardingView: View {
 
     private var backgroundSelection: some View {
         VStack(spacing: 14) {
-            Text("Choose your locker")
+            Text("写真を置いておく場所")
                 .font(LockUDesign.Typography.screenTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
                 .padding(.top, 24)
@@ -269,7 +297,7 @@ struct FirstLockerOnboardingView: View {
                 .padding(.horizontal, 3)
             }
 
-            Button("Continue") { step = .final }
+            Button("次へ") { step = .final }
                 .buttonStyle(LockUPrimaryButtonStyle())
             Button("思い出を変更") { step = .memories }
                 .buttonStyle(LockUSecondaryButtonStyle())
@@ -280,16 +308,12 @@ struct FirstLockerOnboardingView: View {
 
     private var finalPreview: some View {
         VStack(spacing: 14) {
-            Text("Your first locker")
+            Text("自分だけのLocker")
                 .font(LockUDesign.Typography.screenTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
                 .padding(.top, 24)
             SeedLockerPreview(drafts: model.drafts, backgroundStyle: model.selectedBackgroundStyle)
                 .frame(maxHeight: 450)
-            Text(model.selectedBackgroundStyle.title)
-                .font(LockUDesign.Typography.body)
-                .foregroundStyle(LockUDesign.Color.schoolNavy)
-
             if let error = model.creationError {
                 Text(error)
                     .font(LockUDesign.Typography.caption)
@@ -302,19 +326,16 @@ struct FirstLockerOnboardingView: View {
                 createMyLocker()
             } label: {
                 if model.isCreatingLocker {
-                    HStack(spacing: 9) { ProgressView(); Text("Creating your locker…") }
+                    HStack(spacing: 9) { ProgressView(); Text("準備しています…") }
                 } else {
-                    Text("Create My Locker")
+                    Text("自分だけのLockerをはじめる")
                 }
             }
             .buttonStyle(LockUPrimaryButtonStyle())
             .disabled(model.isCreatingLocker || model.requiresRecovery)
-            .accessibilityLabel(model.isCreatingLocker ? "ロッカーを作成中" : "最初のロッカーを作る")
+            .accessibilityLabel(model.isCreatingLocker ? "ロッカーを準備中" : "自分だけのLockerをはじめる")
 
-            HStack(spacing: 22) {
-                Button("思い出を変更") { step = .memories }
-                Button("背景を変更") { step = .background }
-            }
+            Button("写真を変更") { step = .memories }
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(LockUDesign.Color.schoolNavy)
             .disabled(model.isCreatingLocker)
@@ -415,5 +436,60 @@ private struct SeedLockerPreview: View {
         .aspectRatio(0.78, contentMode: .fit)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("選択した写真と\(backgroundStyle.title)のロッカープレビュー")
+    }
+}
+
+private struct OnboardingLockerJourneyVisual: View {
+    let stage: Int
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color(red: 181/255, green: 194/255, blue: 198/255))
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(red: 137/255, green: 151/255, blue: 156/255).opacity(0.72))
+                    .padding(13)
+
+                photo(x: 0.36, y: 0.35, width: 0.38, rotation: -1.4, color: .white)
+                if stage >= 1 {
+                    photo(x: 0.68, y: 0.61, width: 0.32, rotation: 1.7, color: LockUDesign.Color.notebookPaper)
+                    Text("😆  😌  🥹  🥱")
+                        .font(.system(size: 17))
+                        .position(x: proxy.size.width * 0.48, y: proxy.size.height * 0.78)
+                    Text("8.14  ♡")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.76))
+                        .rotationEffect(.degrees(-4))
+                        .position(x: proxy.size.width * 0.30, y: proxy.size.height * 0.66)
+                }
+                if stage >= 2 {
+                    photo(x: 0.29, y: 0.72, width: 0.28, rotation: -2, color: Color.white.opacity(0.94))
+                    Text("92 DAYS AGO")
+                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .tracking(0.7)
+                        .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.66))
+                        .padding(.horizontal, 6).padding(.vertical, 4)
+                        .background(LockUDesign.Color.notebookPaper.opacity(0.9), in: RoundedRectangle(cornerRadius: 3))
+                        .position(x: proxy.size.width * 0.70, y: proxy.size.height * 0.24)
+                }
+            }
+        }
+        .aspectRatio(0.72, contentMode: .fit)
+        .accessibilityHidden(true)
+    }
+
+    private func photo(x: CGFloat, y: CGFloat, width: CGFloat, rotation: Double, color: Color) -> some View {
+        GeometryReader { proxy in
+            ZStack {
+                Rectangle().fill(color)
+                LinearGradient(colors: [LockUDesign.Color.ramuneBlue.opacity(0.42), LockUDesign.Color.schoolNavy.opacity(0.20)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .padding(5)
+            }
+            .frame(width: proxy.size.width * width, height: proxy.size.width * width * 1.12)
+            .rotationEffect(.degrees(rotation))
+            .position(x: proxy.size.width * x, y: proxy.size.height * y)
+            .shadow(color: .black.opacity(0.10), radius: 3, y: 2)
+        }
     }
 }

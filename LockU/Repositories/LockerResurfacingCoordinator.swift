@@ -42,10 +42,16 @@ final class LockerResurfacingCoordinator: ObservableObject {
            memories.contains(where: { $0.id == stored.memoryID && $0.memoryDate < date }) {
             candidateMemoryID = stored.memoryID
             candidateReflectionTrace = reflectionTraceService.metadata(for: stored.memoryID)
+            remember(stored.memoryID)
             return
         }
 
-        let recent = Set(recentIDs())
+        let visibleMemoryIDs = Set(
+            memories.sorted { $0.createdAt > $1.createdAt }
+                .prefix(LockerMemoryLayout.totalVisibleSlotCount)
+                .map(\.id)
+        )
+        let recent = Set(recentIDs()).union(visibleMemoryIDs)
         let candidate = service.lockerCandidate(
             for: date,
             from: memories,
@@ -56,6 +62,7 @@ final class LockerResurfacingCoordinator: ObservableObject {
         candidateReflectionTrace = candidate.flatMap { reflectionTraceService.metadata(for: $0.id) }
         if let candidate {
             defaults.set("\(key)|\(candidate.id.uuidString)", forKey: dailyKey)
+            remember(candidate.id)
         } else {
             defaults.removeObject(forKey: dailyKey)
         }
