@@ -19,11 +19,14 @@ struct LockerHomeView: View {
         GeometryReader { proxy in
             let isOpen = appModel.lockerDoorState.isOpenOrOpening
             let maxHeight: CGFloat = isOpen ? 680 : 664
-            let lockerHeight = min(maxHeight, proxy.size.height - 60)
+            let previousLockerHeight = min(maxHeight, proxy.size.height - 60)
             let lockerWidth = min(
                 proxy.size.width * 0.93,
-                lockerHeight / LockUSceneTokens.Home.lockerAspectRatio
+                previousLockerHeight / LockUSceneTokens.Home.lockerAspectRatio
             )
+            let heightReduction = min(64, max(52, proxy.size.height * 0.07))
+            let lockerHeight = max(360, previousLockerHeight - heightReduction)
+            let editZoneHeight = min(60, max(54, heightReduction))
 
             VStack(spacing: LockUSceneTokens.Home.headerToLocker) {
                 LockerUtilityBar(
@@ -35,37 +38,38 @@ struct LockerHomeView: View {
                 .padding(.horizontal, LockUSceneTokens.Home.headerHorizontalMargin)
                 .zIndex(LockUSceneTokens.Layer.interface)
 
-                ZStack {
-                    LockerFrameView(
-                        lockerColor: Color(lockUHex: settingsRepository.settings.lockerColorHex)
-                    )
-                    .environmentObject(lockerResurfacingCoordinator)
-                    .environmentObject(canvasEditingCoordinator)
-                    .opacity(appModel.lockerDoorState.isOpenOrOpening ? 1 : 0.12)
-                    .blur(radius: appModel.lockerDoorState == .closed ? 1.5 : 0)
-                    .animation(
-                        reduceMotion
-                            ? LockUDesign.Motion.soft
-                            : LockUDesign.Motion.soft.delay(
-                                appModel.lockerDoorState == .opening ? 0.2 : 0
-                            ),
-                        value: appModel.lockerDoorState
-                    )
+                VStack(spacing: 0) {
+                    ZStack {
+                        LockerFrameView(
+                            lockerColor: Color(lockUHex: settingsRepository.settings.lockerColorHex)
+                        )
+                        .environmentObject(lockerResurfacingCoordinator)
+                        .environmentObject(canvasEditingCoordinator)
+                        .opacity(appModel.lockerDoorState.isOpenOrOpening ? 1 : 0.12)
+                        .blur(radius: appModel.lockerDoorState == .closed ? 1.5 : 0)
+                        .animation(
+                            reduceMotion
+                                ? LockUDesign.Motion.soft
+                                : LockUDesign.Motion.soft.delay(
+                                    appModel.lockerDoorState == .opening ? 0.2 : 0
+                                ),
+                            value: appModel.lockerDoorState
+                        )
 
-                    LockerDoorView()
-                        .zIndex(10)
+                        LockerDoorView()
+                            .zIndex(10)
+                    }
+                    .frame(width: lockerWidth, height: lockerHeight)
+                    .animation(.easeOut(duration: 0.22), value: isOpen)
+                    .zIndex(LockUSceneTokens.Layer.physical)
 
-                }
-                .frame(width: lockerWidth, height: lockerHeight)
-                .animation(.easeOut(duration: 0.22), value: isOpen)
-                .zIndex(LockUSceneTokens.Layer.physical)
-                .overlay(alignment: .bottom) {
                     LockerCanvasExternalControls(coordinator: canvasEditingCoordinator)
-                        .offset(y: 54)
+                        .padding(.top, 10)
+                        .frame(width: lockerWidth, height: editZoneHeight, alignment: .topTrailing)
                         .zIndex(LockUSceneTokens.Layer.interface)
                 }
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 0)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .opacity(appeared ? 1 : 0.65)
@@ -146,7 +150,7 @@ private struct LockerCanvasExternalControls: View {
                 Button("完了") { coordinator.finish() }
                     .font(.system(size: 13, weight: .semibold))
                     .padding(.horizontal, compact ? 12 : 16)
-                    .frame(height: 44)
+                    .frame(minWidth: compact ? 44 : 84, minHeight: 44)
                     .background(.ultraThinMaterial, in: Capsule())
                     .accessibilityLabel("編集を完了")
             } else {
@@ -157,7 +161,7 @@ private struct LockerCanvasExternalControls: View {
                     }
                     .font(.system(size: 13, weight: .medium))
                     .padding(.horizontal, compact ? 12 : 15)
-                    .frame(height: 42)
+                    .frame(minWidth: compact ? 44 : 84, minHeight: 44)
                     .background(.ultraThinMaterial, in: Capsule())
                     .overlay(Capsule().stroke(.white.opacity(0.28), lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.09), radius: 8, y: 3)
