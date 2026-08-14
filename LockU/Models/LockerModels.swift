@@ -26,6 +26,16 @@ nonisolated struct LockerPlacement: Codable, Hashable, Sendable {
     var zIndex: Int
 }
 
+nonisolated enum LockerTextFontStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case handwritten, casual, clean, mono
+    var id: String { rawValue }
+}
+
+nonisolated enum LockerTextColorStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case charcoal, navy, blue, pink, white, yellow
+    var id: String { rawValue }
+}
+
 nonisolated struct LockerTextDecoration: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     var text: String
@@ -33,10 +43,77 @@ nonisolated struct LockerTextDecoration: Codable, Identifiable, Hashable, Sendab
     var normalizedY: Double
     var scale: Double
     var rotationDegrees: Double
-    /// Optional for backward compatibility with existing locker-canvas.json files.
-    var colorHex: String?
-    var zIndex: Int?
+    var zIndex: Int
+    var fontStyle: LockerTextFontStyle
+    var colorStyle: LockerTextColorStyle
     let createdAt: Date
+
+    init(
+        id: UUID, text: String, normalizedX: Double, normalizedY: Double,
+        scale: Double, rotationDegrees: Double, zIndex: Int,
+        fontStyle: LockerTextFontStyle = .handwritten,
+        colorStyle: LockerTextColorStyle = .charcoal,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.text = text
+        self.normalizedX = normalizedX
+        self.normalizedY = normalizedY
+        self.scale = scale
+        self.rotationDegrees = rotationDegrees
+        self.zIndex = zIndex
+        self.fontStyle = fontStyle
+        self.colorStyle = colorStyle
+        self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, text, normalizedX, normalizedY, scale, rotationDegrees
+        case zIndex, fontStyle, colorStyle, colorHex, createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        text = try values.decode(String.self, forKey: .text)
+        normalizedX = try values.decode(Double.self, forKey: .normalizedX)
+        normalizedY = try values.decode(Double.self, forKey: .normalizedY)
+        scale = try values.decode(Double.self, forKey: .scale)
+        rotationDegrees = try values.decode(Double.self, forKey: .rotationDegrees)
+        zIndex = try values.decodeIfPresent(Int.self, forKey: .zIndex) ?? 30
+        fontStyle = try values.decodeIfPresent(LockerTextFontStyle.self, forKey: .fontStyle) ?? .handwritten
+        if let savedStyle = try values.decodeIfPresent(LockerTextColorStyle.self, forKey: .colorStyle) {
+            colorStyle = savedStyle
+        } else {
+            colorStyle = Self.migratedColor(from: try values.decodeIfPresent(String.self, forKey: .colorHex))
+        }
+        createdAt = try values.decode(Date.self, forKey: .createdAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(id, forKey: .id)
+        try values.encode(text, forKey: .text)
+        try values.encode(normalizedX, forKey: .normalizedX)
+        try values.encode(normalizedY, forKey: .normalizedY)
+        try values.encode(scale, forKey: .scale)
+        try values.encode(rotationDegrees, forKey: .rotationDegrees)
+        try values.encode(zIndex, forKey: .zIndex)
+        try values.encode(fontStyle, forKey: .fontStyle)
+        try values.encode(colorStyle, forKey: .colorStyle)
+        try values.encode(createdAt, forKey: .createdAt)
+    }
+
+    private static func migratedColor(from hex: String?) -> LockerTextColorStyle {
+        switch hex?.uppercased() {
+        case "#162636": return .navy
+        case "#007AFF", "#0A84FF": return .blue
+        case "#FF2D55", "#FF375F": return .pink
+        case "#FFFFFF": return .white
+        case "#FFD60A", "#FFCC00": return .yellow
+        default: return .charcoal
+        }
+    }
 }
 
 nonisolated enum LockerMemoryPlacementKind: String, Codable, Sendable { case automatic, userAdded }

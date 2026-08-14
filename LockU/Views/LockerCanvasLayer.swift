@@ -15,6 +15,10 @@ final class LockerCanvasEditingCoordinator: ObservableObject {
     @Published private(set) var memoryToken = 0
     @Published private(set) var removeToken = 0
     @Published private(set) var bringToFrontToken = 0
+    @Published private(set) var fontToken = 0
+    @Published private(set) var colorToken = 0
+    @Published var selectedFontStyle: LockerTextFontStyle = .handwritten
+    @Published var selectedColorStyle: LockerTextColorStyle = .charcoal
     @Published var selection: Selection = .none
 
     func begin() { guard !isEditing else { return }; isEditing = true; beginToken &+= 1 }
@@ -24,6 +28,13 @@ final class LockerCanvasEditingCoordinator: ObservableObject {
     func requestMemory() { isDrawing = false; selection = .none; memoryToken &+= 1 }
     func removeSelection() { guard selection != .none else { return }; removeToken &+= 1; selection = .none }
     func bringSelectionToFront() { guard selection == .memory else { return }; bringToFrontToken &+= 1 }
+    func selectText(font: LockerTextFontStyle, color: LockerTextColorStyle) {
+        selectedFontStyle = font
+        selectedColorStyle = color
+        selection = .text
+    }
+    func changeFont(to style: LockerTextFontStyle) { selectedFontStyle = style; fontToken &+= 1 }
+    func changeColor(to style: LockerTextColorStyle) { selectedColorStyle = style; colorToken &+= 1 }
     func undoDrawing() { NotificationCenter.default.post(name: .lockerCanvasUndo, object: nil) }
 }
 
@@ -81,6 +92,8 @@ struct LockerCanvasLayer: View {
             .onChange(of: editingCoordinator.memoryToken) { _, _ in showMemoryPicker = true }
             .onChange(of: editingCoordinator.removeToken) { _, _ in removeSelection() }
             .onChange(of: editingCoordinator.bringToFrontToken) { _, _ in bringSelectionToFront() }
+            .onChange(of: editingCoordinator.fontToken) { _, _ in changeSelectedTextFont() }
+            .onChange(of: editingCoordinator.colorToken) { _, _ in changeSelectedTextColor() }
         }
         .sheet(isPresented: $showMemoryPicker) {
             LockerMemoryPicker(
@@ -106,15 +119,32 @@ struct LockerCanvasLayer: View {
     }
 
     private func lockerText(_ item: LockerTextDecoration, size: CGSize) -> some View {
-        Text(item.text).font(.system(size: 18, weight: .medium, design: .rounded)).foregroundStyle(Color(lockUHex: item.colorHex ?? "#162636"))
-            .shadow(color: .black.opacity(selectedTextID == item.id ? 0.12 : 0), radius: selectedTextID == item.id ? 2 : 0)
-            .padding(6).overlay(RoundedRectangle(cornerRadius: 6).stroke(.white.opacity(selectedTextID == item.id ? 0.55 : 0), lineWidth: 0.8))
-            .scaleEffect(CGFloat(item.scale)).rotationEffect(.degrees(item.rotationDegrees))
-            .position(x: CGFloat(item.normalizedX) * size.width, y: CGFloat(item.normalizedY) * size.height)
-            .zIndex(Double(item.zIndex ?? 30))
-            .onTapGesture { guard editingCoordinator.isEditing, !editingCoordinator.isDrawing else { return }; selectedTextID = item.id; selectedPlacementID = nil; editingCoordinator.selection = .text }
-            .gesture(editingCoordinator.isEditing && !editingCoordinator.isDrawing ? transformGesture(textID: item.id, size: size) : nil)
-            .accessibilityLabel("ロッカーの文字、\(item.text)")
+        LockerTextItemView(
+            item: binding(forTextID: item.id, fallback: item), canvasSize: size,
+            isEditing: editingCoordinator.isEditing && !editingCoordinator.isDrawing,
+            isSelected: selectedTextID == item.id,
+            onSelect: { selectText(item.id) },
+            onCommit: { save(size: size) }
+        )
+        .zIndex(Double(item.zIndex))
+    }
+
+    private func binding(forTextID id: UUID, fallback: LockerTextDecoration) -> Binding<LockerTextDecoration> {
+        Binding(
+            get: { texts.first(where: { $0.id == id }) ?? fallback },
+            set: { updated in
+                guard let index = texts.firstIndex(where: { $0.id == id }) else { return }
+                texts[index] = updated
+            }
+        )
+    }
+
+    private func selectText(_ id: UUID) {
+        guard let index = texts.firstIndex(where: { $0.id == id }) else { return }
+        selectedTextID = id
+        selectedPlacementID = nil
+        texts[index].zIndex = (texts.map(\.zIndex).max() ?? 29) + 1
+        editingCoordinator.selectText(font: texts[index].fontStyle, color: texts[index].colorStyle)
     }
 
     private func lockerMemory(_ memory: MemoryRecord, placement: LockerMemoryPlacement, size: CGSize) -> some View {
@@ -187,8 +217,19 @@ struct LockerCanvasLayer: View {
     private func beginEditing() { snapshot = Snapshot(texts: texts, placements: placements, drawing: drawing) }
     private func saveAndFinish() { save(size: currentCanvasSize); selectedTextID = nil; selectedPlacementID = nil }
     private func removeSelection() {
-        if let selectedTextID { texts.removeAll { $0.id == selectedTextID }; self.selectedTextID = nil }
+        if let selectedTextID { texts.removeAll { $0.id == selectedTextID }; self.selectedTextID = nil; save(size: currentCanvasSize) }
         if let selectedPlacementID { placements.removeAll { $0.id == selectedPlacementID }; self.selectedPlacementID = nil }
+    }
+    private func changeSelectedTextFont() {
+        guard let selectedTextID, let index = texts.firstIndex(where: { $0.id == selectedTextID }) else { return }
+        texts[index].fontStyle = editingCoordinator.selectedFontStyle
+        texts[index] = texts[index].clamped(to: currentCanvasSize)
+        save(size: currentCanvasSize)
+    }
+    private func changeSelectedTextColor() {
+        guard let selectedTextID, let index = texts.firstIndex(where: { $0.id == selectedTextID }) else { return }
+        texts[index].colorStyle = editingCoordinator.selectedColorStyle
+        save(size: currentCanvasSize)
     }
     private func bringSelectionToFront() {
         guard let selectedPlacementID,
@@ -213,13 +254,14 @@ struct LockerCanvasLayer: View {
         guard !normalized.isEmpty else { return }
         texts.append(LockerTextDecoration(
             id: UUID(), text: normalized,
-            normalizedX: 0.5, normalizedY: 0.68,
+            normalizedX: 0.5, normalizedY: 0.65,
             scale: 1, rotationDegrees: 0,
-            colorHex: "#162636",
-            zIndex: (texts.compactMap(\.zIndex).max() ?? 29) + 1,
+            zIndex: (texts.map(\.zIndex).max() ?? 29) + 1,
+            fontStyle: .handwritten, colorStyle: .charcoal,
             createdAt: .now
         ))
         textEntry = ""
+        save(size: currentCanvasSize)
     }
     private func addMemories(_ memories: [MemoryRecord]) {
         let existingIDs = Set(placements.map(\.memoryID))
@@ -246,6 +288,132 @@ struct LockerCanvasLayer: View {
         showMemoryPicker = false
     }
     private struct Snapshot { let texts: [LockerTextDecoration]; let placements: [LockerMemoryPlacement]; let drawing: PKDrawing }
+}
+
+private struct LockerTextItemView: View {
+    @Binding var item: LockerTextDecoration
+    let canvasSize: CGSize
+    let isEditing: Bool
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let onCommit: () -> Void
+
+    @GestureState private var dragTranslation: CGSize = .zero
+    @GestureState private var magnification: CGFloat = 1
+    @GestureState private var rotation: Angle = .zero
+
+    var body: some View {
+        Text(item.text)
+            .font(LockerTextFontResolver.font(for: item.fontStyle, size: 20))
+            .foregroundStyle(LockerTextColorResolver.color(for: item.colorStyle))
+            .fixedSize()
+            .shadow(
+                color: item.colorStyle == .white ? .black.opacity(0.08) : .clear,
+                radius: 1, y: 1
+            )
+            .padding(6)
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(.white.opacity(isEditing && isSelected ? 0.48 : 0), lineWidth: 0.8)
+            }
+            .scaleEffect(CGFloat(item.scale) * magnification)
+            .rotationEffect(.degrees(item.rotationDegrees) + rotation)
+            .position(
+                x: CGFloat(item.normalizedX) * canvasSize.width + dragTranslation.width,
+                y: CGFloat(item.normalizedY) * canvasSize.height + dragTranslation.height
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { if isEditing { onSelect() } }
+            .gesture(isEditing && isSelected ? gestures : nil)
+            .accessibilityLabel("ロッカーテキスト、\(item.text)")
+            .accessibilityHint(isEditing ? "移動、フォント変更、色変更、削除ができます" : "")
+            .accessibilityAction(named: "選択") { if isEditing { onSelect() } }
+    }
+
+    private var gestures: some Gesture {
+        DragGesture(minimumDistance: 1)
+            .updating($dragTranslation) { value, state, _ in state = value.translation }
+            .onEnded { value in
+                item.normalizedX += Double(value.translation.width / max(canvasSize.width, 1))
+                item.normalizedY += Double(value.translation.height / max(canvasSize.height, 1))
+                item = item.clamped(to: canvasSize)
+                onCommit()
+            }
+            .simultaneously(with:
+                MagnificationGesture()
+                    .updating($magnification) { value, state, _ in state = value }
+                    .onEnded { value in
+                        item.scale = min(max(item.scale * Double(value), 0.65), 1.8)
+                        item = item.clamped(to: canvasSize)
+                        onCommit()
+                    }
+            )
+            .simultaneously(with:
+                RotationGesture()
+                    .updating($rotation) { value, state, _ in state = value }
+                    .onEnded { value in
+                        item.rotationDegrees = min(max(item.rotationDegrees + value.degrees, -25), 25)
+                        item = item.clamped(to: canvasSize)
+                        onCommit()
+                    }
+            )
+    }
+}
+
+enum LockerTextFontResolver {
+    static func font(for style: LockerTextFontStyle, size: CGFloat) -> Font {
+        switch style {
+        case .handwritten:
+            if let font = UIFont(name: "MarkerFelt-Thin", size: size) { return Font(font) }
+            return .system(size: size, design: .rounded)
+        case .casual:
+            return .system(size: size, weight: .medium, design: .rounded)
+        case .clean:
+            return .system(size: size, weight: .medium, design: .default)
+        case .mono:
+            return .system(size: size - 1, weight: .medium, design: .monospaced)
+        }
+    }
+
+    static func uiFont(for style: LockerTextFontStyle, size: CGFloat) -> UIFont {
+        switch style {
+        case .handwritten: UIFont(name: "MarkerFelt-Thin", size: size) ?? .systemFont(ofSize: size, weight: .medium)
+        case .casual:
+            let base = UIFont.systemFont(ofSize: size, weight: .medium)
+            guard let descriptor = base.fontDescriptor.withDesign(.rounded) else { return base }
+            return UIFont(descriptor: descriptor, size: size)
+        case .clean: .systemFont(ofSize: size, weight: .medium)
+        case .mono: .monospacedSystemFont(ofSize: size - 1, weight: .medium)
+        }
+    }
+}
+
+private enum LockerTextColorResolver {
+    static func color(for style: LockerTextColorStyle) -> Color {
+        switch style {
+        case .charcoal: Color(lockUHex: "#34383C")
+        case .navy: Color(lockUHex: "#162636")
+        case .blue: Color(lockUHex: "#3987C9")
+        case .pink: Color(lockUHex: "#E985A5")
+        case .white: .white
+        case .yellow: Color(lockUHex: "#F2C94C")
+        }
+    }
+}
+
+private extension LockerTextDecoration {
+    func clamped(to canvasSize: CGSize) -> Self {
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return self }
+        var result = self
+        let font = LockerTextFontResolver.uiFont(for: fontStyle, size: 20)
+        let measured = (text as NSString).size(withAttributes: [.font: font])
+        // Keep at least 65% of the decoration visible, including its interaction padding.
+        let halfVisibleWidth = min(canvasSize.width * 0.49, (measured.width + 12) * CGFloat(scale) * 0.325)
+        let halfVisibleHeight = min(canvasSize.height * 0.49, (measured.height + 12) * CGFloat(scale) * 0.325)
+        result.normalizedX = min(max(normalizedX, Double(halfVisibleWidth / canvasSize.width)), Double(1 - halfVisibleWidth / canvasSize.width))
+        result.normalizedY = min(max(normalizedY, Double(halfVisibleHeight / canvasSize.height)), Double(1 - halfVisibleHeight / canvasSize.height))
+        return result
+    }
 }
 
 private struct LockerPencilCanvas: UIViewRepresentable {

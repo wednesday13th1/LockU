@@ -133,6 +133,10 @@ private struct LockerCanvasExternalControls: View {
                         toolButton("plus.circle", compact ? nil : "思い出を追加") { coordinator.requestMemory() }
                             .accessibilityLabel("過去の思い出を追加")
                         if coordinator.selection != .none {
+                            if coordinator.selection == .text {
+                                fontMenu
+                                colorMenu
+                            }
                             if coordinator.selection == .memory {
                                 toolButton("square.3.layers.3d.top.filled", nil) { coordinator.bringSelectionToFront() }
                                     .accessibilityLabel("前面へ移動")
@@ -170,6 +174,42 @@ private struct LockerCanvasExternalControls: View {
             }
         }
         .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.76))
+    }
+
+    private var fontMenu: some View {
+        Menu {
+            ForEach(LockerTextFontStyle.allCases) { style in
+                Button { coordinator.changeFont(to: style) } label: {
+                    HStack {
+                        Text(style.title)
+                            .font(LockerTextFontResolver.font(for: style, size: 16))
+                        if coordinator.selectedFontStyle == style { Image(systemName: "checkmark") }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "textformat")
+                .frame(minWidth: 30, minHeight: 36)
+        }
+        .accessibilityLabel("フォントを変更")
+    }
+
+    private var colorMenu: some View {
+        Menu {
+            ForEach(LockerTextColorStyle.allCases) { style in
+                Button { coordinator.changeColor(to: style) } label: {
+                    HStack {
+                        Circle().fill(style.previewColor).frame(width: 13, height: 13)
+                        Text(style.title)
+                        if coordinator.selectedColorStyle == style { Image(systemName: "checkmark") }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "paintpalette")
+                .frame(minWidth: 30, minHeight: 36)
+        }
+        .accessibilityLabel("色を変更")
     }
 
     private var drawingTools: some View {
@@ -216,6 +256,41 @@ private struct LockerCanvasExternalControls: View {
                 if let title { Text(title).font(.system(size: 10, weight: .medium)) }
             }
             .frame(minWidth: 30, minHeight: 36)
+        }
+    }
+}
+
+private extension LockerTextFontStyle {
+    var title: String {
+        switch self {
+        case .handwritten: "手書き　放課後"
+        case .casual: "やわらか　放課後"
+        case .clean: "シンプル　放課後"
+        case .mono: "デジカメ　放課後"
+        }
+    }
+}
+
+private extension LockerTextColorStyle {
+    var title: String {
+        switch self {
+        case .charcoal: "チャコール"
+        case .navy: "ネイビー"
+        case .blue: "ブルー"
+        case .pink: "ピンク"
+        case .white: "ホワイト"
+        case .yellow: "イエロー"
+        }
+    }
+
+    var previewColor: Color {
+        switch self {
+        case .charcoal: Color(lockUHex: "#34383C")
+        case .navy: Color(lockUHex: "#162636")
+        case .blue: Color(lockUHex: "#3987C9")
+        case .pink: Color(lockUHex: "#E985A5")
+        case .white: .white
+        case .yellow: Color(lockUHex: "#F2C94C")
         }
     }
 }
