@@ -46,9 +46,9 @@ struct SelfDiscoveryView: View {
                 .offset(y: reduceMotion || appeared ? 0 : 8)
             }
             .background(LockUPageBackground())
-            .navigationTitle("MEMORY")
+            .navigationTitle("こんな日もあった")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Close") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("閉じる") { dismiss() } } }
         }
         .onAppear {
             if reduceMotion { appeared = true }

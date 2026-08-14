@@ -1,13 +1,38 @@
 import PencilKit
 import SwiftUI
 
+@MainActor
+final class LockerCanvasEditingCoordinator: ObservableObject {
+    enum Selection { case none, text, memory }
+    @Published private(set) var isEditing = false
+    @Published var isDrawing = false
+    @Published var erasing = false
+    @Published var penColor = UIColor.white
+    @Published var penWidth: CGFloat = 3
+    @Published private(set) var beginToken = 0
+    @Published private(set) var finishToken = 0
+    @Published private(set) var textToken = 0
+    @Published private(set) var memoryToken = 0
+    @Published private(set) var removeToken = 0
+    @Published private(set) var bringToFrontToken = 0
+    @Published var selection: Selection = .none
+
+    func begin() { guard !isEditing else { return }; isEditing = true; beginToken &+= 1 }
+    func finish() { guard isEditing else { return }; finishToken &+= 1; isEditing = false; isDrawing = false; selection = .none }
+    func toggleDrawing() { isDrawing.toggle(); selection = .none }
+    func requestText() { isDrawing = false; selection = .none; textToken &+= 1 }
+    func requestMemory() { isDrawing = false; selection = .none; memoryToken &+= 1 }
+    func removeSelection() { guard selection != .none else { return }; removeToken &+= 1; selection = .none }
+    func bringSelectionToFront() { guard selection == .memory else { return }; bringToFrontToken &+= 1 }
+    func undoDrawing() { NotificationCenter.default.post(name: .lockerCanvasUndo, object: nil) }
+}
+
 struct LockerCanvasLayer: View {
     @EnvironmentObject private var canvasRepository: LockerCanvasRepository
     @EnvironmentObject private var memoryRepository: MemoryRepository
+    @EnvironmentObject private var editingCoordinator: LockerCanvasEditingCoordinator
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isEditing = false
-    @State private var isDrawing = false
     @State private var texts: [LockerTextDecoration] = []
     @State private var placements: [LockerMemoryPlacement] = []
     @State private var selectedTextID: UUID?
@@ -15,9 +40,6 @@ struct LockerCanvasLayer: View {
     @State private var drawing = PKDrawing()
     @State private var drawingSize: CGSize = .zero
     @State private var currentCanvasSize: CGSize = .zero
-    @State private var penColor = UIColor.white
-    @State private var penWidth: CGFloat = 3
-    @State private var erasing = false
     @State private var showTextEntry = false
     @State private var textEntry = ""
     @State private var showMemoryPicker = false
@@ -26,14 +48,16 @@ struct LockerCanvasLayer: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
+            ZStack(alignment: .bottomTrailing) {
                 LockerPencilCanvas(
                     drawing: $drawing, canvasSize: proxy.size, referenceSize: drawingSize,
-                    isDrawingEnabled: isEditing && isDrawing, color: penColor,
-                    width: penWidth, isEraser: erasing
+                    isDrawingEnabled: editingCoordinator.isEditing && editingCoordinator.isDrawing,
+                    color: editingCoordinator.penColor,
+                    width: editingCoordinator.penWidth,
+                    isEraser: editingCoordinator.erasing
                 )
-                .opacity(isEditing && isDrawing ? 0.68 : 0.46)
-                .allowsHitTesting(isEditing && isDrawing)
+                .opacity(editingCoordinator.isEditing && editingCoordinator.isDrawing ? 0.68 : 0.46)
+                .allowsHitTesting(editingCoordinator.isEditing && editingCoordinator.isDrawing)
 
                 ForEach(texts) { decoration in
                     lockerText(decoration, size: proxy.size)
@@ -45,83 +69,52 @@ struct LockerCanvasLayer: View {
                     }
                 }
 
-                if isEditing { editorChrome }
-                else { editButton }
             }
             .onAppear { currentCanvasSize = proxy.size; load(size: proxy.size) }
             .onChange(of: proxy.size) { _, size in currentCanvasSize = size }
             .onChange(of: scenePhase) { _, phase in
-                if phase != .active, isEditing { save(size: proxy.size) }
+                if phase != .active, editingCoordinator.isEditing { save(size: proxy.size) }
             }
+            .onChange(of: editingCoordinator.beginToken) { _, _ in beginEditing() }
+            .onChange(of: editingCoordinator.finishToken) { _, _ in saveAndFinish() }
+            .onChange(of: editingCoordinator.textToken) { _, _ in showTextEntry = true }
+            .onChange(of: editingCoordinator.memoryToken) { _, _ in showMemoryPicker = true }
+            .onChange(of: editingCoordinator.removeToken) { _, _ in removeSelection() }
+            .onChange(of: editingCoordinator.bringToFrontToken) { _, _ in bringSelectionToFront() }
         }
-        .sheet(isPresented: $showMemoryPicker) { LockerMemoryPicker(onSelect: addMemory) }
+        .sheet(isPresented: $showMemoryPicker) {
+            LockerMemoryPicker(
+                excludedMemoryIDs: Set(placements.map(\.memoryID)),
+                maximumSelectionCount: max(
+                    0,
+                    LockerCanvasRepository.maximumUserMemories
+                        - placements.filter { $0.kind == .userAdded }.count
+                ),
+                onAdd: addMemories
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .alert("文字を追加", isPresented: $showTextEntry) {
-            TextField("summer!!", text: $textEntry)
-            Button("Cancel", role: .cancel) { textEntry = "" }
-            Button("Add") { addText() }
+            TextField("ロッカーにひとこと", text: $textEntry)
+            Button("キャンセル", role: .cancel) { textEntry = "" }
+            Button("追加") { addText() }
         } message: { Text("30文字までの短い言葉") }
         .alert("LockU", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
     }
 
-    private var editButton: some View {
-        VStack { HStack { Spacer(); Button("Edit") { beginEditing() }
-            .font(.system(size: 11, weight: .semibold)).padding(.horizontal, 12).frame(height: 32)
-            .background(.ultraThinMaterial, in: Capsule()).accessibilityLabel("Edit Locker") }; Spacer() }
-        .padding(8)
-    }
-
-    private var editorChrome: some View {
-        VStack {
-            HStack {
-                Button("Cancel", action: cancel).accessibilityLabel("Cancel Editing")
-                Spacer()
-                if let selectedTextID { Button("Remove") { texts.removeAll { $0.id == selectedTextID }; self.selectedTextID = nil } }
-                if let selectedPlacementID { Button("Remove from Locker") { placements.removeAll { $0.id == selectedPlacementID }; self.selectedPlacementID = nil }.accessibilityLabel("Remove from Locker") }
-                Button("Done") { saveAndFinish() }.accessibilityLabel("Finish Editing")
-            }
-            .font(.system(size: 11, weight: .semibold)).padding(.horizontal, 10).frame(height: 36)
-            Spacer()
-            if isDrawing { drawingTools }
-            HStack(spacing: 24) {
-                toolButton("pencil.tip", "DRAW") { isDrawing.toggle(); selectedTextID = nil; selectedPlacementID = nil }
-                    .accessibilityLabel("Draw on Locker")
-                toolButton("textformat", "WRITE") { isDrawing = false; showTextEntry = true }.accessibilityLabel("Add Text")
-                toolButton("photo.on.rectangle", "+ MEMORY") { isDrawing = false; showMemoryPicker = true }.accessibilityLabel("Add Memory")
-            }
-            .padding(.horizontal, 18).frame(height: 48).background(.ultraThinMaterial, in: Capsule()).padding(.bottom, 6)
-        }
-        .foregroundStyle(LockUDesign.Color.schoolNavy)
-    }
-
-    private var drawingTools: some View {
-        HStack(spacing: 10) {
-            Button { erasing = false } label: { Image(systemName: "pencil.tip") }
-            Button { erasing = true } label: { Image(systemName: "eraser") }
-            Button { NotificationCenter.default.post(name: .lockerCanvasUndo, object: nil) } label: { Image(systemName: "arrow.uturn.backward") }
-                .accessibilityLabel("Undo Drawing")
-            ForEach([UIColor.white, UIColor(red: 0.06, green: 0.12, blue: 0.22, alpha: 1), UIColor.systemBlue, UIColor.systemPink, UIColor.black], id: \.self) { color in
-                Button { penColor = color; erasing = false } label: { Circle().fill(Color(uiColor: color)).frame(width: 18, height: 18).overlay(Circle().stroke(.white.opacity(0.6))) }
-            }
-            ForEach([CGFloat(2), CGFloat(4), CGFloat(7)], id: \.self) { width in Button { penWidth = width } label: { Circle().fill(LockUDesign.Color.schoolNavy).frame(width: width + 4, height: width + 4) } }
-        }
-        .padding(.horizontal, 12).frame(height: 40).background(.thinMaterial, in: Capsule())
-    }
-
-    private func toolButton(_ icon: String, _ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { VStack(spacing: 2) { Image(systemName: icon); Text(title).font(.system(size: 9, weight: .semibold)) } }
-    }
-
     private func lockerText(_ item: LockerTextDecoration, size: CGSize) -> some View {
-        Text(item.text).font(.system(size: 18, weight: .medium, design: .rounded)).foregroundStyle(.white.opacity(0.9))
+        Text(item.text).font(.system(size: 18, weight: .medium, design: .rounded)).foregroundStyle(Color(lockUHex: item.colorHex ?? "#162636"))
             .shadow(color: .black.opacity(selectedTextID == item.id ? 0.12 : 0), radius: selectedTextID == item.id ? 2 : 0)
             .padding(6).overlay(RoundedRectangle(cornerRadius: 6).stroke(.white.opacity(selectedTextID == item.id ? 0.55 : 0), lineWidth: 0.8))
             .scaleEffect(CGFloat(item.scale)).rotationEffect(.degrees(item.rotationDegrees))
             .position(x: CGFloat(item.normalizedX) * size.width, y: CGFloat(item.normalizedY) * size.height)
-            .onTapGesture { guard isEditing, !isDrawing else { return }; selectedTextID = item.id; selectedPlacementID = nil }
-            .gesture(isEditing && !isDrawing ? transformGesture(textID: item.id, size: size) : nil)
-            .accessibilityLabel("Locker text, \(item.text)")
+            .zIndex(Double(item.zIndex ?? 30))
+            .onTapGesture { guard editingCoordinator.isEditing, !editingCoordinator.isDrawing else { return }; selectedTextID = item.id; selectedPlacementID = nil; editingCoordinator.selection = .text }
+            .gesture(editingCoordinator.isEditing && !editingCoordinator.isDrawing ? transformGesture(textID: item.id, size: size) : nil)
+            .accessibilityLabel("ロッカーの文字、\(item.text)")
     }
 
     private func lockerMemory(_ memory: MemoryRecord, placement: LockerMemoryPlacement, size: CGSize) -> some View {
@@ -140,16 +133,16 @@ struct LockerCanvasLayer: View {
             .shadow(color: .black.opacity(0.18), radius: selectedPlacementID == placement.id ? 5 : 2, y: 2)
             .scaleEffect(CGFloat(placement.scale)).rotationEffect(.degrees(placement.rotationDegrees))
             .position(x: CGFloat(placement.normalizedX) * size.width, y: CGFloat(placement.normalizedY) * size.height)
-            .onTapGesture { guard isEditing, !isDrawing else { return }; selectedPlacementID = placement.id; selectedTextID = nil }
-            .gesture(isEditing && !isDrawing ? transformGesture(placementID: placement.id, size: size) : nil)
+            .onTapGesture { guard editingCoordinator.isEditing, !editingCoordinator.isDrawing else { return }; selectedPlacementID = placement.id; selectedTextID = nil; editingCoordinator.selection = .memory }
+            .gesture(editingCoordinator.isEditing && !editingCoordinator.isDrawing ? transformGesture(placementID: placement.id, size: size) : nil)
     }
 
     private func transformGesture(textID: UUID? = nil, placementID: UUID? = nil, size: CGSize) -> some Gesture {
         let base = transformValues(textID, placementID)
-        SimultaneousGesture(
+        return SimultaneousGesture(
             DragGesture().onChanged { value in mutate(textID, placementID) { x, y, _, _ in x = clamp(base.x + Double(value.translation.width / max(size.width, 1)), 0.08, 0.92); y = clamp(base.y + Double(value.translation.height / max(size.height, 1)), 0.08, 0.92) } },
             SimultaneousGesture(
-                MagnificationGesture().onChanged { value in mutate(textID, placementID) { _, _, scale, _ in scale = clamp(base.scale * Double(value), 0.7, 1.5) } },
+                MagnificationGesture().onChanged { value in mutate(textID, placementID) { _, _, scale, _ in scale = clamp(base.scale * Double(value), placementID == nil ? 0.7 : 0.3, 1.5) } },
                 RotationGesture().onChanged { value in mutate(textID, placementID) { _, _, _, rotation in rotation = clamp(base.rotation + value.degrees, -15, 15) } }
             )
         )
@@ -162,14 +155,46 @@ struct LockerCanvasLayer: View {
     }
 
     private func mutate(_ textID: UUID?, _ placementID: UUID?, _ change: (inout Double, inout Double, inout Double, inout Double) -> Void) {
-        if let textID, let i = texts.firstIndex(where: { $0.id == textID }) { change(&texts[i].normalizedX, &texts[i].normalizedY, &texts[i].scale, &texts[i].rotationDegrees) }
-        if let placementID, let i = placements.firstIndex(where: { $0.id == placementID }) { change(&placements[i].normalizedX, &placements[i].normalizedY, &placements[i].scale, &placements[i].rotationDegrees) }
+        if let textID, let index = texts.firstIndex(where: { $0.id == textID }) {
+            var item = texts[index]
+            var x = item.normalizedX
+            var y = item.normalizedY
+            var scale = item.scale
+            var rotation = item.rotationDegrees
+            change(&x, &y, &scale, &rotation)
+            item.normalizedX = x
+            item.normalizedY = y
+            item.scale = scale
+            item.rotationDegrees = rotation
+            texts[index] = item
+        }
+        if let placementID, let index = placements.firstIndex(where: { $0.id == placementID }) {
+            var item = placements[index]
+            var x = item.normalizedX
+            var y = item.normalizedY
+            var scale = item.scale
+            var rotation = item.rotationDegrees
+            change(&x, &y, &scale, &rotation)
+            item.normalizedX = x
+            item.normalizedY = y
+            item.scale = scale
+            item.rotationDegrees = rotation
+            placements[index] = item
+        }
     }
 
     private func clamp(_ value: Double, _ low: Double, _ high: Double) -> Double { min(max(value, low), high) }
-    private func beginEditing() { snapshot = Snapshot(texts: texts, placements: placements, drawing: drawing); isEditing = true }
-    private func cancel() { if let snapshot { texts = snapshot.texts; placements = snapshot.placements; drawing = snapshot.drawing }; isEditing = false; isDrawing = false }
-    private func saveAndFinish() { save(size: currentCanvasSize); isEditing = false; isDrawing = false }
+    private func beginEditing() { snapshot = Snapshot(texts: texts, placements: placements, drawing: drawing) }
+    private func saveAndFinish() { save(size: currentCanvasSize); selectedTextID = nil; selectedPlacementID = nil }
+    private func removeSelection() {
+        if let selectedTextID { texts.removeAll { $0.id == selectedTextID }; self.selectedTextID = nil }
+        if let selectedPlacementID { placements.removeAll { $0.id == selectedPlacementID }; self.selectedPlacementID = nil }
+    }
+    private func bringSelectionToFront() {
+        guard let selectedPlacementID,
+              let index = placements.firstIndex(where: { $0.id == selectedPlacementID }) else { return }
+        placements[index].zIndex = (placements.map(\.zIndex).max() ?? placements[index].zIndex) + 1
+    }
     private func save(size: CGSize) { do { try canvasRepository.commit(texts: texts, placements: placements, drawingData: drawing.dataRepresentation(), drawingSize: size == .zero ? nil : size) } catch { errorMessage = error.localizedDescription } }
     private func load(size: CGSize) {
         texts = canvasRepository.metadata.texts
@@ -183,11 +208,41 @@ struct LockerCanvasLayer: View {
         }
         drawingSize = size
     }
-    private func addText() { let normalized = String(textEntry.trimmingCharacters(in: .whitespacesAndNewlines).prefix(30)); guard !normalized.isEmpty else { return }; texts.append(LockerTextDecoration(id: UUID(), text: normalized, normalizedX: 0.5, normalizedY: 0.5, scale: 1, rotationDegrees: 0, createdAt: .now)); textEntry = "" }
-    private func addMemory(_ memory: MemoryRecord) {
-        guard !placements.contains(where: { $0.memoryID == memory.id }) else { errorMessage = LockerCanvasError.memoryAlreadyPlaced.localizedDescription; return }
-        guard placements.filter({ $0.kind == .userAdded }).count < LockerCanvasRepository.maximumUserMemories else { errorMessage = LockerCanvasError.userMemoryLimitReached.localizedDescription; return }
-        placements.append(LockerMemoryPlacement(id: UUID(), memoryID: memory.id, normalizedX: 0.5, normalizedY: 0.52, scale: 1, rotationDegrees: 0, zIndex: (placements.map(\.zIndex).max() ?? 40) + 1, kind: .userAdded, createdAt: .now))
+    private func addText() {
+        let normalized = String(textEntry.trimmingCharacters(in: .whitespacesAndNewlines).prefix(30))
+        guard !normalized.isEmpty else { return }
+        texts.append(LockerTextDecoration(
+            id: UUID(), text: normalized,
+            normalizedX: 0.5, normalizedY: 0.68,
+            scale: 1, rotationDegrees: 0,
+            colorHex: "#162636",
+            zIndex: (texts.compactMap(\.zIndex).max() ?? 29) + 1,
+            createdAt: .now
+        ))
+        textEntry = ""
+    }
+    private func addMemories(_ memories: [MemoryRecord]) {
+        let existingIDs = Set(placements.map(\.memoryID))
+        let remainingCount = max(0, LockerCanvasRepository.maximumUserMemories - placements.filter { $0.kind == .userAdded }.count)
+        let additions = memories.filter { !existingIDs.contains($0.id) }.prefix(remainingCount)
+        guard !additions.isEmpty else { return }
+
+        let startingZIndex = placements.map(\.zIndex).max() ?? 40
+        let initialPositions: [(Double, Double)] = [
+            (0.56, 0.48), (0.72, 0.38), (0.36, 0.60), (0.66, 0.66),
+            (0.30, 0.38), (0.50, 0.72), (0.76, 0.56), (0.42, 0.44),
+            (0.58, 0.32), (0.34, 0.70)
+        ]
+        for (index, memory) in additions.enumerated() {
+            let position = initialPositions[index % initialPositions.count]
+            placements.append(LockerMemoryPlacement(
+                id: UUID(), memoryID: memory.id,
+                normalizedX: position.0, normalizedY: position.1,
+                scale: 1, rotationDegrees: 0,
+                zIndex: startingZIndex + index + 1,
+                kind: .userAdded, createdAt: .now
+            ))
+        }
         showMemoryPicker = false
     }
     private struct Snapshot { let texts: [LockerTextDecoration]; let placements: [LockerMemoryPlacement]; let drawing: PKDrawing }
@@ -210,11 +265,13 @@ private struct LockerPencilCanvas: UIViewRepresentable {
         if view.drawing != drawing {
             var resolved = drawing
             if referenceSize.width > 0, referenceSize.height > 0, canvasSize != referenceSize { resolved = drawing.transformed(using: CGAffineTransform(scaleX: canvasSize.width / referenceSize.width, y: canvasSize.height / referenceSize.height)) }
+            context.coordinator.isApplyingDrawing = true
             view.drawing = resolved
+            context.coordinator.isApplyingDrawing = false
         }
     }
     static func dismantleUIView(_ uiView: PKCanvasView, coordinator: Coordinator) { if let observer = coordinator.undoObserver { NotificationCenter.default.removeObserver(observer) }; coordinator.undoObserver = nil; coordinator.canvas = nil }
-    final class Coordinator: NSObject, PKCanvasViewDelegate { @Binding var drawing: PKDrawing; weak var canvas: PKCanvasView?; var undoObserver: NSObjectProtocol?; init(drawing: Binding<PKDrawing>) { _drawing = drawing }; func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) { drawing = canvasView.drawing } }
+    final class Coordinator: NSObject, PKCanvasViewDelegate { @Binding var drawing: PKDrawing; weak var canvas: PKCanvasView?; var undoObserver: NSObjectProtocol?; var isApplyingDrawing = false; init(drawing: Binding<PKDrawing>) { _drawing = drawing }; func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) { guard !isApplyingDrawing else { return }; drawing = canvasView.drawing } }
 }
 
 private extension Notification.Name { static let lockerCanvasUndo = Notification.Name("LockU.LockerCanvas.Undo") }
@@ -222,9 +279,108 @@ private extension Notification.Name { static let lockerCanvasUndo = Notification
 private struct LockerMemoryPicker: View {
     @EnvironmentObject private var repository: MemoryRepository
     @Environment(\.dismiss) private var dismiss
-    let onSelect: (MemoryRecord) -> Void
+    let excludedMemoryIDs: Set<UUID>
+    let maximumSelectionCount: Int
+    let onAdd: ([MemoryRecord]) -> Void
+    @State private var selectedIDs: Set<UUID> = []
+    @State private var filter: Filter = .all
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
-    var body: some View { NavigationStack { ScrollView { LazyVGrid(columns: columns, spacing: 12) { ForEach(repository.memories.sorted { $0.memoryDate > $1.memoryDate }) { memory in Button { onSelect(memory) } label: { VStack(spacing: 4) { DownsampledLockerCanvasMemory(memory: memory).aspectRatio(1, contentMode: .fill).clipped(); Text(memory.memoryDate.formatted(.dateTime.month().day())).font(.caption2).foregroundStyle(.secondary) } }.buttonStyle(.plain) } }.padding() }.navigationTitle("Memoryを選ぶ").toolbar { Button("Close") { dismiss() } } } }
+
+    private enum Filter: String, CaseIterable, Identifiable {
+        case all = "すべて"
+        case date = "日付"
+        var id: Self { self }
+    }
+
+    private var availableMemories: [MemoryRecord] {
+        let memories = repository.memories.filter { !excludedMemoryIDs.contains($0.id) }
+        switch filter {
+        case .all:
+            return memories.sorted { $0.createdAt > $1.createdAt }
+        case .date:
+            return memories.sorted { $0.memoryDate > $1.memoryDate }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("表示", selection: $filter) {
+                    ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(availableMemories) { memory in
+                            memoryButton(memory)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                }
+
+                HStack {
+                    Button("キャンセル") { dismiss() }
+                    Spacer()
+                    Button("追加（\(selectedIDs.count)）") {
+                        let selected = availableMemories.filter { selectedIDs.contains($0.id) }
+                        onAdd(selected)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(LockUDesign.Color.schoolNavy)
+                    .disabled(selectedIDs.isEmpty)
+                }
+                .padding(16)
+                .background(.ultraThinMaterial)
+            }
+            .navigationTitle("思い出を追加")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func memoryButton(_ memory: MemoryRecord) -> some View {
+        let isSelected = selectedIDs.contains(memory.id)
+        return Button {
+            if isSelected {
+                selectedIDs.remove(memory.id)
+            } else if selectedIDs.count < maximumSelectionCount {
+                selectedIDs.insert(memory.id)
+            }
+        } label: {
+            VStack(spacing: 4) {
+                DownsampledLockerCanvasMemory(memory: memory)
+                    .aspectRatio(1, contentMode: .fill)
+                    .clipped()
+                    .overlay(alignment: .bottomTrailing) {
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(.white, Color.accentColor)
+                                .padding(5)
+                        }
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
+                    }
+                Text(memory.memoryDate.formatted(.dateTime.month().day()))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isSelected && selectedIDs.count >= maximumSelectionCount)
+        .accessibilityLabel("\(memory.memoryDate.formatted(.dateTime.month().day()))の思い出")
+        .accessibilityValue(isSelected ? "選択中" : "未選択")
+    }
 }
 
 private struct DownsampledLockerCanvasMemory: View {

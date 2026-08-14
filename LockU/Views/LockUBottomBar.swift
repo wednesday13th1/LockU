@@ -6,8 +6,8 @@ struct LockUBottomBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            tabButton(.locker, title: "Locker", icon: "cabinet.fill")
-            tabButton(.book, title: "Memories", icon: "book.closed.fill")
+            tabButton(.locker, title: "ロッカー", icon: "cabinet.fill")
+            tabButton(.book, title: "思い出", icon: "book.closed.fill")
             cameraButton
             tabButton(.peek, title: "Peek", icon: "eye.fill")
         }
@@ -65,6 +65,6 @@ struct LockUBottomBar: View {
         }
         .frame(maxWidth: .infinity)
         .offset(y: -3)
-        .accessibilityLabel("Camera")
+        .accessibilityLabel("カメラ")
     }
 }

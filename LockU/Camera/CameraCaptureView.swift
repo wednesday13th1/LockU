@@ -31,7 +31,7 @@ struct CameraCaptureView: View {
     @State private var isAdjustingLight = false
     @State private var showLightHUD = false
     @State private var hideLightHUDTask: Task<Void, Never>?
-    @State private var secondaryPreviewCorner: DualCameraPiPCorner = .topTrailing
+    @State private var secondaryPreviewCorner: DualCameraPiPCorner = .topLeading
     @State private var secondaryPreviewDragOffset: CGSize = .zero
     @State private var isDraggingSecondaryPreview = false
     @State private var secondaryPreviewSnapToken = 0
@@ -39,6 +39,7 @@ struct CameraCaptureView: View {
     @State private var isSwappingDualPresentation = false
     @State private var dualPresentationSwapToken = 0
     @State private var swapCompletionTask: Task<Void, Never>?
+    @State private var startupTask: Task<Void, Never>?
 
     private let dailyFilmService = DailyFilmService()
     private let revealStore = DailyFilmRevealStore()
@@ -114,17 +115,25 @@ struct CameraCaptureView: View {
     }
 
     private func handleCameraAppear() {
+#if DEBUG
+        print("[CameraUI][OPEN]")
+#endif
         appModel.setCameraPresented(true)
         camera.setCameraScreenActive(true)
         camera.setApplicationActive(scenePhase == .active)
+        captureExperience = .single
+        lightLevel = 0.5
+        secondaryPreviewCorner = .topLeading
         refreshDailyFilm(allowReveal: true)
-        if !capturedToday { camera.prepare() }
+        scheduleCameraStartup()
     }
 
     private func handleCameraDisappear() {
         camera.setCameraScreenActive(false)
         camera.setApplicationActive(false)
         camera.stopSession()
+        startupTask?.cancel()
+        startupTask = nil
         editor.clear()
         camera.clearDualCapture()
         clearMemoryExpression()
@@ -143,6 +152,9 @@ struct CameraCaptureView: View {
 
     private func handlePermissionChange(_ status: AVAuthorizationStatus) {
         appModel.cameraPermissionDenied = status == .denied || status == .restricted
+        if status == .authorized, !capturedToday, captureExperience == .single {
+            camera.startSession()
+        }
     }
 
     private func handleCalendarRefresh() {
@@ -164,10 +176,19 @@ struct CameraCaptureView: View {
     }
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {
-        camera.setApplicationActive(phase == .active)
-        guard phase == .active else {
+        switch phase {
+        case .active:
+            camera.setApplicationActive(true)
+        case .inactive:
+            // Camera presentation and system overlays can transiently report inactive.
+            // Wait for active/background instead of tearing down a session that is opening.
+            return
+        case .background:
+            camera.setApplicationActive(false)
             isChangingCameraMode = false
             camera.stopSession()
+            return
+        @unknown default:
             return
         }
 
@@ -178,7 +199,26 @@ struct CameraCaptureView: View {
             guard camera.dualCapturedImages == nil else { return }
             activateDualMode()
         } else {
-            camera.startSession()
+            camera.prepareSingleCamera()
+        }
+    }
+
+    private func scheduleCameraStartup() {
+        startupTask?.cancel()
+        startupTask = Task { @MainActor in
+            // onAppear can run during the transient inactive phase of the tab transition.
+            // Re-check UIKit's application state after SwiftUI has committed the presentation.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            for _ in 0..<10 where scenePhase != .active && UIApplication.shared.applicationState != .active {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard !Task.isCancelled else { return }
+            }
+            let isActive = scenePhase == .active || UIApplication.shared.applicationState == .active
+            camera.setApplicationActive(isActive)
+            guard isActive, !capturedToday else { return }
+            camera.prepareSingleCamera()
+            startupTask = nil
         }
     }
 
@@ -227,10 +267,8 @@ struct CameraCaptureView: View {
             }
 
 
-            if captureExperience == .dual {
-                CameraLightEffectView(level: lightLevel)
-                    .zIndex(1)
-            }
+            CameraLightEffectView(level: lightLevel)
+                .zIndex(1)
 
             if captureExperience == .dual {
                 DualCameraPiPDragSurface(
@@ -242,21 +280,17 @@ struct CameraCaptureView: View {
                 .zIndex(6)
             }
 
-            if captureExperience == .dual {
-                CameraLightHUD(level: lightLevel)
-                    .offset(y: 58)
-                    .opacity(showLightHUD ? 1 : 0)
-                    .scaleEffect(reduceMotion ? 1 : (showLightHUD ? 1 : 0.96))
-                    .zIndex(30)
-            }
+            CameraLightHUD(level: lightLevel)
+                .offset(y: 58)
+                .opacity(showLightHUD ? 1 : 0)
+                .scaleEffect(reduceMotion ? 1 : (showLightHUD ? 1 : 0.96))
+                .zIndex(30)
 
-            if captureExperience == .dual {
-                DualCameraLightControlLayout(
-                    level: $lightLevel,
-                    onEditingChanged: handleLightEditingChanged
-                )
-                .zIndex(10)
-            }
+            CameraLightControlLayout(
+                level: $lightLevel,
+                onEditingChanged: handleLightEditingChanged
+            )
+            .zIndex(10)
 
             if captureExperience == .dual, !dualPreviewIsVisible {
                 DualCameraPreparingSurface(showProgress: dualShowsProgress)
@@ -270,12 +304,12 @@ struct CameraCaptureView: View {
                 VStack(spacing: 14) {
                     Image(systemName: "camera.fill")
                         .font(.system(size: 24, weight: .medium))
-                    Text("Camera unavailable")
+                    Text("カメラを使えません")
                         .font(.system(size: 17, weight: .semibold))
                     HStack(spacing: 12) {
-                        Button("Close") { appModel.selectedTab = .locker }
+                        Button("閉じる") { appModel.selectedTab = .locker }
                         if camera.dualCameraUXState != .unsupported {
-                            Button("Retry") { camera.retryDualCamera() }
+                            Button("もう一度") { camera.retryDualCamera() }
                         }
                     }
                     .buttonStyle(.bordered)
@@ -305,15 +339,27 @@ struct CameraCaptureView: View {
                 .animation(.easeOut(duration: 0.16), value: flashOverlay)
                 .zIndex(40)
         }
+        .onAppear {
+#if DEBUG
+            print("[CameraUI][LIGHT_VISIBLE] mode=\(captureExperience == .dual ? "dual" : "single")")
+#endif
+        }
+        .onChange(of: captureExperience) { _, experience in
+#if DEBUG
+            print("[CameraUI][LIGHT_VISIBLE] mode=\(experience == .dual ? "dual" : "single")")
+#endif
+        }
         .onChange(of: camera.dualCameraUXState) { _, state in
             if state == .ready {
                 camera.markDualPreviewVisible()
-                camera.setDualLightLevel(lightLevel, force: true)
+                camera.setLightLevel(lightLevel, force: true)
+#if DEBUG
+                print("[CameraUI][DUAL_READY]")
+#endif
             }
         }
         .onChange(of: lightLevel) { _, level in
-            guard captureExperience == .dual else { return }
-            camera.setDualLightLevel(level)
+            camera.setLightLevel(level)
         }
     }
 
@@ -407,7 +453,7 @@ struct CameraCaptureView: View {
                         .rotationEffect(.degrees(dualPresentation == .frontMain ? 160 : 0))
                         .animation(.easeOut(duration: 0.22), value: dualPresentation)
                         .disabled(isSwappingDualPresentation || !dualPreviewIsVisible)
-                        .accessibilityLabel("Swap main camera")
+                        .accessibilityLabel("メインカメラを入れ替える")
                     }
                     .padding(.horizontal, 24)
                 }
@@ -459,7 +505,7 @@ struct CameraCaptureView: View {
         }
 
         isAdjustingLight = false
-        camera.setDualLightLevel(lightLevel, force: true)
+        camera.setLightLevel(lightLevel, force: true)
 #if DEBUG
         print("[CameraUI][LIGHT_DRAG_END] value=\(Int((lightLevel * 100).rounded()))")
 #endif
@@ -548,6 +594,9 @@ struct CameraCaptureView: View {
             if reduceMotion { captureExperience = experience }
             else { withAnimation(.easeInOut(duration: 0.24)) { captureExperience = experience } }
             if experience == .dual {
+#if DEBUG
+                print("[CameraUI][DUAL_START_REQUEST]")
+#endif
                 camera.startDualSession { started in
                     if !started, camera.dualCameraUXState == .unsupported {
                         if reduceMotion { captureExperience = .single }
@@ -948,7 +997,7 @@ private struct CameraLightEffectView: View {
     }
 }
 
-private struct DualCameraLightControlLayout: View {
+private struct CameraLightControlLayout: View {
     @Binding var level: Double
     let onEditingChanged: (Bool) -> Void
 
@@ -1006,7 +1055,7 @@ private struct DualCameraPiPDragSurface: View {
                         .onChanged { onDragChanged($0.translation) }
                         .onEnded { onDragEnded($0.translation, layout) }
                 )
-                .accessibilityLabel("Move secondary camera preview")
+                .accessibilityLabel("サブカメラのプレビューを移動")
                 .accessibilityHint("Drag and release to snap to a safe corner")
         }
         .allowsHitTesting(true)
@@ -1064,7 +1113,7 @@ private struct VerticalCameraLightControl: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Reset camera light")
+            .accessibilityLabel("カメラライトをリセット")
             .accessibilityValue("50 percent")
         }
         .foregroundStyle(.white.opacity(0.92))
@@ -1135,7 +1184,7 @@ private struct VerticalLightTrack: View {
             )
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Camera light")
+        .accessibilityLabel("カメラライト")
         .accessibilityValue("\(Int((safeLevel * 100).rounded())) percent")
         .accessibilityAdjustableAction { direction in
             switch direction {

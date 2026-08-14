@@ -161,7 +161,12 @@ final class MemoryRepository: ObservableObject {
         targetPointSize: CGSize
     ) async -> UIImage? {
         guard let fileName = memory.frontImageFileName else { return nil }
-        return await loadImageAsync(fileName: fileName, purpose: purpose, targetPointSize: targetPointSize)
+        return await loadImageAsync(
+            fileName: fileName,
+            purpose: purpose,
+            targetPointSize: targetPointSize,
+            displayScale: UIScreen.main.scale
+        )
     }
 
     func backImage(for memory: MemoryRecord) -> UIImage? {
@@ -180,7 +185,12 @@ final class MemoryRepository: ObservableObject {
         targetPointSize: CGSize
     ) async -> UIImage? {
         let fileName = memory.backImageFileName ?? memory.imageFileName
-        return await loadImageAsync(fileName: fileName, purpose: purpose, targetPointSize: targetPointSize)
+        return await loadImageAsync(
+            fileName: fileName,
+            purpose: purpose,
+            targetPointSize: targetPointSize,
+            displayScale: UIScreen.main.scale
+        )
     }
 
     func hasFrontImage(for memory: MemoryRecord) -> Bool {
@@ -248,7 +258,7 @@ final class MemoryRepository: ObservableObject {
         fileName: String,
         purpose: MemoryImagePurpose,
         targetPointSize: CGSize,
-        displayScale: CGFloat = UIScreen.main.scale
+        displayScale: CGFloat
     ) async -> UIImage? {
         let pixelWidth = max(1, Int(ceil(targetPointSize.width * displayScale)))
         let pixelHeight = max(1, Int(ceil(targetPointSize.height * displayScale)))

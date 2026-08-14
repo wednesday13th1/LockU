@@ -14,7 +14,7 @@ enum LockerCanvasError: LocalizedError {
 }
 
 @MainActor final class LockerCanvasRepository: ObservableObject {
-    static let maximumUserMemories = 4
+    static let maximumUserMemories = 10
     @Published private(set) var metadata: LockerCanvasMetadata = .empty
     private let store: SafeJSONStore<LockerCanvasMetadata>
     private let drawingDirectory: URL

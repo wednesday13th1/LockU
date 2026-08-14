@@ -13,6 +13,7 @@ struct LockerHomeView: View {
     let onSettings: () -> Void
     @State private var appeared = false
     @StateObject private var lockerResurfacingCoordinator = LockerResurfacingCoordinator()
+    @StateObject private var canvasEditingCoordinator = LockerCanvasEditingCoordinator()
 
     var body: some View {
         GeometryReader { proxy in
@@ -39,6 +40,7 @@ struct LockerHomeView: View {
                         lockerColor: Color(lockUHex: settingsRepository.settings.lockerColorHex)
                     )
                     .environmentObject(lockerResurfacingCoordinator)
+                    .environmentObject(canvasEditingCoordinator)
                     .opacity(appModel.lockerDoorState.isOpenOrOpening ? 1 : 0.12)
                     .blur(radius: appModel.lockerDoorState == .closed ? 1.5 : 0)
                     .animation(
@@ -57,6 +59,11 @@ struct LockerHomeView: View {
                 .frame(width: lockerWidth, height: lockerHeight)
                 .animation(.easeOut(duration: 0.22), value: isOpen)
                 .zIndex(LockUSceneTokens.Layer.physical)
+                .overlay(alignment: .bottom) {
+                    LockerCanvasExternalControls(coordinator: canvasEditingCoordinator)
+                        .offset(y: 54)
+                        .zIndex(LockUSceneTokens.Layer.interface)
+                }
 
                 Spacer(minLength: 8)
             }
@@ -65,17 +72,20 @@ struct LockerHomeView: View {
             .offset(y: appeared ? 0 : 8)
             .onAppear {
                 if !appeared { appModel.markLockerFirstRender() }
-                appModel.refreshTimeDependentState()
                 guard !appeared else { return }
                 if reduceMotion {
                     appeared = true
                 } else {
                     withAnimation(.easeOut(duration: 0.45)) { appeared = true }
                 }
-                refreshLockerResurfacing()
+                Task { @MainActor in
+                    await Task.yield()
+                    appModel.refreshTimeDependentState()
+                    refreshLockerResurfacing()
+                }
             }
             .onChange(of: memoryRepository.memories.count) { _, _ in refreshLockerResurfacing() }
-            .onChange(of: demoClock.now) { _, _ in refreshLockerResurfacing() }
+            .onChange(of: demoClock.preset) { _, _ in refreshLockerResurfacing() }
             .animation(.easeOut(duration: 0.23), value: lockerResurfacingCoordinator.candidateMemoryID)
         }
     }
@@ -87,6 +97,122 @@ struct LockerHomeView: View {
             memories: memoryRepository.memories,
             growthStage: growth.stage
         )
+    }
+}
+
+private struct LockerCanvasExternalControls: View {
+    @ObservedObject var coordinator: LockerCanvasEditingCoordinator
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            controls(compact: false)
+            controls(compact: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .accessibilityElement(children: .contain)
+        .animation(.easeOut(duration: 0.2), value: coordinator.isEditing)
+        .animation(.easeOut(duration: 0.18), value: coordinator.isDrawing)
+    }
+
+    private func controls(compact: Bool) -> some View {
+        HStack(spacing: compact ? 7 : 10) {
+            if coordinator.isEditing {
+                if coordinator.isDrawing {
+                    drawingTools
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else {
+                    HStack(spacing: compact ? 10 : 14) {
+                        toolButton("pencil.tip", compact ? nil : "描く") { coordinator.toggleDrawing() }
+                            .accessibilityLabel("ロッカーに描く")
+                        toolButton("textformat", compact ? nil : "文字を追加") { coordinator.requestText() }
+                            .accessibilityLabel("文字を追加")
+                        toolButton("plus.circle", compact ? nil : "思い出を追加") { coordinator.requestMemory() }
+                            .accessibilityLabel("過去の思い出を追加")
+                        if coordinator.selection != .none {
+                            if coordinator.selection == .memory {
+                                toolButton("square.3.layers.3d.top.filled", nil) { coordinator.bringSelectionToFront() }
+                                    .accessibilityLabel("前面へ移動")
+                            }
+                            toolButton("xmark", nil) { coordinator.removeSelection() }
+                                .accessibilityLabel(coordinator.selection == .memory ? "ロッカーから外す" : "文字を外す")
+                        }
+                    }
+                    .padding(.horizontal, compact ? 10 : 14)
+                    .frame(height: 44)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                Button("完了") { coordinator.finish() }
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(.horizontal, compact ? 12 : 16)
+                    .frame(height: 44)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .accessibilityLabel("編集を完了")
+            } else {
+                Button { coordinator.begin() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "pencil")
+                        if !compact { Text("編集") }
+                    }
+                    .font(.system(size: 13, weight: .medium))
+                    .padding(.horizontal, compact ? 12 : 15)
+                    .frame(height: 42)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(.white.opacity(0.28), lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.09), radius: 8, y: 3)
+                }
+                .accessibilityLabel("ロッカーを編集")
+            }
+        }
+        .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.76))
+    }
+
+    private var drawingTools: some View {
+        HStack(spacing: 8) {
+            Button { coordinator.erasing = false } label: { Image(systemName: "pencil.tip") }
+                .accessibilityLabel("ペン")
+            Button { coordinator.erasing = true } label: { Image(systemName: "eraser") }
+                .accessibilityLabel("消しゴム")
+            Button(action: coordinator.undoDrawing) { Image(systemName: "arrow.uturn.backward") }
+                .accessibilityLabel("元に戻す")
+            ForEach(drawingColors, id: \.self) { color in
+                Button {
+                    coordinator.penColor = color
+                    coordinator.erasing = false
+                } label: {
+                    Circle()
+                        .fill(Color(uiColor: color))
+                        .frame(width: 15, height: 15)
+                        .overlay(Circle().stroke(.white.opacity(0.72), lineWidth: 0.7))
+                }
+                .frame(width: 22, height: 36)
+                .accessibilityLabel("ペンの色を変更")
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 44)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var drawingColors: [UIColor] {
+        [
+            .black,
+            UIColor(red: 0.06, green: 0.12, blue: 0.22, alpha: 1),
+            .systemBlue,
+            .systemPink,
+            .white
+        ]
+    }
+
+    private func toolButton(_ icon: String, _ title: String?, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                if let title { Text(title).font(.system(size: 10, weight: .medium)) }
+            }
+            .frame(minWidth: 30, minHeight: 36)
+        }
     }
 }
 
@@ -156,7 +282,7 @@ private struct LockerResurfacedMemoryCard: View {
                         .foregroundStyle(Color.black.opacity(0.62))
                         .lineLimit(3)
                 }
-                Button("Memoryを見る", action: onViewMemory)
+                Button("思い出を見る", action: onViewMemory)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.black.opacity(0.54))
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -207,16 +333,16 @@ private struct LockerUtilityBar: View {
                 .font(.system(size: 18, weight: .medium))
                 .frame(maxWidth: .infinity)
             Menu {
-                Button("Share", systemImage: "square.and.arrow.up", action: onShare)
-                Button("Locker Code", systemImage: "number", action: onCode)
-                Button("Settings", systemImage: "gearshape", action: onSettings)
+                Button("シェア", systemImage: "square.and.arrow.up", action: onShare)
+                Button("ロッカーコード", systemImage: "number", action: onCode)
+                Button("設定", systemImage: "gearshape", action: onSettings)
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 17, weight: .semibold))
                     .frame(width: 44, height: 44)
             }
             .foregroundStyle(LockUSceneTokens.Material.lockerInk.opacity(0.84))
-            .accessibilityLabel("Locker menu")
+            .accessibilityLabel("ロッカーメニュー")
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .foregroundStyle(LockUSceneTokens.Material.lockerInk.opacity(0.92))
@@ -346,13 +472,6 @@ private struct LockerInteriorSurface: View {
 
                 InteriorLightFalloff(side: side, ceiling: ceiling, floor: floor)
                 InteriorHardwareOverlay(side: side, ceiling: ceiling, floor: floor)
-
-                LockerGrowthDecorationLayer()
-                    .padding(.horizontal, side + 1)
-                    .padding(.top, ceiling)
-                    .padding(.bottom, floor)
-                    .saturation(0.62)
-                    .opacity(0.34)
 
                 LockerInteriorContent()
                     .padding(.horizontal, side + 1)
@@ -546,7 +665,7 @@ struct LockerNamePlateView: View {
         .overlay(RoundedRectangle(cornerRadius: 1.5).stroke(Color(red: 195/255, green: 198/255, blue: 196/255), lineWidth: 0.5))
         .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Locker \(number), \(ownerName.isEmpty ? "My Locker" : ownerName)")
+        .accessibilityLabel("ロッカー \(number)、\(ownerName.isEmpty ? "ロッカー" : ownerName)")
     }
 }
 

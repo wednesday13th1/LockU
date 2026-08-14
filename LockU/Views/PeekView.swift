@@ -187,7 +187,7 @@ struct PeekView: View {
                     .padding()
                     .background(.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 16))
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.75)))
-                    .accessibilityLabel("Locker Code")
+                    .accessibilityLabel("ロッカーコード")
                 Button("ロッカーをのぞく") {
                     submittedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
@@ -207,12 +207,12 @@ struct PeekView: View {
                 Image(systemName: "eye.fill")
                     .font(.title2)
                     .foregroundStyle(LockUDesign.Color.ramuneBlue)
-                Text("TODAY’S PREVIEW")
+                Text("今日のプレビュー")
                     .font(LockUDesign.Typography.caption)
                     .tracking(2)
-                Text("Locker \(code)")
+                Text("ロッカー \(code)")
                     .font(LockUDesign.Typography.screenTitle)
-                Text("by Haru")
+                Text("Haruのロッカー")
                     .font(LockUDesign.Typography.body)
                     .foregroundStyle(LockUDesign.Color.softInkSecondary)
                 VStack(spacing: 8) {
@@ -410,7 +410,7 @@ private struct RevisitExperienceView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.68))
                         .frame(minHeight: 44)
-                        .accessibilityLabel("Then and Now、この頃と今を見る")
+                        .accessibilityLabel("あの時と今を見る")
                     }
                     nowReflections
                         .padding(.top, 28)
@@ -457,7 +457,7 @@ private struct RevisitExperienceView: View {
                     .font(.system(size: 17, weight: .semibold))
                     .frame(width: 44, height: 44)
             }
-            .accessibilityLabel("Revisitを閉じる")
+            .accessibilityLabel("振り返りを閉じる")
             Spacer()
         }
         .foregroundStyle(LockUDesign.Color.schoolNavy)
@@ -470,7 +470,7 @@ private struct RevisitExperienceView: View {
                 .font(.footnote.weight(.semibold))
                 .tracking(1.7)
                 .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.64))
-                .accessibilityLabel("Revisit reason: \(presentation.eyebrowText)")
+                .accessibilityLabel("振り返りのきっかけ、\(presentation.eyebrowText)")
             Text(presentation.relativeDateText.uppercased())
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .tracking(1.4)
@@ -529,7 +529,7 @@ private struct RevisitExperienceView: View {
             .frame(maxWidth: 500)
             .aspectRatio(4 / 3, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 3))
-            .accessibilityLabel("Memory photo unavailable")
+            .accessibilityLabel("思い出の写真を表示できません")
         }
     }
 
@@ -579,7 +579,7 @@ private struct RevisitExperienceView: View {
 
     private var originalContext: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("THEN")
+            Text("あの時")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(1.8)
                 .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.58))
@@ -736,7 +736,7 @@ private struct RevisitExperienceView: View {
         let reflections = reflectionRepository.reflections(for: presentation.memoryID)
         if !reflections.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Text("NOW")
+                Text("いま")
                     .font(.system(size: 10, weight: .semibold))
                     .tracking(1.8)
                     .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.58))

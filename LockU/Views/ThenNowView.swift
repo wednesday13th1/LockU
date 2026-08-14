@@ -18,9 +18,9 @@ struct ThenNowView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     if horizontalSizeClass == .regular {
-                        HStack(alignment: .center, spacing: 18) { memoryColumn("THEN", pair.thenMemory); gapLabel; memoryColumn("NOW", pair.nowMemory) }
+                        HStack(alignment: .center, spacing: 18) { memoryColumn("あの時", pair.thenMemory); gapLabel; memoryColumn("いま", pair.nowMemory) }
                     } else {
-                        VStack(spacing: 25) { memoryColumn("THEN", pair.thenMemory); gapLabel; memoryColumn("NOW", pair.nowMemory) }
+                        VStack(spacing: 25) { memoryColumn("あの時", pair.thenMemory); gapLabel; memoryColumn("いま", pair.nowMemory) }
                     }
                     if !showsReflection {
                         Text("少し変わった？")
@@ -36,9 +36,9 @@ struct ThenNowView: View {
                 .offset(y: reduceMotion || appeared ? 0 : 8)
             }
             .background(LockUPageBackground())
-            .navigationTitle("THEN & NOW")
+            .navigationTitle("あの時と、いま")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Close") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("閉じる") { dismiss() } } }
         }
         .onAppear { if reduceMotion { appeared = true } else { withAnimation(.easeOut(duration: 0.34)) { appeared = true } } }
         .onChange(of: reflectionText) { _, value in if value.count > MemoryReflectionPolicy.maximumLength { reflectionText = String(value.prefix(MemoryReflectionPolicy.maximumLength)) } }
@@ -47,7 +47,7 @@ struct ThenNowView: View {
 
     private func memoryColumn(_ label: String, _ memory: MemoryRecord) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text(label).font(.system(size: 11, weight: .semibold)).tracking(2).foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.62))
+            Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.62))
             ThenNowMemoryImage(memory: memory).aspectRatio(0.82, contentMode: .fit).frame(maxWidth: 310).clipped().shadow(color: .black.opacity(0.11), radius: 4, y: 2)
             if let emoji = memory.moodEmoji { Text(emoji).font(.system(size: 22)) }
             if let note = memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
@@ -66,15 +66,15 @@ struct ThenNowView: View {
     }
 
     private var gapText: String {
-        if pair.dayGap >= 365, pair.dayGap % 365 < 45 { return "\(max(1, pair.dayGap / 365)) YEAR\(pair.dayGap / 365 == 1 ? "" : "S")" }
-        if pair.dayGap >= 60 { return "\(max(2, Int((Double(pair.dayGap) / 30).rounded()))) MONTHS" }
-        return "\(pair.dayGap) DAYS"
+        if pair.dayGap >= 365, pair.dayGap % 365 < 45 { return "\(max(1, pair.dayGap / 365))年前" }
+        if pair.dayGap >= 60 { return "\(max(2, Int((Double(pair.dayGap) / 30).rounded())))か月前" }
+        return "\(pair.dayGap)日前"
     }
 
     @ViewBuilder private var reflectionSection: some View {
         if showsReflection {
             VStack(alignment: .leading, spacing: 12) {
-                Text("あの時の自分に、今ならなんて言う？").font(LockUDesign.Typography.body)
+                Text("あの時の自分を、今見ると？").font(LockUDesign.Typography.body)
                 ScrollView(.horizontal, showsIndicators: false) { HStack { ForEach(quickResponses, id: \.self) { response in Button(response) { reflectionText = response }.buttonStyle(.bordered) } } }
                 TextEditor(text: $reflectionText).frame(minHeight: 80).scrollContentBackground(.hidden).background(LockUDesign.Color.notebookPaper.opacity(0.4))
                 HStack { Button("今回は残さない") { showsReflection = false; reflectionText = "" }; Spacer(); Button("残す", action: saveReflection).disabled(reflectionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
@@ -84,7 +84,7 @@ struct ThenNowView: View {
         }
     }
 
-    private var quickResponses: [String] { ["よくやってた", "大丈夫だったよ", "懐かしい", "ちゃんと進んでた", "この頃も好き"] }
+    private var quickResponses: [String] { ["よくやってた", "大丈夫だったよ", "懐かしい", "この頃も好き", "自分なりに頑張ってた", "あの時は大変だったね"] }
     private func saveReflection() {
         do {
             try CompleteRevisitWorkflow(memoryRepository: memoryRepository, reflectionRepository: reflectionRepository).execute(memoryID: pair.thenMemory.id, reflectionText: reflectionText)

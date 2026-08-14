@@ -244,6 +244,11 @@ final class CameraSessionManager: ObservableObject {
     private var isCameraScreenActive = false
     private var dualOperationGeneration = 0
     private var isDualLifecycleInvalidated = false
+    private var isSingleConfigurationPending = false
+    private var isSingleStartPending = false
+    private var isPermissionRequestPending = false
+    private var currentLightLevel = 0.5
+    private var pendingDualStartCompletion: (@MainActor (Bool) -> Void)?
     private var diagnosticSessionID = UUID()
 
     var supportsDualCamera: Bool { AVCaptureMultiCamSession.isMultiCamSupported }
@@ -261,6 +266,7 @@ final class CameraSessionManager: ObservableObject {
 
     var dualCameraUXState: DualCameraUXState {
         if permissionStatus == .denied || permissionStatus == .restricted { return .permissionDenied }
+        guard sessionMode == .dual else { return .preparing }
         if dualSessionState == .unsupported { return .unsupported }
         if isCapturing { return .capturing }
         if dualSessionState == .interrupted { return .interrupted }
@@ -313,10 +319,14 @@ final class CameraSessionManager: ObservableObject {
             permissionStatus = .authorized
             configureAndStart()
         case .notDetermined:
-            Task {
+            guard !isPermissionRequestPending else { return }
+            isPermissionRequestPending = true
+            Task { @MainActor [weak self] in
                 let granted = await AVCaptureDevice.requestAccess(for: .video)
-                permissionStatus = granted ? .authorized : .denied
-                if granted { configureAndStart() }
+                guard let self else { return }
+                self.isPermissionRequestPending = false
+                self.permissionStatus = granted ? .authorized : .denied
+                if granted { self.configureAndStart() }
             }
         case .denied:
             permissionStatus = .denied
@@ -325,6 +335,23 @@ final class CameraSessionManager: ObservableObject {
         @unknown default:
             permissionStatus = .denied
         }
+    }
+
+    /// Restores PHOTO as the opening mode even if the previous screen closed while using DUAL.
+    func prepareSingleCamera() {
+        if sessionMode == .dual {
+            invalidateDualLifecycle(reason: "camera opened in photo mode")
+            dualSessionState = .stopping
+            dualController.stop { [weak self] in
+                guard let self, self.isApplicationActive, self.isCameraScreenActive else { return }
+                self.sessionMode = .single
+                self.dualSessionState = .stopped
+                self.prepare()
+            }
+            return
+        }
+        sessionMode = .single
+        prepare()
     }
 
     func startSession() {
@@ -337,8 +364,19 @@ final class CameraSessionManager: ObservableObject {
             configureAndStart()
             return
         }
+        guard !isSingleStartPending else { return }
+        isSingleStartPending = true
+#if DEBUG
+        print("[CameraUI][SINGLE_START_REQUEST]")
+#endif
         controller.start { [weak self] running in
-            self?.isSessionRunning = running
+            guard let self else { return }
+            self.isSingleStartPending = false
+            self.isSessionRunning = running
+            if running { self.controller.setLightLevel(self.currentLightLevel * 100) }
+#if DEBUG
+            if running { print("[CameraUI][SINGLE_RUNNING]") }
+#endif
         }
     }
 
@@ -393,6 +431,16 @@ final class CameraSessionManager: ObservableObject {
 
     func startDualSession(completion: (@MainActor (Bool) -> Void)? = nil) {
         dualCameraLog("OPEN_REQUEST")
+        guard isCameraScreenActive else {
+            dualCameraLog("OPEN_REJECTED_SCREEN_INACTIVE")
+            completion?(false)
+            return
+        }
+        guard isApplicationActive else {
+            dualCameraLog("OPEN_DEFERRED_APPLICATION_INACTIVE")
+            pendingDualStartCompletion = completion
+            return
+        }
         if dualCameraHealth == .unavailable || dualSessionState == .failed {
             dualCameraLog("OPEN_IGNORED_RETRY_REQUIRED generation=\(dualOperationGeneration)")
             completion?(false)
@@ -411,6 +459,7 @@ final class CameraSessionManager: ObservableObject {
         }
 
         dualCameraLog("OPEN_ACCEPTED")
+        pendingDualStartCompletion = nil
         isDualLifecycleInvalidated = false
         let authorization = AVCaptureDevice.authorizationStatus(for: .video)
         dualCameraLog("PERMISSION_CHECK status=\(authorization.rawValue)")
@@ -607,6 +656,17 @@ final class CameraSessionManager: ObservableObject {
         )
     }
 
+    /// Routes one normalized LIGHT value to the active camera topology.
+    func setLightLevel(_ normalizedLevel: Double, force: Bool = false) {
+        let safeLevel = normalizedLevel.isFinite ? min(1, max(0, normalizedLevel)) : 0.5
+        currentLightLevel = safeLevel
+        if sessionMode == .dual {
+            setDualLightLevel(safeLevel, force: force)
+        } else {
+            controller.setLightLevel(safeLevel * 100)
+        }
+    }
+
     @discardableResult
     func connectDualPreview(
         backLayer: AVCaptureVideoPreviewLayer,
@@ -650,6 +710,10 @@ final class CameraSessionManager: ObservableObject {
                 generation: dualOperationGeneration,
                 screenActive: isCameraScreenActive
             )
+            if isCameraScreenActive, let completion = pendingDualStartCompletion {
+                pendingDualStartCompletion = nil
+                startDualSession(completion: completion)
+            }
         }
     }
 
@@ -662,8 +726,14 @@ final class CameraSessionManager: ObservableObject {
         }
         isCameraScreenActive = isActive
         if !isActive {
+            pendingDualStartCompletion?(false)
+            pendingDualStartCompletion = nil
             invalidateDualLifecycle(reason: "camera screen closed")
         } else {
+            if dualCameraHealth == .unavailable || dualSessionState == .failed {
+                dualCameraHealth = .unknown
+                dualSessionState = .stopped
+            }
             dualController.updateDiagnosticContext(
                 generation: dualOperationGeneration,
                 screenActive: isApplicationActive
@@ -683,8 +753,11 @@ final class CameraSessionManager: ObservableObject {
             startSession()
             return
         }
+        guard !isSingleConfigurationPending else { return }
+        isSingleConfigurationPending = true
         controller.configure(position: currentPosition) { [weak self] result in
             guard let self else { return }
+            self.isSingleConfigurationPending = false
             guard self.isApplicationActive, self.isCameraScreenActive else { return }
             switch result {
             case .success:
@@ -1490,6 +1563,7 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
         guard let device = discoverDevice(position: position) else {
             throw LockUCameraError.cameraUnavailable
         }
+        try configureMultiCamFormat(for: device, position: position)
         debugLog(
             "\(position == .front ? "FRONT_DEVICE_READY" : "BACK_DEVICE_READY") " +
             "type=\(device.deviceType.rawValue)"
@@ -1516,6 +1590,61 @@ private nonisolated final class DualCameraSessionController: NSObject, @unchecke
             "position=\(position == .front ? "front" : "back") result=\(fallbackDevice?.deviceType.rawValue ?? "none")"
         )
         return fallbackDevice
+    }
+
+    private func configureMultiCamFormat(
+        for device: AVCaptureDevice,
+        position: AVCaptureDevice.Position
+    ) throws {
+        let targetFPS = 30.0
+        let candidates = device.formats.filter { format in
+            guard format.isMultiCamSupported else { return false }
+            return format.videoSupportedFrameRateRanges.contains { range in
+                range.minFrameRate <= targetFPS && targetFPS <= range.maxFrameRate
+            }
+        }
+        guard let selected = candidates.min(by: { lhs, rhs in
+            multiCamFormatScore(lhs) < multiCamFormatScore(rhs)
+        }) else {
+            debugLog(
+                "MULTICAM_FORMAT_UNAVAILABLE position=\(position == .front ? "front" : "back")",
+                isError: true
+            )
+            throw LockUCameraError.cameraUnavailable
+        }
+
+        let duration = CMTime(value: 1, timescale: 30)
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            device.activeFormat = selected
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+        } catch {
+            debugLog(
+                "MULTICAM_FORMAT_APPLY_FAILED position=\(position == .front ? "front" : "back") " +
+                "error=\(error.localizedDescription)",
+                isError: true
+            )
+            throw error
+        }
+
+        let dimensions = CMVideoFormatDescriptionGetDimensions(selected.formatDescription)
+        debugLog(
+            "MULTICAM_FORMAT_SELECTED position=\(position == .front ? "front" : "back") " +
+            "dimensions=\(dimensions.width)x\(dimensions.height) fps=30"
+        )
+    }
+
+    private func multiCamFormatScore(_ format: AVCaptureDevice.Format) -> Int64 {
+        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        let width = Int64(dimensions.width)
+        let height = Int64(dimensions.height)
+        let targetWidth: Int64 = 1_920
+        let targetHeight: Int64 = 1_080
+        let dimensionDistance = abs(width - targetWidth) + abs(height - targetHeight)
+        let oversizedPenalty: Int64 = width > targetWidth || height > targetHeight ? 10_000_000 : 0
+        return oversizedPenalty + dimensionDistance
     }
 
     private func prepareConnection(_ connection: AVCaptureConnection?) {
@@ -1883,6 +2012,28 @@ private nonisolated final class CameraSessionController: NSObject, @unchecked Se
                 self.session.stopRunning()
             }
             Task { @MainActor in completion() }
+        }
+    }
+
+    func setLightLevel(_ level: Double) {
+        sessionQueue.async { [weak self] in
+            guard let device = self?.videoInput?.device else { return }
+            let bias = LockULightExposureMapping.bias(
+                lightLevel: level,
+                deviceMinimum: device.minExposureTargetBias,
+                deviceMaximum: device.maxExposureTargetBias,
+                role: device.position == .front ? .front : .back
+            )
+            guard device.minExposureTargetBias < 0 || device.maxExposureTargetBias > 0 else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                device.setExposureTargetBias(bias) { _ in }
+            } catch {
+#if DEBUG
+                print("[CameraUI][LIGHT_WARNING] \(error.localizedDescription)")
+#endif
+            }
         }
     }
 

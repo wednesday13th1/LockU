@@ -40,7 +40,7 @@ private struct LockerCodeSheet: View {
             Image(systemName: "number.circle.fill")
                 .font(.system(size: 38))
                 .foregroundStyle(LockUDesign.Color.ramuneBlue)
-            Text("Locker Code").font(LockUDesign.Typography.screenTitle)
+            Text("ロッカーコード").font(LockUDesign.Typography.screenTitle)
             Text(code)
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .tracking(3)
@@ -48,7 +48,7 @@ private struct LockerCodeSheet: View {
                 .font(LockUDesign.Typography.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(LockUDesign.Color.softInkSecondary)
-            Button("Close") { dismiss() }.buttonStyle(LockUPrimaryButtonStyle())
+            Button("閉じる") { dismiss() }.buttonStyle(LockUPrimaryButtonStyle())
         }
         .foregroundStyle(LockUDesign.Color.schoolNavy)
         .padding(32)
@@ -67,8 +67,8 @@ private struct ShareLockerSheet: View {
             Image(systemName: "paperplane.fill")
                 .font(.system(size: 36))
                 .foregroundStyle(LockUDesign.Color.ramuneBlue)
-            Text("Share your locker").font(LockUDesign.Typography.screenTitle)
-            Text("LOCKER CODE")
+            Text("ロッカーをシェア").font(LockUDesign.Typography.screenTitle)
+            Text("ロッカーコード")
                 .font(LockUDesign.Typography.caption)
                 .tracking(2)
                 .foregroundStyle(LockUDesign.Color.softInkSecondary)
@@ -82,12 +82,12 @@ private struct ShareLockerSheet: View {
             .padding(18)
             .frame(maxWidth: .infinity)
             .background(LockUDesign.Color.notebookPaper, in: RoundedRectangle(cornerRadius: 18))
-            ShareLink(item: "My LockU Locker Code: \(code)") {
-                Label("Share", systemImage: "square.and.arrow.up")
+            ShareLink(item: "LockUのロッカーコード：\(code)") {
+                Label("シェア", systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(LockUPrimaryButtonStyle())
-            Button("Close") { dismiss() }.buttonStyle(LockUSecondaryButtonStyle())
+            Button("閉じる") { dismiss() }.buttonStyle(LockUSecondaryButtonStyle())
         }
         .foregroundStyle(LockUDesign.Color.schoolNavy)
         .padding(28)
@@ -108,6 +108,8 @@ private struct LockerSettingsSheet: View {
     @EnvironmentObject private var repository: LockerSettingsRepository
     @EnvironmentObject private var appModel: LockUAppModel
     @EnvironmentObject private var memoryRepository: MemoryRepository
+    @StateObject private var previewResurfacingCoordinator = LockerResurfacingCoordinator()
+    @StateObject private var previewCanvasEditingCoordinator = LockerCanvasEditingCoordinator()
     @State private var ownerName = ""
     @State private var lockerNumber = ""
     @State private var appearance = LockerAppearanceSettings.default
@@ -121,53 +123,55 @@ private struct LockerSettingsSheet: View {
                         LockerMemoryBoardView(appearanceOverride: appearance)
                             .environmentObject(memoryRepository)
                             .environmentObject(appModel)
+                            .environmentObject(previewResurfacingCoordinator)
+                            .environmentObject(previewCanvasEditingCoordinator)
                     }
                     .frame(height: 230)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.42), lineWidth: 1))
                     .allowsHitTesting(false)
-                    .accessibilityLabel("Current Locker Home preview")
+                    .accessibilityLabel("現在のロッカープレビュー")
                 }
 
-                Section("Locker Appearance") {
-                    Picker("Locker Background", selection: $appearance.backgroundStyle) {
+                Section("見た目") {
+                    Picker("背景", selection: $appearance.backgroundStyle) {
                         ForEach(LockerBackgroundStyle.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Collage Style", selection: $appearance.collageStyle) {
+                    Picker("コラージュ", selection: $appearance.collageStyle) {
                         ForEach(LockerCollageStyle.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Frame", selection: $appearance.frameStyle) {
+                    Picker("フレーム", selection: $appearance.frameStyle) {
                         ForEach(LockerFrameStyle.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Filter", selection: $appearance.filterStyle) {
+                    Picker("フィルター", selection: $appearance.filterStyle) {
                         ForEach(LockerFilterStyle.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Shelf Mood", selection: $appearance.itemTheme) {
+                    Picker("棚の雰囲気", selection: $appearance.itemTheme) {
                         ForEach(LockerItemTheme.allCases) { theme in
                             Text(theme.title)
                                 .tag(theme)
-                                .accessibilityLabel("\(theme.title) theme")
+                                .accessibilityLabel("\(theme.title)のテーマ")
                         }
                     }
-                    Picker("Featured Video", selection: $appearance.featuredVideoMemoryID) {
-                        Text("Automatic — Latest Memory").tag(UUID?.none)
+                    Picker("動く思い出", selection: $appearance.featuredVideoMemoryID) {
+                        Text("自動・最新の思い出").tag(UUID?.none)
                         ForEach(memoryRepository.memories) { memory in
                             Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
                                 .tag(Optional(memory.id))
                         }
                     }
-                    Toggle("Daily Variation", isOn: $appearance.dailyVariationEnabled)
+                    Toggle("日ごとに少し変える", isOn: $appearance.dailyVariationEnabled)
                 }
 
-                Section("Locker") {
-                    TextField("Owner name", text: $ownerName)
-                    TextField("Locker code", text: $lockerNumber)
+                Section("ロッカー") {
+                    TextField("名前", text: $ownerName)
+                    TextField("ロッカーコード", text: $lockerNumber)
                         .keyboardType(.numberPad)
                 }
 
                 #if DEBUG
-                Section("Demo Time") {
-                    Picker("Time", selection: Binding(
+                Section("デモ時刻") {
+                    Picker("時刻", selection: Binding(
                         get: { appModel.demoClock.preset },
                         set: { appModel.selectDemoPreset($0) }
                     )) {
@@ -175,19 +179,19 @@ private struct LockerSettingsSheet: View {
                             Text(preset.title).tag(preset)
                         }
                     }
-                    Text("Session only · Memory dates are never changed")
+                    Text("この起動中のみ・思い出の日付は変わりません")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 #endif
             }
-            .navigationTitle("Settings")
+            .navigationTitle("設定")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("キャンセル") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("保存") {
                         do {
                             var settings = repository.settings
                             settings.ownerName = ownerName.isEmpty ? "My" : ownerName

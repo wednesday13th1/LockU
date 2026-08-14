@@ -33,6 +33,9 @@ nonisolated struct LockerTextDecoration: Codable, Identifiable, Hashable, Sendab
     var normalizedY: Double
     var scale: Double
     var rotationDegrees: Double
+    /// Optional for backward compatibility with existing locker-canvas.json files.
+    var colorHex: String?
+    var zIndex: Int?
     let createdAt: Date
 }
 
@@ -113,21 +116,25 @@ struct LockerSettings: Codable, Equatable, Sendable {
 enum LockerCollageStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     case balanced, casual, polaroid, digicam
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self { case .balanced: "バランス"; case .casual: "ラフ"; case .polaroid: "チェキ"; case .digicam: "デジカメ" }
+    }
 }
 
 enum LockerFrameStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     case mixed, polaroid, thinWhite, borderless
     var id: String { rawValue }
     var title: String {
-        switch self { case .mixed: "Mixed"; case .polaroid: "Polaroid"; case .thinWhite: "Thin White"; case .borderless: "Borderless" }
+        switch self { case .mixed: "ミックス"; case .polaroid: "チェキ"; case .thinWhite: "白フチ"; case .borderless: "フチなし" }
     }
 }
 
 enum LockerFilterStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     case clear, digicam, film, aoharu, soft
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self { case .clear: "クリア"; case .digicam: "デジカメ"; case .film: "フィルム"; case .aoharu: "アオハル"; case .soft: "ソフト" }
+    }
 }
 
 enum LockerBackgroundStyle: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -141,12 +148,12 @@ enum LockerBackgroundStyle: String, Codable, CaseIterable, Identifiable, Sendabl
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .clearBlue: "Clear Blue"
-        case .softSky: "Soft Sky"
-        case .warmSunset: "Warm Sunset"
-        case .paleCream: "Pale Cream"
-        case .coolGray: "Cool Gray"
-        case .fadedSchoolBlue: "Faded School Blue"
+        case .clearBlue: "青空"
+        case .softSky: "やわらかい空"
+        case .warmSunset: "夕焼け"
+        case .paleCream: "クリーム"
+        case .coolGray: "クールグレー"
+        case .fadedSchoolBlue: "スクールブルー"
         }
     }
 }
@@ -158,7 +165,9 @@ enum LockerItemTheme: String, Codable, CaseIterable, Identifiable, Sendable {
     case aoharu
 
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self { case .blush: "スイート"; case .blue: "ブルー"; case .sage: "セージ"; case .aoharu: "アオハル" }
+    }
 }
 
 struct LockerAppearanceSettings: Codable, Equatable, Sendable {

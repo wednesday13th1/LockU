@@ -16,8 +16,8 @@ struct CameraImportView: View {
         ScrollView {
             VStack(spacing: LockUDesign.Spacing.large) {
                 VStack(spacing: 6) {
-                    Text("Today").font(.largeTitle.bold())
-                    Text(capturedToday ? "Today's memory is safe." : "Choose one moment worth keeping.")
+                    Text("今日").font(.largeTitle.bold())
+                    Text(capturedToday ? "今日の思い出は残してあります。" : "今日をひとつ残す。")
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -25,13 +25,13 @@ struct CameraImportView: View {
                 preview
 
                 if capturedToday && savedMemory == nil {
-                    Label("One memory per day", systemImage: "checkmark.seal.fill")
+                    Label("思い出は1日ひとつ", systemImage: "checkmark.seal.fill")
                         .foregroundStyle(LockUDesign.Color.ink)
                         .padding()
                         .background(.thinMaterial, in: Capsule())
                 } else {
                     PhotosPicker(selection: $selection, matching: .images) {
-                        Label("Choose from Photos", systemImage: "photo")
+                        Label("写真ライブラリから選ぶ", systemImage: "photo")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -53,7 +53,7 @@ struct CameraImportView: View {
                             appModel.report(error)
                         }
                     } label: {
-                        Label("Add to Locker", systemImage: "cabinet.fill")
+                        Label("ロッカーに残す", systemImage: "cabinet.fill")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)

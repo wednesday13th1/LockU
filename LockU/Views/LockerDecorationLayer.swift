@@ -90,17 +90,17 @@ private struct LockerDecorationItem: View {
             }
         }
         .contextMenu {
-            Button("Bring to Front", systemImage: "square.3.layers.3d.top.filled") {
+            Button("手前に移動", systemImage: "square.3.layers.3d.top.filled") {
                 perform { try LockerPlacementCoordinator(repository: repository).bringToFront(decoration) }
             }
-            Button("Flip", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
+            Button("左右を反転", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
                 perform { try LockerPlacementCoordinator(repository: repository).flip(decoration) }
             }
-            Button("Delete", systemImage: "trash", role: .destructive) {
+            Button("削除", systemImage: "trash", role: .destructive) {
                 perform { try repository.delete(decoration) }
             }
         }
-        .accessibilityLabel("Locker decoration")
+        .accessibilityLabel("ロッカーの飾り")
         .accessibilityHint("Drag, pinch, or rotate to edit. Long press for options.")
     }
 

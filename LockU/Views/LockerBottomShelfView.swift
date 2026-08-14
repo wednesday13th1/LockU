@@ -6,20 +6,10 @@ struct LockerBottomShelfView: View {
         GeometryReader { proxy in
             let shelfTopY = proxy.size.height - 21
 
-            ZStack(alignment: .topLeading) {
-                LockerShelfObjectLayer()
-                    .frame(width: proxy.size.width, height: shelfTopY)
-                    .scaleEffect(0.86, anchor: .bottom)
-                    .saturation(0.58)
-                    .opacity(0.28)
-                    .zIndex(50)
-
-                PhysicalMetalShelf()
-                    .frame(width: proxy.size.width, height: 21)
-                    .position(x: proxy.size.width * 0.5, y: shelfTopY + 10.5)
-                    .zIndex(40)
-            }
-            .accessibilityElement(children: .contain)
+            PhysicalMetalShelf()
+                .frame(width: proxy.size.width, height: 21)
+                .position(x: proxy.size.width * 0.5, y: shelfTopY + 10.5)
+                .accessibilityHidden(true)
         }
     }
 }
@@ -293,7 +283,7 @@ private struct LockerShelfObjectLayer: View {
         .animation(.easeInOut(duration: 0.22), value: settingsRepository.settings.appearance.itemTheme)
         .onAppear(perform: refreshDailyVariation)
         .onChange(of: settingsRepository.settings.appearance.itemTheme) { _, _ in refreshDailyVariation() }
-        .onChange(of: demoClock.now) { _, _ in refreshDailyVariation() }
+        .onChange(of: demoClock.preset) { _, _ in refreshDailyVariation() }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
     }
@@ -1169,7 +1159,7 @@ struct LockerCameraButton: View {
         }
         .buttonStyle(LockerPressStyle())
         .frame(minWidth: 44, minHeight: 44)
-        .accessibilityLabel("Camera")
+        .accessibilityLabel("カメラ")
         .accessibilityHint("Opens Camera tab")
     }
 }

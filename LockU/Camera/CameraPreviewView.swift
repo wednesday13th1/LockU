@@ -25,13 +25,13 @@ struct DualCameraOverlayLayout {
     }
 
     var pipTop: CGFloat { safeAreaTop + 78 }
-    var lightControlTop: CGFloat { pipTop + pipSize.height + 28 }
+    var lightControlTop: CGFloat { safeAreaTop + 100 }
     var captureClearance: CGFloat { max(162, safeAreaBottom + 146) }
     var availableLightControlHeight: CGFloat {
-        max(248, bounds.height - lightControlTop - captureClearance)
+        max(120, bounds.height - lightControlTop - captureClearance)
     }
     var lightTrackHeight: CGFloat {
-        min(240, max(94, availableLightControlHeight - 154))
+        min(220, max(120, availableLightControlHeight - 154))
     }
     var lightControlFrame: CGRect {
         CGRect(
@@ -126,6 +126,7 @@ final class CameraPreviewUIView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        previewLayer.frame = bounds
         updateConnection()
     }
 
@@ -209,7 +210,7 @@ final class DualCameraPreviewUIView: UIView {
     private let frontShadowLayer = CALayer()
     let diagnosticID = String(UUID().uuidString.prefix(4))
     private var lastReportedZeroFrame: Bool?
-    private var pipCorner: DualCameraPiPCorner = .topTrailing
+    private var pipCorner: DualCameraPiPCorner = .topLeading
     private var presentation: DualCameraPresentation = .backMain
     private var pipDragOffset: CGSize = .zero
     private var isDraggingPiP = false

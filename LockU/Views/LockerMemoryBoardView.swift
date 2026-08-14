@@ -91,10 +91,10 @@ struct LockerMemoryBoardView: View {
                 }
 
                 LockerDecorationLayer()
-                    .zIndex(20)
+                    .zIndex(10)
 
                 LockerCanvasLayer()
-                    .zIndex(80)
+                    .zIndex(15)
 
                 if selfDiscoveryMoment == nil, let pair = thenNowPair {
                     VStack {
@@ -103,7 +103,7 @@ struct LockerMemoryBoardView: View {
                                 presentedThenNowPair = pair
                             } label: {
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text("THEN & NOW").font(.system(size: 9, weight: .semibold)).tracking(1.1)
+                                    Text("あの時と、いま").font(.system(size: 9, weight: .semibold))
                                     Text("この頃と、今").font(.system(size: 8, weight: .regular))
                                 }
                                 .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.72))
@@ -112,7 +112,7 @@ struct LockerMemoryBoardView: View {
                                 .rotationEffect(.degrees(-1.2))
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Then and Now、この頃と今を見る")
+                            .accessibilityLabel("あの時と今を見る")
                             Spacer()
                         }
                         Spacer()
@@ -131,7 +131,7 @@ struct LockerMemoryBoardView: View {
                             } label: {
                                 VStack(alignment: .trailing, spacing: 1) {
                                     Text("こんな日もあった").font(.system(size: 9, weight: .semibold))
-                                    Text("MEMORY × 3").font(.system(size: 7.5, weight: .medium, design: .monospaced)).tracking(0.8)
+                                    Text("思い出 × 3").font(.system(size: 7.5, weight: .medium))
                                 }
                                 .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.70))
                                 .padding(.horizontal, 9).padding(.vertical, 6)
@@ -469,7 +469,7 @@ private struct LivingMemoryView: View {
                 .shadow(color: .black.opacity(0.085), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Latest memory from \(memory.createdAt.formatted(date: .abbreviated, time: .shortened))")
+        .accessibilityLabel("最新の思い出、\(memory.createdAt.formatted(date: .abbreviated, time: .shortened))")
     }
 }
 
@@ -1221,7 +1221,7 @@ struct PolaroidMemoryView: View {
             .shadow(color: LockUDesign.Color.summerShadow.opacity(0.22), radius: 15, y: 8)
         }
         .buttonStyle(LockerPressStyle())
-        .accessibilityLabel("Memory from \(memory.createdAt.formatted(date: .long, time: .omitted))")
+        .accessibilityLabel("\(memory.createdAt.formatted(date: .long, time: .omitted))の思い出")
         .accessibilityHint("Opens Memory Book")
     }
 
@@ -1283,7 +1283,7 @@ struct LockerWeatherNoteView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Today’s memory")
+            Text("今日の思い出")
                 .font(.system(size: 8, weight: .bold))
             if let weather = memory.weather {
                 Label(temperature(weather), systemImage: weatherSymbol(weather.summary))

@@ -55,7 +55,7 @@ struct MemoryBookshelfView: View {
 
     private var header: some View {
         HStack {
-            Text("Memories")
+            Text("思い出")
                 .font(LockUDesign.Typography.screenTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
             Spacer()

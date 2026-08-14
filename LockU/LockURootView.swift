@@ -96,7 +96,7 @@ final class LockUAppModel: ObservableObject {
     private func boot() async {
         let wasPreviouslyMigrated = onboardingDefaults.bool(forKey: "locku.migration.v2.completed")
         let coordinator = LockUBootCoordinator(dependencies: dependencies)
-        let essential = await coordinator.performEssentialBoot { bootState = $0 }
+        let essential = await coordinator.performEssentialBoot { self.bootState = $0 }
         if storageMode == .recoveryTemporary { presentedError = "一時復旧モードで起動しました。新しいデータは永続保存されません。" }
         else if let error = essential.error { presentedError = error.localizedDescription }
 
@@ -125,7 +125,7 @@ final class LockUAppModel: ObservableObject {
 
             let wasPreviouslyMigrated = onboardingDefaults.bool(forKey: "locku.migration.v2.completed")
             let coordinator = LockUBootCoordinator(dependencies: dependencies)
-            let deferred = await coordinator.performDeferredBoot { bootState = $0 }
+            let deferred = await coordinator.performDeferredBoot { self.bootState = $0 }
             if generation == deferredBootGeneration { deferredBootTask = nil }
             guard !Task.isCancelled, generation == deferredBootGeneration else { return }
             if presentedError == nil, let error = deferred.error {
