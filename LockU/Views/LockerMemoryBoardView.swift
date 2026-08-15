@@ -8,6 +8,7 @@ struct LockerMemoryBoardView: View {
     @EnvironmentObject private var demoClock: LockUDemoClock
     @EnvironmentObject private var resurfacingCoordinator: LockerResurfacingCoordinator
     @EnvironmentObject private var revisitCoordinator: RevisitCoordinator
+    @EnvironmentObject private var editingCoordinator: LockerCanvasEditingCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var selectedMemoryID: UUID?
@@ -87,6 +88,7 @@ struct LockerMemoryBoardView: View {
                             .onAppear {
                                 registerRitualDestination(placement, boardProxy: proxy)
                             }
+                            .allowsHitTesting(!editingCoordinator.isEditing)
                     }
                 }
 
@@ -94,7 +96,7 @@ struct LockerMemoryBoardView: View {
                     .zIndex(10)
 
                 LockerCanvasLayer()
-                    .zIndex(15)
+                    .zIndex(editingCoordinator.isEditing ? 100 : 15)
 
                 if selfDiscoveryMoment == nil, let pair = thenNowPair {
                     VStack {
@@ -119,6 +121,7 @@ struct LockerMemoryBoardView: View {
                     }
                     .padding(8)
                     .zIndex(90)
+                    .allowsHitTesting(!editingCoordinator.isEditing)
                 }
 
                 if let moment = selfDiscoveryMoment {
@@ -144,6 +147,7 @@ struct LockerMemoryBoardView: View {
                     }
                     .padding(8)
                     .zIndex(90)
+                    .allowsHitTesting(!editingCoordinator.isEditing)
                 }
             }
             .padding(.horizontal, max(4, proxy.size.width * 0.025))

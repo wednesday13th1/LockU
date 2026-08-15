@@ -36,6 +36,28 @@ nonisolated enum LockerTextColorStyle: String, Codable, CaseIterable, Identifiab
     var id: String { rawValue }
 }
 
+nonisolated enum LockerDrawingColorStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case charcoal, navy, blue, pink, white, yellow
+    var id: String { rawValue }
+}
+
+nonisolated struct LockerDrawingStroke: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    var points: [CodablePoint]
+    var colorStyle: LockerDrawingColorStyle
+    var lineWidth: Double
+}
+
+nonisolated struct LockerDrawingDecoration: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    var strokes: [LockerDrawingStroke]
+    var position: CodablePoint
+    var scale: Double
+    var rotationDegrees: Double
+    var zIndex: Int
+    let createdAt: Date
+}
+
 nonisolated struct LockerTextDecoration: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     var text: String
@@ -78,8 +100,8 @@ nonisolated struct LockerTextDecoration: Codable, Identifiable, Hashable, Sendab
         text = try values.decode(String.self, forKey: .text)
         normalizedX = try values.decode(Double.self, forKey: .normalizedX)
         normalizedY = try values.decode(Double.self, forKey: .normalizedY)
-        scale = try values.decode(Double.self, forKey: .scale)
-        rotationDegrees = try values.decode(Double.self, forKey: .rotationDegrees)
+        scale = try values.decodeIfPresent(Double.self, forKey: .scale) ?? 1
+        rotationDegrees = try values.decodeIfPresent(Double.self, forKey: .rotationDegrees) ?? 0
         zIndex = try values.decodeIfPresent(Int.self, forKey: .zIndex) ?? 30
         fontStyle = try values.decodeIfPresent(LockerTextFontStyle.self, forKey: .fontStyle) ?? .handwritten
         if let savedStyle = try values.decodeIfPresent(LockerTextColorStyle.self, forKey: .colorStyle) {
@@ -87,7 +109,7 @@ nonisolated struct LockerTextDecoration: Codable, Identifiable, Hashable, Sendab
         } else {
             colorStyle = Self.migratedColor(from: try values.decodeIfPresent(String.self, forKey: .colorHex))
         }
-        createdAt = try values.decode(Date.self, forKey: .createdAt)
+        createdAt = try values.decodeIfPresent(Date.self, forKey: .createdAt) ?? .distantPast
     }
 
     func encode(to encoder: Encoder) throws {
@@ -138,8 +160,40 @@ nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendab
     var drawingReferenceHeight: Double?
     var texts: [LockerTextDecoration]
     var memoryPlacements: [LockerMemoryPlacement]
+    var drawingDecorations: [LockerDrawingDecoration]
 
-    static let empty = LockerCanvasMetadata(id: recordID, drawingFileName: nil, drawingReferenceWidth: nil, drawingReferenceHeight: nil, texts: [], memoryPlacements: [])
+    init(
+        id: UUID, drawingFileName: String?, drawingReferenceWidth: Double?,
+        drawingReferenceHeight: Double?, texts: [LockerTextDecoration],
+        memoryPlacements: [LockerMemoryPlacement],
+        drawingDecorations: [LockerDrawingDecoration] = []
+    ) {
+        self.id = id
+        self.drawingFileName = drawingFileName
+        self.drawingReferenceWidth = drawingReferenceWidth
+        self.drawingReferenceHeight = drawingReferenceHeight
+        self.texts = texts
+        self.memoryPlacements = memoryPlacements
+        self.drawingDecorations = drawingDecorations
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, drawingFileName, drawingReferenceWidth, drawingReferenceHeight
+        case texts, memoryPlacements, drawingDecorations
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(UUID.self, forKey: .id) ?? Self.recordID
+        drawingFileName = try values.decodeIfPresent(String.self, forKey: .drawingFileName)
+        drawingReferenceWidth = try values.decodeIfPresent(Double.self, forKey: .drawingReferenceWidth)
+        drawingReferenceHeight = try values.decodeIfPresent(Double.self, forKey: .drawingReferenceHeight)
+        texts = try values.decodeIfPresent([LockerTextDecoration].self, forKey: .texts) ?? []
+        memoryPlacements = try values.decodeIfPresent([LockerMemoryPlacement].self, forKey: .memoryPlacements) ?? []
+        drawingDecorations = try values.decodeIfPresent([LockerDrawingDecoration].self, forKey: .drawingDecorations) ?? []
+    }
+
+    static let empty = LockerCanvasMetadata(id: recordID, drawingFileName: nil, drawingReferenceWidth: nil, drawingReferenceHeight: nil, texts: [], memoryPlacements: [], drawingDecorations: [])
 }
 
 nonisolated struct LockerDecoration: Codable, Identifiable, Hashable, Sendable {

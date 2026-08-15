@@ -57,6 +57,7 @@ struct LockerHomeView: View {
                         )
 
                         LockerDoorView()
+                            .environmentObject(canvasEditingCoordinator)
                             .zIndex(10)
                     }
                     .frame(width: lockerWidth, height: lockerHeight)
@@ -105,6 +106,8 @@ struct LockerHomeView: View {
 }
 
 private struct LockerCanvasExternalControls: View {
+    @EnvironmentObject private var appModel: LockUAppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var coordinator: LockerCanvasEditingCoordinator
 
     var body: some View {
@@ -116,6 +119,7 @@ private struct LockerCanvasExternalControls: View {
         .accessibilityElement(children: .contain)
         .animation(.easeOut(duration: 0.2), value: coordinator.isEditing)
         .animation(.easeOut(duration: 0.18), value: coordinator.isDrawing)
+        .disabled(coordinator.isEditing && appModel.lockerDoorState != .open)
     }
 
     private func controls(compact: Bool) -> some View {
@@ -126,24 +130,36 @@ private struct LockerCanvasExternalControls: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
                     HStack(spacing: compact ? 10 : 14) {
-                        toolButton("pencil.tip", compact ? nil : "描く") { coordinator.toggleDrawing() }
-                            .accessibilityLabel("ロッカーに描く")
-                        toolButton("textformat", compact ? nil : "文字を追加") { coordinator.requestText() }
-                            .accessibilityLabel("文字を追加")
-                        toolButton("plus.circle", compact ? nil : "思い出を追加") { coordinator.requestMemory() }
-                            .accessibilityLabel("過去の思い出を追加")
-                        if coordinator.selection != .none {
-                            if coordinator.selection == .text {
-                                fontMenu
-                                colorMenu
-                            }
-                            if coordinator.selection == .memory {
-                                toolButton("square.3.layers.3d.top.filled", nil) { coordinator.bringSelectionToFront() }
-                                    .accessibilityLabel("前面へ移動")
-                            }
+                        switch coordinator.selection {
+                        case .none:
+                            toolButton("pencil.tip", compact ? nil : "描く") { coordinator.toggleDrawing() }
+                                .accessibilityLabel("ロッカーに描く")
+                            toolButton("textformat", compact ? nil : "文字") { coordinator.requestText() }
+                                .accessibilityLabel("文字を追加")
+                            toolButton("plus.circle", compact ? nil : "思い出") { coordinator.requestMemory() }
+                                .accessibilityLabel("過去の思い出を追加")
+                        case .text:
+                            toolButton("character.cursor.ibeam", compact ? nil : "内容") { coordinator.requestTextContentEdit() }
+                                .accessibilityLabel("文字の内容を編集")
+                            fontMenu
+                            colorMenu
+                            toolButton("plus.square.on.square", nil) { coordinator.duplicateSelection() }
+                                .accessibilityLabel("文字を複製")
+                            toolButton("trash", nil) { coordinator.removeSelection() }
+                                .accessibilityLabel(removalAccessibilityLabel)
+                        case .drawing:
+                            toolButton("plus.square.on.square", compact ? nil : "複製") { coordinator.duplicateSelection() }
+                                .accessibilityLabel("落書きを複製")
+                            toolButton("trash", compact ? nil : "削除") { coordinator.removeSelection() }
+                                .accessibilityLabel(removalAccessibilityLabel)
+                        case .memory:
+                            toolButton("square.3.layers.3d.top.filled", nil) { coordinator.bringSelectionToFront() }
+                                .accessibilityLabel("前面へ移動")
                             toolButton("xmark", nil) { coordinator.removeSelection() }
-                                .accessibilityLabel(coordinator.selection == .memory ? "ロッカーから外す" : "文字を外す")
+                                .accessibilityLabel(removalAccessibilityLabel)
                         }
+                        toolButton("arrow.uturn.backward", nil) { coordinator.undoEdit() }
+                            .accessibilityLabel("直前の編集を元に戻す")
                     }
                     .padding(.horizontal, compact ? 10 : 14)
                     .frame(height: 44)
@@ -158,7 +174,7 @@ private struct LockerCanvasExternalControls: View {
                     .background(.ultraThinMaterial, in: Capsule())
                     .accessibilityLabel("編集を完了")
             } else {
-                Button { coordinator.begin() } label: {
+                Button { beginEditing() } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "pencil")
                         if !compact { Text("編集") }
@@ -176,12 +192,25 @@ private struct LockerCanvasExternalControls: View {
         .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.76))
     }
 
+    private func beginEditing() {
+        coordinator.begin()
+        guard appModel.lockerDoorState != .open else { return }
+        appModel.lockerDoorState = .opening
+        Task { @MainActor in
+            let delay: UInt64 = reduceMotion ? 180_000_000 : 520_000_000
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled, coordinator.isEditing else { return }
+            appModel.lockerDoorState = .open
+        }
+    }
+
     private var fontMenu: some View {
         Menu {
             ForEach(LockerTextFontStyle.allCases) { style in
                 Button { coordinator.changeFont(to: style) } label: {
-                    HStack {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(style.title)
+                        Text(coordinator.selectedTextPreview)
                             .font(LockerTextFontResolver.font(for: style, size: 16))
                         if coordinator.selectedFontStyle == style { Image(systemName: "checkmark") }
                     }
@@ -214,10 +243,20 @@ private struct LockerCanvasExternalControls: View {
 
     private var drawingTools: some View {
         HStack(spacing: 8) {
-            Button { coordinator.erasing = false } label: { Image(systemName: "pencil.tip") }
-                .accessibilityLabel("ペン")
-            Button { coordinator.erasing = true } label: { Image(systemName: "eraser") }
-                .accessibilityLabel("消しゴム")
+            Button { coordinator.toggleDrawing() } label: { Image(systemName: "checkmark") }
+                .accessibilityLabel("落書きを確定")
+            Button {
+                coordinator.erasing = false
+            } label: {
+                Image(systemName: "pencil.tip")
+            }
+            .accessibilityLabel("ペン")
+            Button {
+                coordinator.erasing = true
+            } label: {
+                Image(systemName: "eraser")
+            }
+            .accessibilityLabel("消しゴム")
             Button(action: coordinator.undoDrawing) { Image(systemName: "arrow.uturn.backward") }
                 .accessibilityLabel("元に戻す")
             ForEach(drawingColors, id: \.self) { color in
@@ -239,13 +278,23 @@ private struct LockerCanvasExternalControls: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
+    private var removalAccessibilityLabel: String {
+        switch coordinator.selection {
+        case .memory: "ロッカーから外す"
+        case .drawing: "落書きを削除"
+        case .text: "文字を削除"
+        case .none: "選択項目を削除"
+        }
+    }
+
     private var drawingColors: [UIColor] {
         [
             .black,
             UIColor(red: 0.06, green: 0.12, blue: 0.22, alpha: 1),
             .systemBlue,
             .systemPink,
-            .white
+            .white,
+            .systemYellow
         ]
     }
 
@@ -263,10 +312,10 @@ private struct LockerCanvasExternalControls: View {
 private extension LockerTextFontStyle {
     var title: String {
         switch self {
-        case .handwritten: "手書き　放課後"
-        case .casual: "やわらか　放課後"
-        case .clean: "シンプル　放課後"
-        case .mono: "デジカメ　放課後"
+        case .handwritten: "手書き"
+        case .casual: "やわらか"
+        case .clean: "シンプル"
+        case .mono: "デジカメ"
         }
     }
 }

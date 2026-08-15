@@ -4,6 +4,7 @@ import UIKit
 struct LockerDoorView: View {
     @EnvironmentObject private var appModel: LockUAppModel
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var editingCoordinator: LockerCanvasEditingCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var doorAngle = 0.0
     @State private var doorForwardOffset = 0.0
@@ -40,9 +41,13 @@ struct LockerDoorView: View {
             )
             .offset(x: doorForwardOffset)
             .opacity(reduceMotion && isOpen ? 0 : 1)
-            .allowsHitTesting(appModel.lockerDoorState.acceptsInput)
+            .allowsHitTesting(appModel.lockerDoorState.acceptsInput && !editingCoordinator.isEditing)
             .contentShape(Rectangle())
-            .onTapGesture { toggleDoor() }
+            .gesture(
+                !editingCoordinator.isEditing
+                    ? TapGesture().onEnded { toggleDoor() }
+                    : nil
+            )
             .accessibilityLabel(isOpen ? "ロッカーを閉じる" : "ロッカーを開く")
             .accessibilityAddTraits(.isButton)
             .onAppear { doorAngle = isOpen ? -96 : 0 }
@@ -50,7 +55,7 @@ struct LockerDoorView: View {
                 animateDoor(opening: opening)
             }
 
-            if appModel.lockerDoorState == .open {
+            if appModel.lockerDoorState == .open && !editingCoordinator.isEditing {
                 Button {
                     toggleDoor()
                 } label: {
@@ -226,6 +231,7 @@ struct LockerDoorView: View {
     }
 
     private func toggleDoor() {
+        guard !editingCoordinator.isEditing else { return }
         guard appModel.lockerDoorState.acceptsInput else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         let opening = appModel.lockerDoorState == .closed
@@ -235,6 +241,10 @@ struct LockerDoorView: View {
             let delay: UInt64 = reduceMotion ? 180_000_000 : 520_000_000
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
+            guard !editingCoordinator.isEditing else {
+                appModel.lockerDoorState = .open
+                return
+            }
             appModel.lockerDoorState = opening ? .open : .closed
         }
     }

@@ -36,9 +36,9 @@ enum LockerCanvasError: LocalizedError {
         return data
     }
 
-    func commit(texts: [LockerTextDecoration], placements: [LockerMemoryPlacement], drawingData: Data?, drawingSize: CGSize?) throws {
+    func commit(texts: [LockerTextDecoration], placements: [LockerMemoryPlacement], drawingDecorations: [LockerDrawingDecoration], drawingData: Data?, drawingSize: CGSize?) throws {
         var next = metadata
-        next.texts = texts; next.memoryPlacements = placements
+        next.texts = texts; next.memoryPlacements = placements; next.drawingDecorations = drawingDecorations
         if let drawingData, !drawingData.isEmpty {
             let name = next.drawingFileName ?? "locker-drawing.pkdrawing"
             try drawingData.write(to: drawingDirectory.appendingPathComponent(name), options: .atomic)
