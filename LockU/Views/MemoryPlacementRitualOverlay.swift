@@ -58,15 +58,14 @@ struct MemoryPlacementRitualOverlay: View {
                 .padding(.bottom, ritual.phase == .preparing ? 0 : frameStyle == .polaroid || frameStyle == .mixed ? 24 : 0)
                 .clipped()
             if ritual.phase != .preparing {
-                VStack(alignment: .leading, spacing: 2) {
-                    if let emoji = ritual.moodEmoji { Text(emoji).font(.system(size: 20)) }
-                    if let note = ritual.memoryNote, !note.isEmpty {
-                        Text(note).font(.system(size: 9.5, weight: .medium)).lineLimit(1)
-                    }
+                if let emoji = ritual.moodEmoji {
+                    Text(emoji)
+                        .font(.system(size: 17))
+                        .opacity(0.92)
+                        .shadow(color: .black.opacity(0.07), radius: 1, y: 0.5)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 }
-                .foregroundStyle(LockUDesign.Color.softInk.opacity(0.82))
-                .padding(8)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: frameStyle == .borderless ? .topTrailing : .bottomLeading)
                 Text(ritual.createdAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).year(.twoDigits)))
                     .font(.system(size: 7, weight: .medium, design: .monospaced))
                     .foregroundStyle(frameStyle == .borderless ? Color.white.opacity(0.86) : LockUDesign.Color.schoolNavy.opacity(0.62))

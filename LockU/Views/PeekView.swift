@@ -1,5 +1,8 @@
 import SwiftUI
 
+// LockU presentation rule:
+// Locker shows how that day felt. Peek holds what that day said.
+// moodEmoji -> Locker + Peek / memoryNote -> Peek THEN / reflection -> Peek NOW
 enum PeekContext: Equatable {
     case normal
     case memory(MemoryRecord)
@@ -17,6 +20,7 @@ struct PeekView: View {
     @State private var submittedCode: String?
     @State private var presentedSelfDiscovery: SelfDiscoveryMoment?
     @State private var presentedThenNowPair: ThenNowMemoryPair?
+    private let reflectionTraceService = MemoryReflectionTraceService()
     let contextOverride: PeekContext?
     let onCompleteRevisit: (RevisitPresentation, String) -> Void
 
@@ -39,6 +43,18 @@ struct PeekView: View {
                     onClose: {
                         appModel.peekMemory = nil
                         appModel.selectedTab = .locker
+                    },
+                    onReflect: { text in
+                        let completedAt = Date()
+                        try CompleteRevisitWorkflow(
+                            memoryRepository: memoryRepository,
+                            reflectionRepository: reflectionRepository
+                        ).execute(
+                            memoryID: memory.id,
+                            reflectionText: text,
+                            completedAt: completedAt
+                        )
+                        reflectionTraceService.recordReflection(memoryID: memory.id, at: completedAt)
                     }
                 )
             case .revisit(let presentation):
@@ -64,14 +80,16 @@ struct PeekView: View {
                     },
                     onComplete: { reflection in
                         if appModel.demoClock.isLive {
+                            let completedAt = Date()
                             try CompleteRevisitWorkflow(
                                 memoryRepository: memoryRepository,
                                 reflectionRepository: reflectionRepository
                             ).execute(
                                 memoryID: presentation.memoryID,
                                 reflectionText: reflection,
-                                completedAt: .now
+                                completedAt: completedAt
                             )
+                            reflectionTraceService.recordReflection(memoryID: presentation.memoryID, at: completedAt)
                         }
                         onCompleteRevisit(presentation, reflection)
                     }
@@ -257,81 +275,223 @@ private struct DualMemoryPeekView: View {
     private enum Perspective { case whatYouSaw, you }
 
     @EnvironmentObject private var memoryRepository: MemoryRepository
+    @EnvironmentObject private var reflectionRepository: MemoryReflectionRepository
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let memory: MemoryRecord
     let onClose: () -> Void
+    let onReflect: (String) throws -> Void
     @State private var perspective: Perspective = .whatYouSaw
+    @State private var reflectionText = ""
+    @State private var isEditingReflection = false
+    @State private var reflectionError: String?
+    @FocusState private var reflectionFocused: Bool
 
     var body: some View {
         ZStack {
             LockUPageBackground()
-            VStack(spacing: 18) {
-                HStack {
-                    Button(action: onClose) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .semibold))
-                            .frame(width: 44, height: 44)
+            ScrollView {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button(action: onClose) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 17, weight: .semibold))
+                                .frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("Memoryを閉じる")
+                        Spacer()
                     }
-                    .accessibilityLabel("Memoryを閉じる")
-                    Spacer()
-                }
 
-                Spacer(minLength: 0)
-                if hasBothPerspectives {
-                    DualMemoryImageSurface(
-                        memory: memory,
-                        purpose: .peek,
-                        targetPointSize: CGSize(width: 500, height: 625),
-                        mainCamera: perspective == .whatYouSaw ? .back : .front
-                    )
+                    Text("PEEK")
+                        .font(.system(size: 11, weight: .semibold))
+                        .tracking(1.8)
+                        .foregroundStyle(LockUDesign.Color.textSecondary)
+                        .padding(.top, 4)
+                    peekDate
+                        .padding(.top, 8)
+
+                    Group {
+                        if hasBothPerspectives {
+                            DualMemoryImageSurface(
+                                memory: memory,
+                                purpose: .peek,
+                                targetPointSize: CGSize(width: 500, height: 625),
+                                mainCamera: perspective == .whatYouSaw ? .back : .front
+                            )
+                            .id(perspective == .whatYouSaw ? 0 : 1)
+                            .transition(.opacity)
+                            .onTapGesture { toggle() }
+                            .accessibilityLabel(perspective == .whatYouSaw ? "その時に見ていた景色" : "その時の自分")
+                        } else if let image = displayedImage {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                        }
+                    }
                         .aspectRatio(4 / 5, contentMode: .fit)
-                        .frame(maxWidth: 500, maxHeight: 560)
+                        .frame(maxWidth: 500, maxHeight: 520)
                         .clipShape(RoundedRectangle(cornerRadius: 3))
                         .shadow(color: .black.opacity(0.11), radius: 5, y: 3)
-                        .id(perspective == .whatYouSaw ? 0 : 1)
-                        .transition(.opacity)
+                        .padding(.top, 24)
+
+                    if hasBothPerspectives {
+                        HStack(spacing: 9) {
+                            Text("WHAT YOU SAW").opacity(perspective == .whatYouSaw ? 0.9 : 0.38)
+                            Text("·").opacity(0.45)
+                            Text("YOU").opacity(perspective == .you ? 0.9 : 0.38)
+                        }
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(1.2)
+                        .padding(.top, 12)
                         .onTapGesture { toggle() }
-                        .accessibilityLabel(perspective == .whatYouSaw ? "その時に見ていた景色" : "その時の自分")
-                } else if let image = displayedImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 500, maxHeight: 560)
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
-                        .shadow(color: .black.opacity(0.11), radius: 5, y: 3)
-                }
-                if memory.moodEmoji != nil || normalizedMemoryNote != nil {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        if let emoji = memory.moodEmoji {
-                            Text(emoji).font(.system(size: 26))
-                        }
-                        if let note = normalizedMemoryNote {
-                            Text(note)
-                                .font(LockUDesign.Typography.body)
-                                .foregroundStyle(LockUDesign.Color.softInk)
-                                .lineLimit(2)
-                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(perspective == .whatYouSaw ? "現在はその時に見ていた景色。タップしてその時の自分を表示" : "現在はその時の自分。タップして見ていた景色を表示")
+                        .accessibilityAddTraits(.isButton)
                     }
-                    .frame(maxWidth: 500, alignment: .leading)
+
+                    thenSection
+                        .padding(.top, 24)
+                    nowSection
+                        .padding(.top, normalizedMemoryNote == nil ? 24 : 28)
                 }
-                if hasBothPerspectives {
-                    HStack(spacing: 9) {
-                        Text("WHAT YOU SAW").opacity(perspective == .whatYouSaw ? 0.9 : 0.38)
-                        Text("·").opacity(0.45)
-                        Text("YOU").opacity(perspective == .you ? 0.9 : 0.38)
-                    }
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.2)
-                    .onTapGesture { toggle() }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(perspective == .whatYouSaw ? "現在はその時に見ていた景色。タップしてその時の自分を表示" : "現在はその時の自分。タップして見ていた景色を表示")
-                    .accessibilityAddTraits(.isButton)
-                }
-                Spacer(minLength: 0)
+                .frame(maxWidth: 560)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 44)
+                .frame(maxWidth: .infinity)
             }
-            .foregroundStyle(LockUDesign.Color.schoolNavy)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 32)
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .foregroundStyle(LockUDesign.Color.schoolNavy)
+        .onChange(of: reflectionText) { _, value in
+            if value.count > MemoryReflectionPolicy.maximumLength {
+                reflectionText = String(value.prefix(MemoryReflectionPolicy.maximumLength))
+            }
+        }
+    }
+
+    private var peekDate: some View {
+        HStack(spacing: 7) {
+            Text(memory.memoryDate.formatted(.dateTime.year().month(.abbreviated).day()).uppercased())
+            if let emoji = memory.moodEmoji {
+                Text("·")
+                Text(emoji)
+                    .accessibilityLabel(MemoryMoodEmoji(rawValue: emoji)?.accessibilityLabel ?? emoji)
+            }
+        }
+        .font(.system(size: 14, weight: .semibold, design: .rounded))
+        .tracking(1.1)
+        .foregroundStyle(LockUDesign.Color.textSecondary)
+    }
+
+    @ViewBuilder
+    private var thenSection: some View {
+        if let note = normalizedMemoryNote {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionLabel("THEN", accessibilityLabel: "あの日に残した言葉")
+                Text(note)
+                    .font(.system(size: 16, weight: .regular))
+                    .lineSpacing(5)
+                    .foregroundStyle(LockUDesign.Color.textPrimary)
+            }
+            .frame(maxWidth: 500, alignment: .leading)
+        }
+    }
+
+    private var nowSection: some View {
+        let reflections = reflectionRepository.reflections(for: memory.id)
+        return VStack(alignment: .leading, spacing: 12) {
+            sectionLabel("NOW", accessibilityLabel: "今の自分からの振り返り")
+            if let latest = reflections.first {
+                Text(latest.createdAt.formatted(.dateTime.year().month(.abbreviated).day()).uppercased())
+                    .font(LockUDesign.Typography.microLabel)
+                    .foregroundStyle(LockUDesign.Color.textSecondary)
+                Text(latest.text)
+                    .font(.system(size: 16, weight: .regular))
+                    .lineSpacing(5)
+                    .foregroundStyle(LockUDesign.Color.textPrimary)
+                    .transition(.opacity)
+                ForEach(reflections.dropFirst().prefix(2)) { reflection in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(reflection.createdAt.formatted(.dateTime.year().month(.abbreviated).day()).uppercased())
+                            .font(LockUDesign.Typography.microLabel)
+                            .foregroundStyle(LockUDesign.Color.textSecondary)
+                        Text(reflection.text)
+                            .font(LockUDesign.Typography.body)
+                            .foregroundStyle(LockUDesign.Color.textPrimary.opacity(0.82))
+                    }
+                    .padding(.top, 8)
+                }
+            }
+
+            if isEditingReflection {
+                reflectionEditor
+                    .transition(.opacity)
+            } else {
+                Text("この日の自分に、今なら何て言う？")
+                    .font(LockUDesign.Typography.body)
+                    .foregroundStyle(LockUDesign.Color.textSecondary)
+                    .padding(.top, reflections.isEmpty ? 0 : 10)
+                Button(reflections.isEmpty ? "ひとこと残す" : "今の言葉を重ねる") {
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) {
+                        isEditingReflection = true
+                        reflectionFocused = true
+                    }
+                }
+                .buttonStyle(LockUSecondaryButtonStyle())
+            }
+        }
+        .frame(maxWidth: 500, alignment: .leading)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: reflections.count)
+    }
+
+    private var reflectionEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("この日の自分に、今なら何て言う？")
+                .font(LockUDesign.Typography.body)
+                .foregroundStyle(LockUDesign.Color.textPrimary)
+            TextEditor(text: $reflectionText)
+                .font(LockUDesign.Typography.body)
+                .scrollContentBackground(.hidden)
+                .focused($reflectionFocused)
+                .frame(minHeight: 86, maxHeight: 120)
+                .padding(8)
+                .background(LockUDesign.Color.notebookPaper.opacity(0.42), in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityLabel("この日の自分へのメッセージ")
+            HStack {
+                Text("\(reflectionText.count) / \(MemoryReflectionPolicy.maximumLength)")
+                    .font(LockUDesign.Typography.microLabel)
+                    .foregroundStyle(LockUDesign.Color.textSecondary)
+                Spacer()
+                Button("残す", action: saveReflection)
+                    .buttonStyle(LockUPrimaryButtonStyle())
+                    .disabled(reflectionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            if let reflectionError {
+                Text(reflectionError)
+                    .font(LockUDesign.Typography.caption)
+                    .foregroundStyle(LockUDesign.Color.warning)
+            }
+        }
+    }
+
+    private func sectionLabel(_ title: String, accessibilityLabel: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .semibold))
+            .tracking(1.6)
+            .foregroundStyle(LockUDesign.Color.textSecondary)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func saveReflection() {
+        reflectionError = nil
+        do {
+            try onReflect(reflectionText)
+            reflectionText = ""
+            reflectionFocused = false
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) {
+                isEditingReflection = false
+            }
+        } catch {
+            reflectionError = error.localizedDescription
         }
     }
 
@@ -466,16 +626,21 @@ private struct RevisitExperienceView: View {
 
     private var revisitContext: some View {
         VStack(spacing: 7) {
-            Text(presentation.eyebrowText)
-                .font(.footnote.weight(.semibold))
+            Text("PEEK")
+                .font(.system(size: 11, weight: .semibold))
                 .tracking(1.7)
-                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.64))
-                .accessibilityLabel("振り返りのきっかけ、\(presentation.eyebrowText)")
-            Text(presentation.relativeDateText.uppercased())
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .tracking(1.4)
-                .foregroundStyle(LockUDesign.Color.softInkSecondary)
-                .accessibilityLabel("\(presentation.daysAgo)日前のMemory")
+                .foregroundStyle(LockUDesign.Color.textSecondary)
+            HStack(spacing: 7) {
+                Text(presentation.capturedAt.formatted(.dateTime.year().month(.abbreviated).day()).uppercased())
+                if let emoji = presentation.memory.moodEmoji {
+                    Text("·")
+                    Text(emoji)
+                        .accessibilityLabel(MemoryMoodEmoji(rawValue: emoji)?.accessibilityLabel ?? emoji)
+                }
+            }
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .tracking(1.1)
+            .foregroundStyle(LockUDesign.Color.textSecondary)
         }
         .multilineTextAlignment(.center)
     }
@@ -577,29 +742,22 @@ private struct RevisitExperienceView: View {
         else { withAnimation(.easeInOut(duration: 0.24)) { change() } }
     }
 
+    @ViewBuilder
     private var originalContext: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("あの時")
+        if let note = presentation.memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+            Text("THEN")
                 .font(.system(size: 10, weight: .semibold))
-                .tracking(1.8)
-                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.58))
-                .accessibilityLabel("当時のMemory")
-            if let emoji = presentation.memory.moodEmoji {
-                Text(emoji).font(.system(size: 26))
-            }
-            if let note = presentation.memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
+                .tracking(1.6)
+                .foregroundStyle(LockUDesign.Color.textSecondary)
+                .accessibilityLabel("あの日に残した言葉")
                 Text(note)
-                    .font(LockUDesign.Typography.body)
-                    .foregroundStyle(LockUDesign.Color.softInk)
-                    .lineSpacing(4)
-                    .lineLimit(5)
-                    .accessibilityLabel("当時のメモ、\(note)")
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(LockUDesign.Color.textPrimary)
+                    .lineSpacing(5)
             }
-            Text(presentation.capturedAt.formatted(.dateTime.year().month(.abbreviated).day()))
-                .font(LockUDesign.Typography.caption)
-                .foregroundStyle(LockUDesign.Color.softInkSecondary)
+            .frame(maxWidth: 500, alignment: .leading)
         }
-        .frame(maxWidth: 500, alignment: .leading)
     }
 
     @ViewBuilder
@@ -613,7 +771,7 @@ private struct RevisitExperienceView: View {
                 .frame(maxWidth: 500)
         } else {
             VStack(spacing: 12) {
-                Text("あの時の自分に、今ならなんて言う？")
+                Text("この日の自分に、今なら何て言う？")
                     .font(LockUDesign.Typography.body)
                     .foregroundStyle(LockUDesign.Color.softInk)
                     .multilineTextAlignment(.center)
@@ -646,7 +804,7 @@ private struct RevisitExperienceView: View {
 
     private var reflectionEditor: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("あの時の自分に、今ならなんて言う？")
+            Text("この日の自分に、今なら何て言う？")
                 .font(LockUDesign.Typography.sectionTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
 
@@ -682,7 +840,7 @@ private struct RevisitExperienceView: View {
                     .frame(minHeight: 82, maxHeight: 112)
                     .padding(.horizontal, -1)
                     .background(LockUDesign.Color.notebookPaper.opacity(0.28))
-                    .accessibilityLabel("あの時の自分への言葉を入力")
+                    .accessibilityLabel("この日の自分へのメッセージ")
             }
             .overlay(alignment: .bottom) {
                 Rectangle()
@@ -736,19 +894,22 @@ private struct RevisitExperienceView: View {
         let reflections = reflectionRepository.reflections(for: presentation.memoryID)
         if !reflections.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Text("いま")
+                Text("NOW · \(reflections[0].createdAt.formatted(.dateTime.year().month(.abbreviated).day()).uppercased())")
                     .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.8)
-                    .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.58))
-                    .accessibilityLabel("現在のReflection")
-                ForEach(reflections.prefix(3)) { reflection in
+                    .tracking(1.6)
+                    .foregroundStyle(LockUDesign.Color.textSecondary)
+                    .accessibilityLabel("今の自分からの振り返り")
+                ForEach(Array(reflections.prefix(3).enumerated()), id: \.element.id) { index, reflection in
                     VStack(alignment: .leading, spacing: 5) {
                         Text(reflection.text)
-                            .font(LockUDesign.Typography.body)
-                            .foregroundStyle(LockUDesign.Color.softInk)
-                        Text(reflection.createdAt.formatted(.dateTime.year().month(.abbreviated).day()))
-                            .font(LockUDesign.Typography.microLabel)
-                            .foregroundStyle(LockUDesign.Color.softInkSecondary)
+                            .font(index == 0 ? .system(size: 16, weight: .regular) : LockUDesign.Typography.body)
+                            .foregroundStyle(LockUDesign.Color.textPrimary.opacity(index == 0 ? 1 : 0.82))
+                            .lineSpacing(index == 0 ? 5 : 3)
+                        if index > 0 {
+                            Text(reflection.createdAt.formatted(.dateTime.year().month(.abbreviated).day()).uppercased())
+                                .font(LockUDesign.Typography.microLabel)
+                                .foregroundStyle(LockUDesign.Color.textSecondary)
+                        }
                     }
                     .transition(.opacity)
                 }

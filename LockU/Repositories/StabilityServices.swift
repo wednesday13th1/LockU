@@ -39,11 +39,15 @@ struct StorageHealthInspector {
     private let paths: LockUPaths
     private let fileManager: FileManager
     init(paths: LockUPaths, fileManager: FileManager = .default) { self.paths = paths; self.fileManager = fileManager }
-    func inspect(memories: [MemoryRecord], decorations: [LockerDecoration]) -> StorageRecoveryReport {
+    func inspect(
+        memories: [MemoryRecord],
+        decorations: [LockerDecoration],
+        topShelfDecorationFileNames: Set<String> = []
+    ) -> StorageRecoveryReport {
         let memoryNames = Set(memories.flatMap { memory in
             [memory.imageFileName, memory.frontImageFileName, memory.backImageFileName, memory.videoThumbnailFileName]
                 .compactMap { $0 }
-        }); let decorationNames = Set(decorations.map(\.imageFileName))
+        }); let decorationNames = Set(decorations.map(\.imageFileName)).union(topShelfDecorationFileNames)
         let missingMemoryIDs = memories.filter { memory in
             let posterMissing = !fileManager.fileExists(atPath: paths.memories.appendingPathComponent(memory.imageFileName).path)
             let videoMissing = memory.videoFileName.map {

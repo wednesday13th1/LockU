@@ -1,5 +1,16 @@
+import PhotosUI
 import SwiftUI
 import UIKit
+
+@MainActor
+final class LockerCustomizationCoordinator: ObservableObject {
+    enum Mode: String, CaseIterable, Identifiable { case door, inside; var id: String { rawValue } }
+    @Published var isEditing = false
+    @Published var mode: Mode = .door
+
+    func begin() { mode = .door; isEditing = true }
+    func finish() { isEditing = false }
+}
 
 struct LockerHomeView: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
@@ -14,6 +25,7 @@ struct LockerHomeView: View {
     @State private var appeared = false
     @StateObject private var lockerResurfacingCoordinator = LockerResurfacingCoordinator()
     @StateObject private var canvasEditingCoordinator = LockerCanvasEditingCoordinator()
+    @StateObject private var customizationCoordinator = LockerCustomizationCoordinator()
 
     var body: some View {
         GeometryReader { proxy in
@@ -41,7 +53,8 @@ struct LockerHomeView: View {
                 VStack(spacing: 0) {
                     ZStack {
                         LockerFrameView(
-                            lockerColor: Color(lockUHex: settingsRepository.settings.lockerColorHex)
+                            lockerColor: Color(lockUHex: settingsRepository.settings.lockerColorHex),
+                            customizationCoordinator: customizationCoordinator
                         )
                         .environmentObject(lockerResurfacingCoordinator)
                         .environmentObject(canvasEditingCoordinator)
@@ -56,10 +69,29 @@ struct LockerHomeView: View {
                             value: appModel.lockerDoorState
                         )
 
-                        LockerDoorView()
+                        LockerDoorView(customizationCoordinator: customizationCoordinator)
                             .environmentObject(canvasEditingCoordinator)
-                            .allowsHitTesting(!canvasEditingCoordinator.isEditing)
+                            .allowsHitTesting(!canvasEditingCoordinator.isEditing || customizationCoordinator.isEditing)
                             .zIndex(10)
+
+                        if appModel.lockerDoorState == .closed,
+                           !canvasEditingCoordinator.isEditing,
+                           !customizationCoordinator.isEditing {
+                            Button {
+                                customizationCoordinator.begin()
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 44, height: 44)
+                                    .background(.thinMaterial, in: Circle())
+                                    .background(.white.opacity(0.78), in: Circle())
+                            }
+                            .foregroundStyle(LockUDesign.Color.schoolNavy)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .padding(8)
+                            .zIndex(30)
+                            .accessibilityLabel("ロッカーを編集")
+                        }
                     }
                     .frame(width: lockerWidth, height: lockerHeight)
                     .animation(.easeOut(duration: 0.22), value: isOpen)
@@ -93,6 +125,16 @@ struct LockerHomeView: View {
             .onChange(of: memoryRepository.memories.count) { _, _ in refreshLockerResurfacing() }
             .onChange(of: demoClock.preset) { _, _ in refreshLockerResurfacing() }
             .animation(.easeOut(duration: 0.23), value: lockerResurfacingCoordinator.candidateMemoryID)
+            .sheet(isPresented: Binding(
+                get: { customizationCoordinator.isEditing },
+                set: { if !$0 { customizationCoordinator.finish() } }
+            )) {
+                LockerCustomizationPanel(coordinator: customizationCoordinator)
+                    .presentationDetents([.height(246)])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(.ultraThinMaterial)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .height(246)))
+            }
         }
     }
 
@@ -103,6 +145,93 @@ struct LockerHomeView: View {
             memories: memoryRepository.memories,
             growthStage: growth.stage
         )
+    }
+}
+
+private struct LockerCustomizationColor: Identifiable {
+    let name: String
+    let hex: String
+    var id: String { hex }
+}
+
+private struct LockerCustomizationPanel: View {
+    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var appModel: LockUAppModel
+    @ObservedObject var coordinator: LockerCustomizationCoordinator
+
+    private let colors = [
+        LockerCustomizationColor(name: "スクールブルー", hex: "#7A97A6"),
+        LockerCustomizationColor(name: "スカイブルー", hex: "#82B8D4"),
+        LockerCustomizationColor(name: "セージ", hex: "#91A88E"),
+        LockerCustomizationColor(name: "クリーム", hex: "#D8CDB2"),
+        LockerCustomizationColor(name: "ダストピンク", hex: "#C69AA2"),
+        LockerCustomizationColor(name: "ラベンダー", hex: "#A79BBE")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("EDIT LOCKER")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.7)
+                Spacer()
+                Button("完了") { coordinator.finish() }
+                    .font(.system(size: 14, weight: .semibold))
+            }
+
+            Text("COLOR")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(1.5)
+                .foregroundStyle(LockUDesign.Color.textSecondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 13) {
+                    ForEach(colors) { item in
+                        let selected = settingsRepository.settings.lockerColorHex.uppercased() == item.hex
+                        Button { selectColor(item) } label: {
+                            Circle()
+                                .fill(Color(lockUHex: item.hex))
+                                .frame(width: 28, height: 28)
+                                .padding(4)
+                                .overlay(Circle().stroke(selected ? LockUDesign.Color.schoolNavy : .clear, lineWidth: 2))
+                                .scaleEffect(selected ? 1.06 : 1)
+                        }
+                        .frame(width: 44, height: 44)
+                        .accessibilityLabel("ロッカーの色：\(item.name)")
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                }
+            }
+
+            Picker("編集面", selection: Binding(
+                get: { coordinator.mode },
+                set: { selectMode($0) }
+            )) {
+                Text("DOOR").tag(LockerCustomizationCoordinator.Mode.door)
+                Text("INSIDE").tag(LockerCustomizationCoordinator.Mode.inside)
+            }
+            .pickerStyle(.segmented)
+
+            Text(coordinator.mode == .door
+                 ? "飾りをドラッグ・拡大・回転。長押しで反転や削除。"
+                 : "上の棚に小さな画像を5個まで置けます。")
+                .font(LockUDesign.Typography.caption)
+                .foregroundStyle(LockUDesign.Color.textSecondary)
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 18)
+        .foregroundStyle(LockUDesign.Color.schoolNavy)
+    }
+
+    private func selectColor(_ item: LockerCustomizationColor) {
+        var next = settingsRepository.settings
+        next.lockerColorHex = item.hex
+        do { try settingsRepository.update(next) }
+        catch { appModel.report(error) }
+    }
+
+    private func selectMode(_ mode: LockerCustomizationCoordinator.Mode) {
+        coordinator.mode = mode
+        appModel.lockerDoorState = mode == .inside ? .open : .closed
     }
 }
 
@@ -590,7 +719,11 @@ private struct LockerResurfacedMemoryCard: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 if let emoji = memory.moodEmoji {
-                    Text(emoji).font(.system(size: 22))
+                    Text(emoji)
+                        .font(.system(size: 17))
+                        .opacity(0.92)
+                        .shadow(color: .black.opacity(0.07), radius: 1, y: 0.5)
+                        .accessibilityLabel(MemoryMoodEmoji(rawValue: emoji)?.accessibilityLabel ?? emoji)
                 }
                 HStack(alignment: .firstTextBaseline) {
                     Text(memory.memoryDate.formatted(.dateTime.month(.abbreviated).day()))
@@ -599,12 +732,6 @@ private struct LockerResurfacedMemoryCard: View {
                     Text("\(daysAgo)日前")
                         .font(.system(size: 10, weight: .regular, design: .monospaced))
                         .foregroundStyle(Color.black.opacity(0.42))
-                }
-                if let note = memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
-                    Text(note)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(Color.black.opacity(0.62))
-                        .lineLimit(3)
                 }
                 Button("思い出を見る", action: onViewMemory)
                     .font(.system(size: 11, weight: .medium))
@@ -677,6 +804,7 @@ private struct LockerUtilityBar: View {
 struct LockerFrameView: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
     let lockerColor: Color
+    @ObservedObject var customizationCoordinator: LockerCustomizationCoordinator
 
     var body: some View {
         GeometryReader { proxy in
@@ -684,7 +812,10 @@ struct LockerFrameView: View {
             let topHeight: CGFloat = 16
 
             ZStack {
-                LockerInteriorSurface()
+                LockerInteriorSurface(
+                    lockerColor: lockerColor,
+                    isCustomizingTopShelf: customizationCoordinator.isEditing && customizationCoordinator.mode == .inside
+                )
                     .padding(.horizontal, frameWidth)
                     .padding(.top, topHeight)
                     .padding(.bottom, frameWidth)
@@ -767,6 +898,8 @@ struct LockerFrameView: View {
 
 private struct LockerInteriorSurface: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    let lockerColor: Color
+    let isCustomizingTopShelf: Bool
 
     var body: some View {
         GeometryReader { proxy in
@@ -777,6 +910,7 @@ private struct LockerInteriorSurface: View {
             let aging = LockUDesign.LockerSurfaceAge.threeMonths.agingProfile
             ZStack {
                 LockerInteriorBackground(style: settingsRepository.settings.appearance.backgroundStyle)
+                    .overlay(lockerColor.opacity(0.08))
                     .clipShape(BackWallShape(side: side, ceiling: ceiling, floor: floor))
                 LockUSceneTokens.Material.leftWall
                     .clipShape(LeftInteriorWall(side: side, ceiling: ceiling, floor: floor))
@@ -797,7 +931,7 @@ private struct LockerInteriorSurface: View {
                 InteriorLightFalloff(side: side, ceiling: ceiling, floor: floor)
                 InteriorHardwareOverlay(side: side, ceiling: ceiling, floor: floor)
 
-                LockerInteriorContent()
+                LockerInteriorContent(isCustomizingTopShelf: isCustomizingTopShelf)
                     .padding(.horizontal, side + 1)
                     .padding(.top, ceiling)
                     .padding(.bottom, floor)

@@ -112,7 +112,13 @@ final class LockUBootCoordinator {
         guard !Task.isCancelled else { return DeferredBootResult(didMigrate: didMigrate, error: firstError) }
 
         state(.recovering)
-        let report = StorageHealthInspector(paths: dependencies.paths).inspect(memories: dependencies.memoryRepository.memories, decorations: dependencies.decorationRepository.decorations)
+        let report = StorageHealthInspector(paths: dependencies.paths).inspect(
+            memories: dependencies.memoryRepository.memories,
+            decorations: dependencies.decorationRepository.decorations,
+            topShelfDecorationFileNames: Set(
+                dependencies.lockerCanvasRepository.metadata.topShelfDecorations.map(\.imageFileName)
+            )
+        )
         if report.hasIssues { LockULog.debug(.recovery, "health issues detected; no automatic deletion") }
         state(.ready)
         return DeferredBootResult(didMigrate: didMigrate, error: firstError)

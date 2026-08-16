@@ -6,6 +6,7 @@ struct LockerDoorView: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
     @EnvironmentObject private var editingCoordinator: LockerCanvasEditingCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject var customizationCoordinator: LockerCustomizationCoordinator
     @State private var doorAngle = 0.0
     @State private var doorForwardOffset = 0.0
 
@@ -44,7 +45,7 @@ struct LockerDoorView: View {
             .allowsHitTesting(appModel.lockerDoorState.acceptsInput && !editingCoordinator.isEditing)
             .contentShape(Rectangle())
             .gesture(
-                !editingCoordinator.isEditing
+                !editingCoordinator.isEditing && !customizationCoordinator.isEditing
                     ? TapGesture().onEnded { toggleDoor() }
                     : nil
             )
@@ -55,7 +56,9 @@ struct LockerDoorView: View {
                 animateDoor(opening: opening)
             }
 
-            if appModel.lockerDoorState == .open && !editingCoordinator.isEditing {
+            if appModel.lockerDoorState == .open
+                && !editingCoordinator.isEditing
+                && !customizationCoordinator.isEditing {
                 Button {
                     toggleDoor()
                 } label: {
@@ -77,18 +80,7 @@ struct LockerDoorView: View {
     private func doorFront(size: CGSize) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 5)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            LockUDesign.Color.lockerBodyLight,
-                            LockUDesign.Color.lockerSilver,
-                            LockUDesign.Color.midMetal,
-                            LockUDesign.Color.deepMetal
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(lockerColor)
             LinearGradient(
                 colors: [.white.opacity(0.18), .clear, Color.blue.opacity(0.025), .black.opacity(0.10)],
                 startPoint: .topLeading,
@@ -145,6 +137,11 @@ struct LockerDoorView: View {
                 ventilationSlits
             }
             .padding(.vertical, 24)
+
+            LockerDecorationLayer(
+                isEditing: customizationCoordinator.isEditing && customizationCoordinator.mode == .door
+            )
+            .padding(18)
 
         }
         .overlay(RoundedRectangle(cornerRadius: 5).stroke(LockUDesign.Color.lockerEdge.opacity(0.24)))
@@ -231,7 +228,7 @@ struct LockerDoorView: View {
     }
 
     private func toggleDoor() {
-        guard !editingCoordinator.isEditing else { return }
+        guard !editingCoordinator.isEditing, !customizationCoordinator.isEditing else { return }
         guard appModel.lockerDoorState.acceptsInput else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         let opening = appModel.lockerDoorState == .closed

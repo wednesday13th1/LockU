@@ -4,6 +4,7 @@ import UIKit
 struct LockerDecorationLayer: View {
     @EnvironmentObject private var repository: DecorationRepository
     @State private var selectedID: UUID?
+    let isEditing: Bool
 
     var body: some View {
         GeometryReader { proxy in
@@ -12,6 +13,7 @@ struct LockerDecorationLayer: View {
                     LockerDecorationItem(
                         decoration: decoration,
                         containerSize: proxy.size,
+                        isEditing: isEditing,
                         isSelected: selectedID == decoration.id,
                         onSelect: { selectedID = decoration.id }
                     )
@@ -19,6 +21,7 @@ struct LockerDecorationLayer: View {
                 }
             }
         }
+        .onChange(of: isEditing) { _, editing in if !editing { selectedID = nil } }
     }
 }
 
@@ -27,6 +30,7 @@ private struct LockerDecorationItem: View {
     @EnvironmentObject private var appModel: LockUAppModel
     let decoration: LockerDecoration
     let containerSize: CGSize
+    let isEditing: Bool
     let isSelected: Bool
     let onSelect: () -> Void
 
@@ -51,7 +55,7 @@ private struct LockerDecorationItem: View {
             width: max(48, min(containerSize.width * 0.20, 96)),
             height: max(48, min(containerSize.width * 0.20, 96))
         )
-        .opacity(isSelected ? 0.92 : 0.78)
+        .opacity(isSelected ? 0.96 : 0.88)
         .contentShape(Rectangle())
         .scaleEffect(
             x: decoration.isFlipped
@@ -65,16 +69,17 @@ private struct LockerDecorationItem: View {
             y: containerSize.height * decoration.position.y + dragTranslation.height
         )
         .overlay {
-            if isSelected {
+            if isEditing && isSelected {
                 RoundedRectangle(cornerRadius: 5)
-                    .stroke(Color(red: 247/255, green: 244/255, blue: 234/255).opacity(0.72), lineWidth: 0.8)
+                    .stroke(style: StrokeStyle(lineWidth: 0.8, dash: [4, 3]))
+                    .foregroundStyle(Color(red: 247/255, green: 244/255, blue: 234/255).opacity(0.76))
                     .padding(-5)
                     .allowsHitTesting(false)
             }
         }
-        .gesture(dragGesture)
-        .simultaneousGesture(magnificationGesture)
-        .simultaneousGesture(rotationGesture)
+        .gesture(isEditing ? dragGesture : nil)
+        .simultaneousGesture(isEditing ? magnificationGesture : nil)
+        .simultaneousGesture(isEditing ? rotationGesture : nil)
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.4).onEnded { _ in
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -90,16 +95,19 @@ private struct LockerDecorationItem: View {
             }
         }
         .contextMenu {
-            Button("手前に移動", systemImage: "square.3.layers.3d.top.filled") {
-                perform { try LockerPlacementCoordinator(repository: repository).bringToFront(decoration) }
-            }
-            Button("左右を反転", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
-                perform { try LockerPlacementCoordinator(repository: repository).flip(decoration) }
-            }
-            Button("削除", systemImage: "trash", role: .destructive) {
-                perform { try repository.delete(decoration) }
+            if isEditing {
+                Button("手前に移動", systemImage: "square.3.layers.3d.top.filled") {
+                    perform { try LockerPlacementCoordinator(repository: repository).bringToFront(decoration) }
+                }
+                Button("左右を反転", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
+                    perform { try LockerPlacementCoordinator(repository: repository).flip(decoration) }
+                }
+                Button("削除", systemImage: "trash", role: .destructive) {
+                    perform { try repository.delete(decoration) }
+                }
             }
         }
+        .allowsHitTesting(isEditing)
         .accessibilityLabel("ロッカーの飾り")
         .accessibilityHint("Drag, pinch, or rotate to edit. Long press for options.")
     }

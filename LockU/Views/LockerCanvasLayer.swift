@@ -264,21 +264,22 @@ struct LockerCanvasLayer: View {
     private func lockerMemory(_ memory: MemoryRecord, placement: LockerMemoryPlacement, size: CGSize) -> some View {
         DownsampledLockerCanvasMemory(memory: memory)
             .frame(width: 82, height: 102).background(.white).clipShape(RoundedRectangle(cornerRadius: 2))
-            .overlay(alignment: .bottomLeading) {
-                HStack(alignment: .bottom, spacing: 3) {
-                    if let emoji = memory.moodEmoji { Text(emoji).font(.system(size: 19)) }
-                    if let note = memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
-                        Text(note).font(.system(size: 7.5, weight: .medium)).lineLimit(2).foregroundStyle(LockUDesign.Color.softInk)
-                    }
+            .overlay(alignment: .bottomTrailing) {
+                if let emoji = memory.moodEmoji {
+                    LockerCanvasMoodEmoji(emoji: emoji)
+                        .padding(4)
                 }
-                .padding(4).background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 4))
             }
             .overlay(RoundedRectangle(cornerRadius: 3).stroke(.white.opacity(selection == .memory(placement.id) ? 0.7 : 0), lineWidth: 1))
             .shadow(color: .black.opacity(0.18), radius: selection == .memory(placement.id) ? 5 : 2, y: 2)
             .scaleEffect(CGFloat(placement.scale)).rotationEffect(.degrees(placement.rotationDegrees))
             .position(x: CGFloat(placement.normalizedX) * size.width, y: CGFloat(placement.normalizedY) * size.height)
             .zIndex(100 + Double(placement.zIndex))
-            .onTapGesture { guard editingCoordinator.isEditing, !editingCoordinator.isDrawing else { return }; selection = .memory(placement.id); editingCoordinator.selection = .memory }
+            .onTapGesture {
+                guard editingCoordinator.isEditing, !editingCoordinator.isDrawing else { return }
+                selection = .memory(placement.id)
+                editingCoordinator.selection = .memory
+            }
             .gesture(editingCoordinator.isEditing && !editingCoordinator.isDrawing ? transformGesture(placementID: placement.id, size: size) : nil)
             .allowsHitTesting(!editingCoordinator.isEditing)
     }
@@ -567,6 +568,18 @@ struct LockerCanvasLayer: View {
         let selection: LockerEditorSelection?
     }
 
+}
+
+private struct LockerCanvasMoodEmoji: View {
+    let emoji: String
+
+    var body: some View {
+        Text(emoji)
+            .font(.system(size: 17))
+            .opacity(0.92)
+            .shadow(color: .black.opacity(0.07), radius: 1, y: 0.5)
+            .accessibilityLabel(MemoryMoodEmoji(rawValue: emoji)?.accessibilityLabel ?? emoji)
+    }
 }
 
 private struct LockerTextItemView: View {

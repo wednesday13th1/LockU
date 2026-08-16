@@ -153,6 +153,19 @@ nonisolated struct LockerMemoryPlacement: Codable, Identifiable, Hashable, Senda
     let createdAt: Date
 }
 
+// LockU Locker customization rules:
+// Top-shelf decorations are small visual objects, independent from Memory slots.
+nonisolated struct LockerTopShelfDecoration: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let imageFileName: String
+    var normalizedX: Double
+    var normalizedY: Double
+    var scale: Double
+    var rotationDegrees: Double
+    var zIndex: Int
+    let createdAt: Date
+}
+
 nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendable {
     static let recordID = UUID(uuidString: "CB786E9A-61C8-4C2A-A654-701BE0F547C8")!
     let id: UUID
@@ -162,12 +175,14 @@ nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendab
     var texts: [LockerTextDecoration]
     var memoryPlacements: [LockerMemoryPlacement]
     var drawingDecorations: [LockerDrawingDecoration]
+    var topShelfDecorations: [LockerTopShelfDecoration]
 
     init(
         id: UUID, drawingFileName: String?, drawingReferenceWidth: Double?,
         drawingReferenceHeight: Double?, texts: [LockerTextDecoration],
         memoryPlacements: [LockerMemoryPlacement],
-        drawingDecorations: [LockerDrawingDecoration] = []
+        drawingDecorations: [LockerDrawingDecoration] = [],
+        topShelfDecorations: [LockerTopShelfDecoration] = []
     ) {
         self.id = id
         self.drawingFileName = drawingFileName
@@ -176,11 +191,12 @@ nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendab
         self.texts = texts
         self.memoryPlacements = memoryPlacements
         self.drawingDecorations = drawingDecorations
+        self.topShelfDecorations = topShelfDecorations
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, drawingFileName, drawingReferenceWidth, drawingReferenceHeight
-        case texts, memoryPlacements, drawingDecorations
+        case texts, memoryPlacements, drawingDecorations, topShelfDecorations
     }
 
     init(from decoder: Decoder) throws {
@@ -192,9 +208,10 @@ nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendab
         texts = try values.decodeIfPresent([LockerTextDecoration].self, forKey: .texts) ?? []
         memoryPlacements = try values.decodeIfPresent([LockerMemoryPlacement].self, forKey: .memoryPlacements) ?? []
         drawingDecorations = try values.decodeIfPresent([LockerDrawingDecoration].self, forKey: .drawingDecorations) ?? []
+        topShelfDecorations = try values.decodeIfPresent([LockerTopShelfDecoration].self, forKey: .topShelfDecorations) ?? []
     }
 
-    static let empty = LockerCanvasMetadata(id: recordID, drawingFileName: nil, drawingReferenceWidth: nil, drawingReferenceHeight: nil, texts: [], memoryPlacements: [], drawingDecorations: [])
+    static let empty = LockerCanvasMetadata(id: recordID, drawingFileName: nil, drawingReferenceWidth: nil, drawingReferenceHeight: nil, texts: [], memoryPlacements: [], drawingDecorations: [], topShelfDecorations: [])
 }
 
 nonisolated struct LockerDecoration: Codable, Identifiable, Hashable, Sendable {

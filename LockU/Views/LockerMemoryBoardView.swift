@@ -92,9 +92,6 @@ struct LockerMemoryBoardView: View {
                     }
                 }
 
-                LockerDecorationLayer()
-                    .zIndex(10)
-
                 LockerCanvasLayer()
                     .zIndex(editingCoordinator.isEditing ? 100 : 15)
 
@@ -529,7 +526,7 @@ private struct PolaroidPrint: View {
                         )
                 }
 
-                if memory.moodEmoji != nil || normalizedNote != nil {
+                if memory.moodEmoji != nil {
                     MemoryExpressionMark(memory: memory, frameStyle: frameStyle)
                         .frame(maxWidth: proxy.size.width * 0.86, alignment: expressionAlignment)
                         .offset(x: expressionX(sideMargin: sideMargin), y: expressionY(height: proxy.size.height, bottomMargin: bottomMargin))
@@ -554,13 +551,6 @@ private struct PolaroidPrint: View {
         }
     }
 
-    private var normalizedNote: String? {
-        guard let note = memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else {
-            return nil
-        }
-        return note
-    }
-
     private var expressionAlignment: Alignment { frameStyle == .borderless ? .trailing : .leading }
     private func expressionX(sideMargin: CGFloat) -> CGFloat { frameStyle == .borderless ? sideMargin * 0.25 : sideMargin }
     private func expressionY(height: CGFloat, bottomMargin: CGFloat) -> CGFloat {
@@ -576,28 +566,16 @@ private struct MemoryExpressionMark: View {
     let frameStyle: LockerFrameStyle
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
+        Group {
             if let emoji = memory.moodEmoji {
                 Text(emoji)
-                    .font(.system(size: 20))
-            }
-            if let note = normalizedNote {
-                Text(note)
-                    .font(.system(size: frameStyle == .polaroid || frameStyle == .mixed ? 9.5 : 9, weight: .medium))
-                    .foregroundStyle(frameStyle == .borderless ? Color.white.opacity(0.90) : LockUDesign.Color.softInk.opacity(0.82))
-                    .lineLimit(2)
-                    .shadow(color: frameStyle == .borderless ? .black.opacity(0.20) : .clear, radius: 1, y: 0.5)
+                    .font(.system(size: 17))
+                    .opacity(0.92)
+                    .shadow(color: .black.opacity(0.07), radius: 1, y: 0.5)
+                    .accessibilityLabel(MemoryMoodEmoji(rawValue: emoji)?.accessibilityLabel ?? emoji)
             }
         }
         .padding(4)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var normalizedNote: String? {
-        guard let note = memory.memoryNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else {
-            return nil
-        }
-        return note
     }
 }
 
