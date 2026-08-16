@@ -1,4 +1,75 @@
 import SwiftUI
+import UIKit
+
+nonisolated enum LockerDailyAccent: String, Codable, CaseIterable, Identifiable, Sendable {
+    case mintGreen
+    case skyBlue
+    case lavender
+    case peachPink
+    case sandYellow
+    case sageGreen
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .mintGreen: "ミントグリーン"
+        case .skyBlue: "スカイブルー"
+        case .lavender: "ラベンダー"
+        case .peachPink: "ピーチピンク"
+        case .sandYellow: "サンドイエロー"
+        case .sageGreen: "セージグリーン"
+        }
+    }
+
+    @MainActor var color: Color {
+        switch self {
+        case .mintGreen: Color(lockUHex: "#7FD8BC")
+        case .skyBlue: Color(lockUHex: "#6FAFF5")
+        case .lavender: Color(lockUHex: "#B89AEF")
+        case .peachPink: Color(lockUHex: "#F39AA4")
+        case .sandYellow: Color(lockUHex: "#F1C96A")
+        case .sageGreen: Color(lockUHex: "#9FC38C")
+        }
+    }
+
+    var uiColor: UIColor {
+        switch self {
+        case .mintGreen: UIColor(red: 127 / 255, green: 216 / 255, blue: 188 / 255, alpha: 1)
+        case .skyBlue: UIColor(red: 111 / 255, green: 175 / 255, blue: 245 / 255, alpha: 1)
+        case .lavender: UIColor(red: 184 / 255, green: 154 / 255, blue: 239 / 255, alpha: 1)
+        case .peachPink: UIColor(red: 243 / 255, green: 154 / 255, blue: 164 / 255, alpha: 1)
+        case .sandYellow: UIColor(red: 241 / 255, green: 201 / 255, blue: 106 / 255, alpha: 1)
+        case .sageGreen: UIColor(red: 159 / 255, green: 195 / 255, blue: 140 / 255, alpha: 1)
+        }
+    }
+
+    var drawingColorStyle: LockerDrawingColorStyle {
+        switch self {
+        case .mintGreen: .mintGreen
+        case .skyBlue: .skyBlue
+        case .lavender: .lavender
+        case .peachPink: .peachPink
+        case .sandYellow: .sandYellow
+        case .sageGreen: .sageGreen
+        }
+    }
+}
+
+nonisolated enum LockerDailyAccentProvider {
+    static func accent(
+        for date: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> LockerDailyAccent {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        let day = components.day ?? 0
+        let seed = year * 372 + month * 31 + day
+        let accents = LockerDailyAccent.allCases
+        return accents[abs(seed) % accents.count]
+    }
+}
 
 enum LockUSceneTokens {
     enum Layer {

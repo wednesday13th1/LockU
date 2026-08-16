@@ -5,6 +5,7 @@ import SwiftUI
 final class LockerCanvasEditingCoordinator: ObservableObject {
     enum Mode: String { case inactive, editing, drawing }
     enum Selection { case none, text, drawing, memory }
+    enum ActiveTool { case drawing, text, memory }
     @Published private(set) var isEditing = false
     @Published var isDrawing = false
     @Published var erasing = false
@@ -25,17 +26,32 @@ final class LockerCanvasEditingCoordinator: ObservableObject {
     @Published var selectedColorStyle: LockerTextColorStyle = .charcoal
     @Published var selectedTextPreview = "放課後"
     @Published var selection: Selection = .none
+    @Published private(set) var activeTool: ActiveTool?
+    private var penAccentDate: Date?
 
     var mode: Mode {
         if !isEditing { return .inactive }
         return isDrawing ? .drawing : .editing
     }
 
-    func begin() { guard !isEditing else { return }; isEditing = true; beginToken &+= 1 }
-    func finish() { guard isEditing else { return }; finishToken &+= 1; isEditing = false; isDrawing = false; selection = .none }
-    func toggleDrawing() { guard isEditing else { return }; isDrawing.toggle(); selection = .none }
-    func requestText() { guard isEditing else { return }; isDrawing = false; selection = .none; textToken &+= 1 }
-    func requestMemory() { guard isEditing else { return }; isDrawing = false; selection = .none; memoryToken &+= 1 }
+    func begin(
+        dailyAccent: LockerDailyAccent,
+        date: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) {
+        guard !isEditing else { return }
+        if penAccentDate.map({ !calendar.isDate($0, inSameDayAs: date) }) ?? true {
+            penColor = dailyAccent.uiColor
+            erasing = false
+            penAccentDate = date
+        }
+        isEditing = true
+        beginToken &+= 1
+    }
+    func finish() { guard isEditing else { return }; finishToken &+= 1; isEditing = false; isDrawing = false; selection = .none; activeTool = nil }
+    func toggleDrawing() { guard isEditing else { return }; isDrawing.toggle(); selection = .none; activeTool = isDrawing ? .drawing : nil }
+    func requestText() { guard isEditing else { return }; isDrawing = false; selection = .none; activeTool = .text; textToken &+= 1 }
+    func requestMemory() { guard isEditing else { return }; isDrawing = false; selection = .none; activeTool = .memory; memoryToken &+= 1 }
     func removeSelection() { guard selection != .none else { return }; removeToken &+= 1; selection = .none }
     func bringSelectionToFront() { guard selection == .memory else { return }; bringToFrontToken &+= 1 }
     func selectText(text: String, font: LockerTextFontStyle, color: LockerTextColorStyle) {
@@ -43,6 +59,7 @@ final class LockerCanvasEditingCoordinator: ObservableObject {
         selectedFontStyle = font
         selectedColorStyle = color
         selection = .text
+        activeTool = .text
     }
     func changeFont(to style: LockerTextFontStyle) { selectedFontStyle = style; fontToken &+= 1 }
     func changeColor(to style: LockerTextColorStyle) { selectedColorStyle = style; colorToken &+= 1 }
@@ -69,6 +86,7 @@ struct LockerCanvasLayer: View {
     @State private var drawingDecorations: [LockerDrawingDecoration] = []
     @State private var selection: LockerEditorSelection?
     @State private var drawing = PKDrawing()
+    @State private var pencilSessionBaseline = PKDrawing()
     @State private var pencilSessionStartStrokeCount = 0
     @State private var drawingSize: CGSize = .zero
     @State private var currentCanvasSize: CGSize = .zero
@@ -146,6 +164,7 @@ struct LockerCanvasLayer: View {
                     finalizePencilSession(size: proxy.size)
                     save(size: proxy.size)
                 } else if isDrawing {
+                    pencilSessionBaseline = drawing
                     pencilSessionStartStrokeCount = drawing.strokes.count
                     selection = nil
                 }
@@ -407,13 +426,18 @@ struct LockerCanvasLayer: View {
             createdAt: .now
         )
         drawingDecorations.append(decoration)
-        drawing = PKDrawing(strokes: Array(drawing.strokes.prefix(pencilSessionStartStrokeCount)))
+        // Restore the intact value captured at mode entry. Rebuilding a PKDrawing
+        // from a stroke prefix can detach PencilKit's internal stroke-group inventory.
+        drawing = pencilSessionBaseline
         drawingSize = size
         pencilSessionStartStrokeCount = drawing.strokes.count
         selectDrawing(decoration.id)
     }
 
     private func drawingColorStyle(for color: UIColor) -> LockerDrawingColorStyle {
+        if let accent = LockerDailyAccent.allCases.first(where: { color.isEqual($0.uiColor) }) {
+            return accent.drawingColorStyle
+        }
         var red: CGFloat = 0
         var green: CGFloat = 0
         var blue: CGFloat = 0
@@ -770,6 +794,12 @@ private extension LockerDrawingColorStyle {
         case .pink: Color(lockUHex: "#E985A5")
         case .white: .white
         case .yellow: Color(lockUHex: "#F2C94C")
+        case .mintGreen: LockerDailyAccent.mintGreen.color
+        case .skyBlue: LockerDailyAccent.skyBlue.color
+        case .lavender: LockerDailyAccent.lavender.color
+        case .peachPink: LockerDailyAccent.peachPink.color
+        case .sandYellow: LockerDailyAccent.sandYellow.color
+        case .sageGreen: LockerDailyAccent.sageGreen.color
         }
     }
 }
@@ -843,7 +873,7 @@ private struct LockerPencilCanvas: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(drawing: $drawing) }
     func makeUIView(context: Context) -> PKCanvasView {
-        let view = PKCanvasView()
+        let view = LockerInteractivePKCanvasView()
         view.backgroundColor = .clear
         view.isOpaque = false
         view.isUserInteractionEnabled = true
@@ -874,6 +904,9 @@ private struct LockerPencilCanvas: UIViewRepresentable {
         view.isUserInteractionEnabled = isDrawingEnabled
         view.drawingPolicy = .anyInput
         view.drawingGestureRecognizer.isEnabled = isDrawingEnabled
+        if let diagnosticView = view as? LockerInteractivePKCanvasView {
+            diagnosticView.isDrawingInteractionEnabled = isDrawingEnabled
+        }
         view.tool = isEraser ? PKEraserTool(.vector) : PKInkingTool(.pen, color: color, width: width)
 
         if context.coordinator.lastInteractionEnabled != isDrawingEnabled {
@@ -936,6 +969,25 @@ private struct LockerPencilCanvas: UIViewRepresentable {
             print("[LockerPencil][TOOL_END]")
             #endif
         }
+    }
+}
+
+@MainActor
+private final class LockerInteractivePKCanvasView: PKCanvasView {
+    var isDrawingInteractionEnabled = false {
+        didSet { if isDrawingInteractionEnabled != oldValue { didLogHit = false } }
+    }
+    private var didLogHit = false
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let result = super.hitTest(point, with: event)
+        if isDrawingInteractionEnabled, !didLogHit {
+            didLogHit = true
+            #if DEBUG
+            print("[LockerPencil][HIT_TEST] point=\(point) target=\(String(describing: result))")
+            #endif
+        }
+        return result
     }
 }
 

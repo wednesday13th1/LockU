@@ -38,6 +38,7 @@ nonisolated enum LockerTextColorStyle: String, Codable, CaseIterable, Identifiab
 
 nonisolated enum LockerDrawingColorStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     case charcoal, navy, blue, pink, white, yellow
+    case mintGreen, skyBlue, lavender, peachPink, sandYellow, sageGreen
     var id: String { rawValue }
 }
 

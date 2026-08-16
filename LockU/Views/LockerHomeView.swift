@@ -58,6 +58,7 @@ struct LockerHomeView: View {
 
                         LockerDoorView()
                             .environmentObject(canvasEditingCoordinator)
+                            .allowsHitTesting(!canvasEditingCoordinator.isEditing)
                             .zIndex(10)
                     }
                     .frame(width: lockerWidth, height: lockerHeight)
@@ -108,7 +109,10 @@ struct LockerHomeView: View {
 private struct LockerCanvasExternalControls: View {
     @EnvironmentObject private var appModel: LockUAppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var coordinator: LockerCanvasEditingCoordinator
+    @State private var dailyAccent = LockerDailyAccentProvider.accent(for: Date())
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -120,23 +124,28 @@ private struct LockerCanvasExternalControls: View {
         .animation(.easeOut(duration: 0.2), value: coordinator.isEditing)
         .animation(.easeOut(duration: 0.18), value: coordinator.isDrawing)
         .disabled(coordinator.isEditing && appModel.lockerDoorState != .open)
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, !coordinator.isDrawing else { return }
+            dailyAccent = LockerDailyAccentProvider.accent(for: Date())
+        }
     }
 
     private func controls(compact: Bool) -> some View {
         HStack(spacing: compact ? 7 : 10) {
             if coordinator.isEditing {
+                if !compact { dailyAccentLabel(compact: false) }
                 if coordinator.isDrawing {
                     drawingTools
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
-                    HStack(spacing: compact ? 10 : 14) {
+                    HStack(spacing: compact ? 4 : 14) {
                         switch coordinator.selection {
                         case .none:
-                            toolButton("pencil.tip", compact ? nil : "描く") { coordinator.toggleDrawing() }
+                            toolButton("pencil.tip", compact ? nil : "描く", isSelected: coordinator.activeTool == .drawing) { coordinator.toggleDrawing() }
                                 .accessibilityLabel("ロッカーに描く")
-                            toolButton("textformat", compact ? nil : "文字") { coordinator.requestText() }
+                            toolButton("textformat", compact ? nil : "文字", isSelected: coordinator.activeTool == .text) { coordinator.requestText() }
                                 .accessibilityLabel("文字を追加")
-                            toolButton("plus.circle", compact ? nil : "思い出") { coordinator.requestMemory() }
+                            toolButton("plus.circle", compact ? nil : "思い出", isSelected: coordinator.activeTool == .memory) { coordinator.requestMemory() }
                                 .accessibilityLabel("過去の思い出を追加")
                         case .text:
                             toolButton("character.cursor.ibeam", compact ? nil : "内容") { coordinator.requestTextContentEdit() }
@@ -161,39 +170,52 @@ private struct LockerCanvasExternalControls: View {
                         toolButton("arrow.uturn.backward", nil) { coordinator.undoEdit() }
                             .accessibilityLabel("直前の編集を元に戻す")
                     }
-                    .padding(.horizontal, compact ? 10 : 14)
-                    .frame(height: 44)
+                    .padding(.horizontal, compact ? 4 : 14)
+                    .frame(height: 48)
                     .background(.ultraThinMaterial, in: Capsule())
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
-                Button("完了") { coordinator.finish() }
-                    .font(.system(size: 13, weight: .semibold))
-                    .padding(.horizontal, compact ? 12 : 16)
-                    .frame(minWidth: compact ? 44 : 84, minHeight: 44)
-                    .background(.ultraThinMaterial, in: Capsule())
+                Button { coordinator.finish() } label: {
+                    Label("完了", systemImage: "checkmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(minWidth: 96, minHeight: 48)
+                }
+                    .foregroundStyle(LockUDesign.Color.schoolNavy)
+                    .background(dailyAccent.color.opacity(0.26), in: Capsule())
+                    .overlay(
+                        Capsule().stroke(
+                            dailyAccent.color.opacity(colorSchemeContrast == .increased ? 0.82 : 0.5),
+                            lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
+                        )
+                    )
                     .accessibilityLabel("編集を完了")
+                    .buttonStyle(LockerEditorPressButtonStyle(reduceMotion: reduceMotion))
             } else {
                 Button { beginEditing() } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "pencil")
+                        Image(systemName: "pencil").font(.system(size: 17, weight: .medium))
                         if !compact { Text("編集") }
                     }
-                    .font(.system(size: 13, weight: .medium))
-                    .padding(.horizontal, compact ? 12 : 15)
-                    .frame(minWidth: compact ? 44 : 84, minHeight: 44)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(.white.opacity(0.28), lineWidth: 0.5))
+                    .font(.system(size: 15, weight: .medium))
+                    .padding(.horizontal, 20)
+                    .frame(minWidth: 96, minHeight: 48)
+                    .background(.thinMaterial, in: Capsule())
+                    .background(.white.opacity(0.78), in: Capsule())
+                    .overlay(Capsule().stroke(.white.opacity(0.5), lineWidth: 1))
                     .shadow(color: .black.opacity(0.09), radius: 8, y: 3)
                 }
                 .accessibilityLabel("ロッカーを編集")
+                .buttonStyle(LockerEditorPressButtonStyle(reduceMotion: reduceMotion))
             }
         }
         .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.76))
     }
 
     private func beginEditing() {
-        coordinator.begin()
+        let date = Date()
+        dailyAccent = LockerDailyAccentProvider.accent(for: date)
+        coordinator.begin(dailyAccent: dailyAccent, date: date)
         guard appModel.lockerDoorState != .open else { return }
         appModel.lockerDoorState = .opening
         Task { @MainActor in
@@ -218,9 +240,14 @@ private struct LockerCanvasExternalControls: View {
             }
         } label: {
             Image(systemName: "textformat")
-                .frame(minWidth: 30, minHeight: 36)
+                .font(.system(size: 19, weight: .medium))
+                .frame(minWidth: 44, minHeight: 48)
+                .foregroundStyle(LockUDesign.Color.schoolNavy)
+                .background(dailyAccent.color.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(dailyAccent.color.opacity(0.45), lineWidth: 1))
         }
         .accessibilityLabel("フォントを変更")
+        .accessibilityAddTraits(.isSelected)
     }
 
     private var colorMenu: some View {
@@ -236,46 +263,103 @@ private struct LockerCanvasExternalControls: View {
             }
         } label: {
             Image(systemName: "paintpalette")
-                .frame(minWidth: 30, minHeight: 36)
+                .font(.system(size: 19, weight: .medium))
+                .frame(minWidth: 44, minHeight: 48)
         }
         .accessibilityLabel("色を変更")
     }
 
     private var drawingTools: some View {
-        HStack(spacing: 8) {
-            Button { coordinator.toggleDrawing() } label: { Image(systemName: "checkmark") }
-                .accessibilityLabel("落書きを確定")
-            Button {
-                coordinator.erasing = false
-            } label: {
-                Image(systemName: "pencil.tip")
-            }
-            .accessibilityLabel("ペン")
-            Button {
-                coordinator.erasing = true
-            } label: {
-                Image(systemName: "eraser")
-            }
-            .accessibilityLabel("消しゴム")
-            Button(action: coordinator.undoDrawing) { Image(systemName: "arrow.uturn.backward") }
-                .accessibilityLabel("元に戻す")
-            ForEach(drawingColors, id: \.self) { color in
-                Button {
-                    coordinator.penColor = color
-                    coordinator.erasing = false
-                } label: {
-                    Circle()
-                        .fill(Color(uiColor: color))
-                        .frame(width: 15, height: 15)
-                        .overlay(Circle().stroke(.white.opacity(0.72), lineWidth: 0.7))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                drawingModeButton(icon: "checkmark", title: "落書きを確定", isSelected: false) {
+                    coordinator.toggleDrawing()
                 }
-                .frame(width: 22, height: 36)
-                .accessibilityLabel("ペンの色を変更")
+                drawingModeButton(icon: "pencil.tip", title: "ペン", isSelected: !coordinator.erasing) {
+                    coordinator.erasing = false
+                }
+                drawingModeButton(icon: "eraser", title: "消しゴム", isSelected: coordinator.erasing) {
+                    coordinator.erasing = true
+                }
+                drawingModeButton(icon: "arrow.uturn.backward", title: "元に戻す", isSelected: false) {
+                    coordinator.undoDrawing()
+                }
+                ForEach(LockerDailyAccent.allCases) { accent in
+                    let selected = coordinator.penColor.isEqual(accent.uiColor)
+                    LockerEditorColorSwatch(
+                        accent: accent,
+                        isSelected: selected,
+                        increasedContrast: colorSchemeContrast == .increased,
+                        reduceMotion: reduceMotion
+                    ) {
+                        coordinator.penColor = accent.uiColor
+                        coordinator.erasing = false
+                    }
+                }
+                ForEach(penWidths.indices, id: \.self) { index in
+                    let option = penWidths[index]
+                    let selected = coordinator.penWidth == option.width
+                    Button {
+                        coordinator.penWidth = option.width
+                        coordinator.erasing = false
+                    } label: {
+                        Circle()
+                            .fill(LockUDesign.Color.schoolNavy)
+                            .frame(width: option.dotSize, height: option.dotSize)
+                            .frame(width: 30, height: 30)
+                            .background(dailyAccent.color.opacity(selected ? 0.16 : 0), in: Circle())
+                            .overlay(
+                                Circle().stroke(
+                                    selected ? dailyAccent.color : .clear,
+                                    lineWidth: colorSchemeContrast == .increased ? 2.5 : 2
+                                )
+                            )
+                    }
+                    .frame(width: 44, height: 44)
+                    .accessibilityLabel("ペンの太さ、\(option.name)")
+                    .accessibilityValue(selected ? "選択中" : "")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .buttonStyle(LockerEditorPressButtonStyle(reduceMotion: reduceMotion))
+                }
+            }
+            .padding(.horizontal, 8)
+        }
+        .frame(height: 48)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func dailyAccentLabel(compact: Bool) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(dailyAccent.color).frame(width: 9, height: 9)
+            if !compact {
+                Text("今日のカラー")
+                    .font(.system(size: 9, weight: .semibold))
+                    .lineLimit(1)
             }
         }
-        .padding(.horizontal, 10)
-        .frame(height: 44)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, compact ? 7 : 9)
+        .frame(height: 28)
+        .background(dailyAccent.color.opacity(0.14), in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("今日のカラー、\(dailyAccent.displayName)")
+    }
+
+    private func drawingModeButton(
+        icon: String,
+        title: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        LockerEditorToolButton(
+            icon: icon,
+            title: nil,
+            accessibilityTitle: title,
+            isSelected: isSelected,
+            accentColor: dailyAccent.color,
+            increasedContrast: colorSchemeContrast == .increased,
+            reduceMotion: reduceMotion,
+            action: action
+        )
     }
 
     private var removalAccessibilityLabel: String {
@@ -287,25 +371,137 @@ private struct LockerCanvasExternalControls: View {
         }
     }
 
-    private var drawingColors: [UIColor] {
-        [
-            .black,
-            UIColor(red: 0.06, green: 0.12, blue: 0.22, alpha: 1),
-            .systemBlue,
-            .systemPink,
-            .white,
-            .systemYellow
-        ]
+    private var penWidths: [(name: String, width: CGFloat, dotSize: CGFloat)] {
+        [("細い", 1.5, 4), ("普通", 3, 7), ("太い", 6, 11)]
     }
 
-    private func toolButton(_ icon: String, _ title: String?, action: @escaping () -> Void) -> some View {
+    private func toolButton(
+        _ icon: String,
+        _ title: String?,
+        isSelected: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        LockerEditorToolButton(
+            icon: icon,
+            title: title,
+            accessibilityTitle: title,
+            isSelected: isSelected,
+            accentColor: dailyAccent.color,
+            increasedContrast: colorSchemeContrast == .increased,
+            reduceMotion: reduceMotion,
+            action: action
+        )
+    }
+}
+
+private struct LockerEditorToolButton: View {
+    let icon: String
+    let title: String?
+    let accessibilityTitle: String?
+    let isSelected: Bool
+    let accentColor: Color
+    let increasedContrast: Bool
+    let reduceMotion: Bool
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: icon)
-                if let title { Text(title).font(.system(size: 10, weight: .medium)) }
+                    .font(.system(size: 19, weight: .medium))
+                if let title {
+                    Text(title)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                }
             }
-            .frame(minWidth: 30, minHeight: 36)
+            .padding(.horizontal, title == nil ? 8 : 14)
+            .frame(minWidth: 44, minHeight: 48)
         }
+        .buttonStyle(
+            LockerEditorToolButtonStyle(
+                isSelected: isSelected,
+                accentColor: accentColor,
+                isHovering: isHovering,
+                increasedContrast: increasedContrast,
+                reduceMotion: reduceMotion
+            )
+        )
+        .onHover { isHovering = $0 }
+        .accessibilityLabel(accessibilityTitle ?? title ?? "編集ツール")
+        .accessibilityValue(isSelected ? "選択中" : "")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct LockerEditorToolButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    let accentColor: Color
+    let isHovering: Bool
+    let increasedContrast: Bool
+    let reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let highlighted = configuration.isPressed || isHovering
+        configuration.label
+            .foregroundStyle(isSelected ? LockUDesign.Color.schoolNavy : LockUDesign.Color.schoolNavy.opacity(0.76))
+            .background(
+                isSelected
+                    ? accentColor.opacity(0.22)
+                    : accentColor.opacity(highlighted ? (configuration.isPressed ? 0.16 : 0.12) : 0),
+                in: RoundedRectangle(cornerRadius: 10)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(
+                        isSelected ? accentColor.opacity(increasedContrast ? 0.75 : 0.44) : .clear,
+                        lineWidth: increasedContrast ? 1.5 : 1
+                    )
+            )
+            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.975 : (isHovering ? 1.02 : 1)))
+            .animation(.easeOut(duration: reduceMotion ? 0 : 0.14), value: configuration.isPressed)
+            .animation(.easeOut(duration: reduceMotion ? 0 : 0.16), value: isHovering)
+            .animation(.easeOut(duration: 0.18), value: isSelected)
+    }
+}
+
+private struct LockerEditorColorSwatch: View {
+    let accent: LockerDailyAccent
+    let isSelected: Bool
+    let increasedContrast: Bool
+    let reduceMotion: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Circle()
+                .fill(accent.color)
+                .frame(width: 30, height: 30)
+                .padding(4)
+                .overlay(
+                    Circle().stroke(
+                        isSelected ? accent.color : .clear,
+                        lineWidth: increasedContrast ? 3 : 2.5
+                    )
+                )
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(LockerEditorPressButtonStyle(reduceMotion: reduceMotion))
+        .accessibilityLabel(accent.displayName)
+        .accessibilityValue(isSelected ? "選択中" : "")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct LockerEditorPressButtonStyle: ButtonStyle {
+    let reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.975 : 1))
+            .animation(.easeOut(duration: reduceMotion ? 0 : 0.14), value: configuration.isPressed)
     }
 }
 
@@ -611,7 +807,11 @@ private struct LockerInteriorSurface: View {
                     .allowsHitTesting(false)
             }
             .background(LockUSceneTokens.Material.lockerMetalShadow)
-            .overlay(Rectangle().strokeBorder(LockUSceneTokens.Material.lockerInk.opacity(0.12), lineWidth: 1))
+            .overlay(
+                Rectangle()
+                    .strokeBorder(LockUSceneTokens.Material.lockerInk.opacity(0.12), lineWidth: 1)
+                    .allowsHitTesting(false)
+            )
             .shadow(color: LockUSceneTokens.Shadow.structural, radius: 5, x: 1, y: 2)
         }
     }
