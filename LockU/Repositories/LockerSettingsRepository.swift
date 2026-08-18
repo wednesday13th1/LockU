@@ -33,6 +33,8 @@ final class LockerSettingsRepository: ObservableObject {
     func update(_ newSettings: LockerSettings) throws {
         var sanitized = newSettings
         sanitized.doorOpenProgress = min(1, max(0, sanitized.doorOpenProgress.isFinite ? sanitized.doorOpenProgress : 0))
+        let message = sanitized.doorMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        sanitized.doorMessage = String((message.isEmpty ? LockerSettings.defaultDoorMessage : message).prefix(LockerSettings.maximumDoorMessageLength))
         sanitized.appearance.dailyVariationEnabled = true
         sanitized.appearance.frameStyle = .borderless
         let data = try JSONEncoder().encode(sanitized)

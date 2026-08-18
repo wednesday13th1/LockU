@@ -244,23 +244,27 @@ nonisolated struct LockerDecoration: Codable, Identifiable, Hashable, Sendable {
 }
 
 struct LockerSettings: Codable, Equatable, Sendable {
+    static let defaultDoorMessage = "放課後またね"
+    static let maximumDoorMessageLength = 24
     enum BackgroundMode: String, Codable, Sendable { case today, photo }
     var lockerColorHex: String
     var doorColorHex: String
     var doorOpenProgress: Double
     var lockerNumber: String
     var ownerName: String
+    var doorMessage: String
     var appearance: LockerAppearanceSettings
     var backgroundMode: BackgroundMode
 
     enum CodingKeys: String, CodingKey {
-        case lockerColorHex, doorColorHex, doorOpenProgress, lockerNumber, ownerName, appearance, backgroundMode
+        case lockerColorHex, doorColorHex, doorOpenProgress, lockerNumber, ownerName, doorMessage, appearance, backgroundMode
     }
 
     init(
         lockerColorHex: String,
         lockerNumber: String,
         ownerName: String,
+        doorMessage: String = LockerSettings.defaultDoorMessage,
         appearance: LockerAppearanceSettings = .default,
         doorColorHex: String? = nil,
         doorOpenProgress: Double = 0,
@@ -271,6 +275,7 @@ struct LockerSettings: Codable, Equatable, Sendable {
         self.doorOpenProgress = min(1, max(0, doorOpenProgress.isFinite ? doorOpenProgress : 0))
         self.lockerNumber = lockerNumber
         self.ownerName = ownerName
+        self.doorMessage = doorMessage
         self.appearance = appearance
         self.backgroundMode = backgroundMode
     }
@@ -283,6 +288,7 @@ struct LockerSettings: Codable, Equatable, Sendable {
         doorOpenProgress = min(1, max(0, storedDoorProgress.isFinite ? storedDoorProgress : 0))
         lockerNumber = try container.decode(String.self, forKey: .lockerNumber)
         ownerName = try container.decode(String.self, forKey: .ownerName)
+        doorMessage = try container.decodeIfPresent(String.self, forKey: .doorMessage) ?? Self.defaultDoorMessage
         appearance = (try? container.decodeIfPresent(LockerAppearanceSettings.self, forKey: .appearance)) ?? .default
         backgroundMode = (try? container.decodeIfPresent(BackgroundMode.self, forKey: .backgroundMode)) ?? .today
     }

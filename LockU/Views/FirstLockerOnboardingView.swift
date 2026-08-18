@@ -20,6 +20,10 @@ private final class FirstLockerOnboardingViewModel: ObservableObject {
     @Published private(set) var isCreatingLocker = false
     @Published private(set) var creationError: String?
     @Published private(set) var requiresRecovery = false
+    @Published var backgroundItem: PhotosPickerItem?
+    @Published private(set) var backgroundImage: UIImage?
+    @Published var doorMessage = LockerSettings.defaultDoorMessage
+    @Published private(set) var isLoadingBackground = false
 
     private var loadTask: Task<Void, Never>?
     private var selectionGeneration = UUID()
@@ -30,6 +34,7 @@ private final class FirstLockerOnboardingViewModel: ObservableObject {
     func createLocker(
         memoryRepository: MemoryRepository,
         settingsRepository: LockerSettingsRepository,
+        backgroundRepository: BackgroundRepository,
         now: Date = .now
     ) async -> Bool {
         guard !isCreatingLocker, !requiresRecovery, canContinue else { return false }
@@ -44,7 +49,13 @@ private final class FirstLockerOnboardingViewModel: ObservableObject {
             importedIDs = Set(imported.map(\.id))
 
             var updatedSettings = settingsRepository.settings
-            updatedSettings.backgroundMode = .today
+            if let backgroundImage {
+                try backgroundRepository.save(backgroundImage)
+                updatedSettings.backgroundMode = .photo
+            } else {
+                updatedSettings.backgroundMode = .today
+            }
+            updatedSettings.doorMessage = doorMessage
             updatedSettings.appearance.backgroundStyle = LockerDailyBackgroundProvider.style(for: now)
             do {
                 try settingsRepository.update(updatedSettings)
@@ -65,6 +76,29 @@ private final class FirstLockerOnboardingViewModel: ObservableObject {
             creationError = "ロッカーを作れませんでした。写真と背景はまだ確定されていません。もう一度試してください。"
             return false
         }
+    }
+
+    func backgroundSelectionDidChange() {
+        guard let item = backgroundItem else { return }
+        isLoadingBackground = true
+        Task { [weak self] in
+            defer { self?.isLoadingBackground = false }
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self) else { throw LockUStorageError.invalidImage }
+                let prepared = await Task.detached(priority: .userInitiated) {
+                    LockerBackgroundImagePreparation.downsample(data, maximumPixelSize: 2_048)
+                }.value
+                guard let prepared, let image = UIImage(data: prepared) else { throw LockUStorageError.invalidImage }
+                self?.backgroundImage = image
+            } catch {
+                self?.selectionWarning = "背景写真を読み込めませんでした。選ばずに進むこともできます。"
+            }
+        }
+    }
+
+    func skipBackground() {
+        backgroundItem = nil
+        backgroundImage = nil
     }
 
     func selectionDidChange() {
@@ -141,10 +175,11 @@ struct FirstLockerOnboardingView: View {
     @EnvironmentObject private var appModel: LockUAppModel
     @EnvironmentObject private var memoryRepository: MemoryRepository
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var backgroundRepository: BackgroundRepository
     @State private var step: Step = .memories
     @State private var introPage = 0
 
-    private enum Step { case memories, background, final }
+    private enum Step { case memories, background, message, final }
 
     var body: some View {
         ZStack {
@@ -155,11 +190,13 @@ struct FirstLockerOnboardingView: View {
                 switch step {
                 case .memories: selectionPreview
                 case .background: backgroundSelection
+                case .message: messageSelection
                 case .final: finalPreview
                 }
             }
         }
         .onChange(of: model.selectedItems) { _, _ in model.selectionDidChange() }
+        .onChange(of: model.backgroundItem) { _, _ in model.backgroundSelectionDidChange() }
     }
 
     private var intro: some View {
@@ -254,7 +291,7 @@ struct FirstLockerOnboardingView: View {
                     .foregroundStyle(LockUDesign.Color.softInkSecondary)
             }
 
-            Button("次へ") { step = .final }
+            Button("次へ") { step = .background }
                 .buttonStyle(LockUPrimaryButtonStyle())
                 .disabled(!model.canContinue)
                 .opacity(model.canContinue ? 1 : 0.42)
@@ -268,20 +305,48 @@ struct FirstLockerOnboardingView: View {
 
     private var backgroundSelection: some View {
         VStack(spacing: 14) {
-            Text("写真を置いておく場所")
+            Text("ロッカーの後ろに置く写真を選ぼう")
+                .font(LockUDesign.Typography.screenTitle)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(LockUDesign.Color.schoolNavy)
+                .padding(.top, 24)
+            PersonalizedLockerPreview(drafts: model.drafts, backgroundImage: model.backgroundImage, doorMessage: model.doorMessage)
+                .frame(maxHeight: 430)
+            PhotosPicker(selection: $model.backgroundItem, matching: .images) {
+                Label(model.backgroundImage == nil ? "背景を選ぶ" : "背景を変更", systemImage: "photo")
+            }
+            .buttonStyle(LockUSecondaryButtonStyle())
+            .disabled(model.isLoadingBackground)
+
+            Button("次へ") { step = .message }
+                .buttonStyle(LockUPrimaryButtonStyle())
+            Button("写真を選ばずに進む") { model.skipBackground(); step = .message }
+                .font(.system(size: 14, weight: .semibold))
+        }
+        .padding(.horizontal, 22)
+        .padding(.bottom, 22)
+    }
+
+    private var messageSelection: some View {
+        VStack(spacing: 16) {
+            Text("ドアにひとこと書こう")
                 .font(LockUDesign.Typography.screenTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
                 .padding(.top, 24)
-            SeedLockerPreview(drafts: model.drafts, backgroundStyle: LockerDailyBackgroundProvider.style(for: .now))
-                .frame(maxHeight: 430)
-            Label("今日の色", systemImage: "sparkles")
-                .font(LockUDesign.Typography.caption)
-                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.68))
-
+            PersonalizedLockerPreview(drafts: model.drafts, backgroundImage: model.backgroundImage, doorMessage: model.doorMessage)
+                .frame(maxHeight: 390)
+            TextField("放課後またね", text: $model.doorMessage)
+                .textFieldStyle(.roundedBorder)
+                .onChange(of: model.doorMessage) { _, value in
+                    if value.count > LockerSettings.maximumDoorMessageLength {
+                        model.doorMessage = String(value.prefix(LockerSettings.maximumDoorMessageLength))
+                    }
+                }
+            Text("\(model.doorMessage.count) / \(LockerSettings.maximumDoorMessageLength)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Button("次へ") { step = .final }
                 .buttonStyle(LockUPrimaryButtonStyle())
-            Button("思い出を変更") { step = .memories }
-                .buttonStyle(LockUSecondaryButtonStyle())
         }
         .padding(.horizontal, 22)
         .padding(.bottom, 22)
@@ -293,7 +358,7 @@ struct FirstLockerOnboardingView: View {
                 .font(LockUDesign.Typography.screenTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
                 .padding(.top, 24)
-            SeedLockerPreview(drafts: model.drafts, backgroundStyle: LockerDailyBackgroundProvider.style(for: .now))
+            PersonalizedLockerPreview(drafts: model.drafts, backgroundImage: model.backgroundImage, doorMessage: model.doorMessage)
                 .frame(maxHeight: 450)
             if let error = model.creationError {
                 Text(error)
@@ -331,6 +396,7 @@ struct FirstLockerOnboardingView: View {
             let succeeded = await model.createLocker(
                 memoryRepository: memoryRepository,
                 settingsRepository: settingsRepository,
+                backgroundRepository: backgroundRepository,
                 now: .now
             )
             guard succeeded else { return }
@@ -383,6 +449,39 @@ struct FirstLockerOnboardingView: View {
                 .offset(x: 13, y: -13)
             }
             .shadow(color: .black.opacity(0.08), radius: 3, y: 2)
+    }
+}
+
+private struct PersonalizedLockerPreview: View {
+    let drafts: [SeedMemoryDraft]
+    let backgroundImage: UIImage?
+    let doorMessage: String
+
+    var body: some View {
+        ZStack {
+            Group {
+                if let backgroundImage {
+                    Image(uiImage: backgroundImage).resizable().scaledToFill()
+                        .overlay(Color.white.opacity(0.14))
+                } else {
+                    SkyBackground()
+                }
+            }
+            .allowsHitTesting(false)
+            SeedLockerPreview(drafts: drafts, backgroundStyle: .coolGray)
+                .padding(30)
+                .overlay(alignment: .center) {
+                    Text(doorMessage.isEmpty ? LockerSettings.defaultDoorMessage : doorMessage)
+                        .font(.system(size: 10, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.horizontal, 9).padding(.vertical, 6)
+                        .background(LockUDesign.Color.notebookPaper)
+                        .frame(maxWidth: 120)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .aspectRatio(0.78, contentMode: .fit)
     }
 }
 

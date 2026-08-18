@@ -345,7 +345,7 @@ private struct LockerCustomizationPanel: View {
     }
 }
 
-private nonisolated enum LockerBackgroundImagePreparation {
+nonisolated enum LockerBackgroundImagePreparation {
     static func downsample(_ data: Data, maximumPixelSize: Int) -> Data? {
         let options = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, options) else { return nil }
@@ -1022,9 +1022,6 @@ struct LockerFrameView: View {
 }
 
 private struct LockerInteriorSurface: View {
-    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
-    @EnvironmentObject private var backgroundRepository: BackgroundRepository
-    @EnvironmentObject private var demoClock: LockUDemoClock
     let lockerColor: Color
     @ObservedObject var customizationCoordinator: LockerCustomizationCoordinator
 
@@ -1036,17 +1033,7 @@ private struct LockerInteriorSurface: View {
             let shelfLip = min(8, floor * 0.36)
             let aging = LockUDesign.LockerSurfaceAge.threeMonths.agingProfile
             ZStack {
-                Group {
-                    if settingsRepository.settings.backgroundMode == .photo,
-                       let image = backgroundRepository.image {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .overlay(.white.opacity(0.035))
-                    } else {
-                        LockerInteriorBackground(style: LockerDailyBackgroundProvider.style(for: demoClock.now))
-                    }
-                }
+                LockUSceneTokens.Material.backWall
                     .overlay(lockerColor.opacity(0.055))
                     .clipShape(BackWallShape(side: side, ceiling: ceiling, floor: floor))
                     .allowsHitTesting(false)

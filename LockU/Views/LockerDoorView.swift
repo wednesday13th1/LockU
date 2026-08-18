@@ -125,7 +125,7 @@ struct LockerDoorView: View {
                     ownerName: settingsRepository.settings.ownerName
                 )
                 .frame(width: min(124, size.width * 0.44), height: 64)
-                HandwrittenMemoView(text: "放課後、またね")
+                HandwrittenMemoView(text: settingsRepository.settings.doorMessage)
                     .frame(width: min(142, size.width * 0.46))
                     .rotationEffect(.degrees(-1.5))
                 Spacer()
@@ -329,6 +329,8 @@ private struct HandwrittenMemoView: View {
     var body: some View {
         Text(text)
             .font(.system(size: 12, weight: .medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.62)
             .foregroundStyle(LockUDesign.Color.softInk)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)

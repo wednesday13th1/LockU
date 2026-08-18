@@ -826,18 +826,32 @@ struct SkyBackground: View {
 }
 
 struct LockerSceneBackground: View {
+    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var backgroundRepository: BackgroundRepository
+
     var body: some View {
         ZStack {
-            LinearGradient(stops: [
-                .init(color: Color(red: 91/255, green: 171/255, blue: 220/255), location: 0),
-                .init(color: Color(red: 167/255, green: 220/255, blue: 239/255), location: 0.46),
-                .init(color: Color(red: 239/255, green: 248/255, blue: 248/255), location: 0.84),
-                .init(color: LockUSceneTokens.Material.environmentBottom, location: 1)
-            ], startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [.white.opacity(0.44), .white.opacity(0.10), .clear], center: UnitPoint(x: 0.54, y: 0.67), startRadius: 8, endRadius: 330)
-            LinearGradient(colors: [.white.opacity(0.16), .clear, Color(red: 122/255, green: 197/255, blue: 228/255).opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            if settingsRepository.settings.backgroundMode == .photo,
+               let image = backgroundRepository.image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 1.5)
+                    .overlay(Color.white.opacity(0.16))
+                    .clipped()
+            } else {
+                LinearGradient(stops: [
+                    .init(color: Color(red: 91/255, green: 171/255, blue: 220/255), location: 0),
+                    .init(color: Color(red: 167/255, green: 220/255, blue: 239/255), location: 0.46),
+                    .init(color: Color(red: 239/255, green: 248/255, blue: 248/255), location: 0.84),
+                    .init(color: LockUSceneTokens.Material.environmentBottom, location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [.white.opacity(0.44), .white.opacity(0.10), .clear], center: UnitPoint(x: 0.54, y: 0.67), startRadius: 8, endRadius: 330)
+            }
+            LinearGradient(colors: [.white.opacity(0.12), .clear, Color.black.opacity(0.05)], startPoint: .top, endPoint: .bottom)
         }
         .ignoresSafeArea()
+        .allowsHitTesting(false)
     }
 }
 

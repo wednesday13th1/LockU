@@ -171,7 +171,7 @@ final class BackgroundImageStorage: BackgroundImageStoring {
     }
     func load() -> UIImage? {
         guard fileManager.fileExists(atPath: currentURL.path) else { return nil }
-        return UIImage(contentsOfFile: currentURL.path)
+        return MemoryImageStorage.downsampledImage(at: currentURL, targetPixelSize: 2_048)
     }
     func exists() -> Bool { fileManager.fileExists(atPath: currentURL.path) }
     func delete() throws { if exists() { try fileManager.removeItem(at: currentURL) } }
