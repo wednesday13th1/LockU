@@ -125,7 +125,14 @@ final class DecorationImageStorage: DecorationImageStoring {
     init(directory: URL, fileManager: FileManager = .default) { self.directory = directory; self.fileManager = fileManager }
     func savePNG(_ image: UIImage, id: UUID) throws -> String {
         guard let data = image.pngData() else { throw LockUStorageError.invalidImage }
-        let name = LockUFileNaming.decoration(id: id); try data.write(to: directory.appendingPathComponent(name), options: [.atomic]); return name
+        let name = LockUFileNaming.decoration(id: id)
+        let url = directory.appendingPathComponent(name)
+        try data.write(to: url, options: [.atomic])
+        guard UIImage(contentsOfFile: url.path) != nil else {
+            try? fileManager.removeItem(at: url)
+            throw LockUStorageError.invalidImage
+        }
+        return name
     }
     func load(fileName: String) -> UIImage? {
         let url = directory.appendingPathComponent(fileName)

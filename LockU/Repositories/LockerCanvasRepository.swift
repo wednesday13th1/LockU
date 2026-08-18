@@ -41,6 +41,25 @@ enum LockerCanvasError: LocalizedError {
         return data
     }
 
+    func lockerBodyDrawingData() -> Data? {
+        guard let name = metadata.lockerBodyDrawingFileName else { return nil }
+        return try? Data(
+            contentsOf: drawingDirectory.appendingPathComponent(name),
+            options: .mappedIfSafe
+        )
+    }
+
+    func commitLockerBodyDrawing(_ data: Data, size: CGSize) throws {
+        var next = metadata
+        let name = next.lockerBodyDrawingFileName ?? "locker-body-drawing.pkdrawing"
+        try data.write(to: drawingDirectory.appendingPathComponent(name), options: .atomic)
+        next.lockerBodyDrawingFileName = name
+        next.lockerBodyDrawingReferenceWidth = Double(size.width)
+        next.lockerBodyDrawingReferenceHeight = Double(size.height)
+        try store.save([next])
+        metadata = next
+    }
+
     func commit(texts: [LockerTextDecoration], placements: [LockerMemoryPlacement], drawingDecorations: [LockerDrawingDecoration], drawingData: Data?, drawingSize: CGSize?) throws {
         var next = metadata
         next.texts = texts; next.memoryPlacements = placements; next.drawingDecorations = drawingDecorations

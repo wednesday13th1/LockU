@@ -172,6 +172,9 @@ nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendab
     var drawingFileName: String?
     var drawingReferenceWidth: Double?
     var drawingReferenceHeight: Double?
+    var lockerBodyDrawingFileName: String?
+    var lockerBodyDrawingReferenceWidth: Double?
+    var lockerBodyDrawingReferenceHeight: Double?
     var texts: [LockerTextDecoration]
     var memoryPlacements: [LockerMemoryPlacement]
     var drawingDecorations: [LockerDrawingDecoration]
@@ -182,7 +185,10 @@ nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendab
         drawingReferenceHeight: Double?, texts: [LockerTextDecoration],
         memoryPlacements: [LockerMemoryPlacement],
         drawingDecorations: [LockerDrawingDecoration] = [],
-        topShelfDecorations: [LockerTopShelfDecoration] = []
+        topShelfDecorations: [LockerTopShelfDecoration] = [],
+        lockerBodyDrawingFileName: String? = nil,
+        lockerBodyDrawingReferenceWidth: Double? = nil,
+        lockerBodyDrawingReferenceHeight: Double? = nil
     ) {
         self.id = id
         self.drawingFileName = drawingFileName
@@ -192,11 +198,15 @@ nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendab
         self.memoryPlacements = memoryPlacements
         self.drawingDecorations = drawingDecorations
         self.topShelfDecorations = topShelfDecorations
+        self.lockerBodyDrawingFileName = lockerBodyDrawingFileName
+        self.lockerBodyDrawingReferenceWidth = lockerBodyDrawingReferenceWidth
+        self.lockerBodyDrawingReferenceHeight = lockerBodyDrawingReferenceHeight
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, drawingFileName, drawingReferenceWidth, drawingReferenceHeight
         case texts, memoryPlacements, drawingDecorations, topShelfDecorations
+        case lockerBodyDrawingFileName, lockerBodyDrawingReferenceWidth, lockerBodyDrawingReferenceHeight
     }
 
     init(from decoder: Decoder) throws {
@@ -209,6 +219,9 @@ nonisolated struct LockerCanvasMetadata: Codable, Identifiable, Hashable, Sendab
         memoryPlacements = try values.decodeIfPresent([LockerMemoryPlacement].self, forKey: .memoryPlacements) ?? []
         drawingDecorations = try values.decodeIfPresent([LockerDrawingDecoration].self, forKey: .drawingDecorations) ?? []
         topShelfDecorations = try values.decodeIfPresent([LockerTopShelfDecoration].self, forKey: .topShelfDecorations) ?? []
+        lockerBodyDrawingFileName = try values.decodeIfPresent(String.self, forKey: .lockerBodyDrawingFileName)
+        lockerBodyDrawingReferenceWidth = try values.decodeIfPresent(Double.self, forKey: .lockerBodyDrawingReferenceWidth)
+        lockerBodyDrawingReferenceHeight = try values.decodeIfPresent(Double.self, forKey: .lockerBodyDrawingReferenceHeight)
     }
 
     static let empty = LockerCanvasMetadata(id: recordID, drawingFileName: nil, drawingReferenceWidth: nil, drawingReferenceHeight: nil, texts: [], memoryPlacements: [], drawingDecorations: [], topShelfDecorations: [])
@@ -232,16 +245,27 @@ nonisolated struct LockerDecoration: Codable, Identifiable, Hashable, Sendable {
 
 struct LockerSettings: Codable, Equatable, Sendable {
     var lockerColorHex: String
+    var doorColorHex: String
+    var doorOpenProgress: Double
     var lockerNumber: String
     var ownerName: String
     var appearance: LockerAppearanceSettings
 
     enum CodingKeys: String, CodingKey {
-        case lockerColorHex, lockerNumber, ownerName, appearance
+        case lockerColorHex, doorColorHex, doorOpenProgress, lockerNumber, ownerName, appearance
     }
 
-    init(lockerColorHex: String, lockerNumber: String, ownerName: String, appearance: LockerAppearanceSettings = .default) {
+    init(
+        lockerColorHex: String,
+        lockerNumber: String,
+        ownerName: String,
+        appearance: LockerAppearanceSettings = .default,
+        doorColorHex: String? = nil,
+        doorOpenProgress: Double = 0
+    ) {
         self.lockerColorHex = lockerColorHex
+        self.doorColorHex = doorColorHex ?? lockerColorHex
+        self.doorOpenProgress = min(1, max(0, doorOpenProgress.isFinite ? doorOpenProgress : 0))
         self.lockerNumber = lockerNumber
         self.ownerName = ownerName
         self.appearance = appearance
@@ -250,6 +274,9 @@ struct LockerSettings: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         lockerColorHex = try container.decode(String.self, forKey: .lockerColorHex)
+        doorColorHex = try container.decodeIfPresent(String.self, forKey: .doorColorHex) ?? lockerColorHex
+        let storedDoorProgress = try container.decodeIfPresent(Double.self, forKey: .doorOpenProgress) ?? 0
+        doorOpenProgress = min(1, max(0, storedDoorProgress.isFinite ? storedDoorProgress : 0))
         lockerNumber = try container.decode(String.self, forKey: .lockerNumber)
         ownerName = try container.decode(String.self, forKey: .ownerName)
         appearance = (try? container.decodeIfPresent(LockerAppearanceSettings.self, forKey: .appearance)) ?? .default

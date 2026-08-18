@@ -44,11 +44,6 @@ private struct LockerDecorationItem: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-            } else {
-                Image(systemName: "photo.badge.exclamationmark")
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(.white.opacity(0.7))
             }
         }
         .frame(
@@ -56,6 +51,7 @@ private struct LockerDecorationItem: View {
             height: max(48, min(containerSize.width * 0.20, 96))
         )
         .opacity(isSelected ? 0.96 : 0.88)
+        .shadow(color: .black.opacity(0.14), radius: 3, y: 1)
         .contentShape(Rectangle())
         .scaleEffect(
             x: decoration.isFlipped
@@ -96,13 +92,7 @@ private struct LockerDecorationItem: View {
         }
         .contextMenu {
             if isEditing {
-                Button("手前に移動", systemImage: "square.3.layers.3d.top.filled") {
-                    perform { try LockerPlacementCoordinator(repository: repository).bringToFront(decoration) }
-                }
-                Button("左右を反転", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
-                    perform { try LockerPlacementCoordinator(repository: repository).flip(decoration) }
-                }
-                Button("削除", systemImage: "trash", role: .destructive) {
+                Button("Remove", systemImage: "trash", role: .destructive) {
                     perform { try repository.delete(decoration) }
                 }
             }

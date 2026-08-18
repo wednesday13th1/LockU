@@ -28,7 +28,9 @@ final class LockerSettingsRepository: ObservableObject {
     }
 
     func update(_ newSettings: LockerSettings) throws {
-        let data = try JSONEncoder().encode(newSettings)
+        var sanitized = newSettings
+        sanitized.doorOpenProgress = min(1, max(0, sanitized.doorOpenProgress.isFinite ? sanitized.doorOpenProgress : 0))
+        let data = try JSONEncoder().encode(sanitized)
         let manager = FileManager.default
         if manager.fileExists(atPath: fileURL.path) {
             if manager.fileExists(atPath: backupURL.path) {
@@ -37,7 +39,7 @@ final class LockerSettingsRepository: ObservableObject {
             try manager.copyItem(at: fileURL, to: backupURL)
         }
         try data.write(to: fileURL, options: [.atomic])
-        settings = newSettings
+        settings = sanitized
     }
 
     private func decode(at url: URL) -> LockerSettings? {

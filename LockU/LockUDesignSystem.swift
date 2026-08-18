@@ -71,6 +71,39 @@ nonisolated enum LockerDailyAccentProvider {
     }
 }
 
+nonisolated struct LockerDailyPenColor: Identifiable, Sendable {
+    let name: String
+    let hex: String
+    var id: String { hex }
+
+    @MainActor var color: Color { Color(lockUHex: hex) }
+    var uiColor: UIColor {
+        let value = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        guard value.count == 6, let rgb = UInt64(value, radix: 16) else { return .black }
+        return UIColor(
+            red: CGFloat((rgb >> 16) & 0xFF) / 255,
+            green: CGFloat((rgb >> 8) & 0xFF) / 255,
+            blue: CGFloat(rgb & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+}
+
+nonisolated enum LockerDailyPenPaletteProvider {
+    private static let palettes: [[LockerDailyPenColor]] = [
+        [.init(name: "ミント", hex: "#62C9A8"), .init(name: "空", hex: "#559DE8"), .init(name: "藤", hex: "#A483DA"), .init(name: "桃", hex: "#E98794"), .init(name: "砂", hex: "#D9AE43"), .init(name: "セージ", hex: "#7FA36F")],
+        [.init(name: "ラムネ", hex: "#5EB6CF"), .init(name: "群青", hex: "#5277C6"), .init(name: "すみれ", hex: "#9273C5"), .init(name: "珊瑚", hex: "#E47772"), .init(name: "杏", hex: "#D9984E"), .init(name: "若葉", hex: "#70A66F")],
+        [.init(name: "水色", hex: "#78BFD8"), .init(name: "青", hex: "#477FB5"), .init(name: "ライラック", hex: "#B18DBB"), .init(name: "桜", hex: "#DD8FA8"), .init(name: "蜂蜜", hex: "#CEA74E"), .init(name: "深緑", hex: "#568A73")],
+        [.init(name: "青磁", hex: "#72B8A7"), .init(name: "デニム", hex: "#557FA7"), .init(name: "葡萄", hex: "#876EAD"), .init(name: "ローズ", hex: "#C87387"), .init(name: "黄土", hex: "#C3974B"), .init(name: "苔", hex: "#708B5F")]
+    ]
+
+    static func palette(for date: Date, calendar: Calendar = .autoupdatingCurrent) -> [LockerDailyPenColor] {
+        let day = calendar.startOfDay(for: date)
+        let identifier = calendar.dateComponents([.day], from: Date(timeIntervalSince1970: 0), to: day).day ?? 0
+        return palettes[((identifier % palettes.count) + palettes.count) % palettes.count]
+    }
+}
+
 enum LockUSceneTokens {
     enum Layer {
         static let environment = 0.0

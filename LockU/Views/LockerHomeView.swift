@@ -1,15 +1,32 @@
 import PhotosUI
 import SwiftUI
 import UIKit
+import VisionKit
+import ImageIO
 
 @MainActor
 final class LockerCustomizationCoordinator: ObservableObject {
-    enum Mode: String, CaseIterable, Identifiable { case door, inside; var id: String { rawValue } }
+    enum Tool: String, CaseIterable, Identifiable { case draw, background, door, decor; var id: String { rawValue } }
     @Published var isEditing = false
-    @Published var mode: Mode = .door
+    @Published var selectedTool: Tool = .draw
+    @Published var erasing = false
+    @Published var penColor = LockerDailyAccent.skyBlue.uiColor
+    @Published var penWidth: CGFloat = 3
 
-    func begin() { mode = .door; isEditing = true }
-    func finish() { isEditing = false }
+    func begin(tool: Tool) {
+        selectedTool = tool; isEditing = true
+        #if DEBUG
+        print("[LockerEdit][OPEN] tool=\(tool.rawValue)")
+        #endif
+    }
+    func finish() {
+        isEditing = false; erasing = false
+        #if DEBUG
+        print("[LockerEdit][SAVE]")
+        #endif
+    }
+    func undo() { NotificationCenter.default.post(name: Notification.Name("LockU.LockerBodyDrawing.Undo"), object: nil) }
+    func redo() { NotificationCenter.default.post(name: Notification.Name("LockU.LockerBodyDrawing.Redo"), object: nil) }
 }
 
 struct LockerHomeView: View {
@@ -58,8 +75,8 @@ struct LockerHomeView: View {
                         )
                         .environmentObject(lockerResurfacingCoordinator)
                         .environmentObject(canvasEditingCoordinator)
-                        .opacity(appModel.lockerDoorState.isOpenOrOpening ? 1 : 0.12)
-                        .blur(radius: appModel.lockerDoorState == .closed ? 1.5 : 0)
+                        .opacity(appModel.lockerDoorState.isOpenOrOpening || customizationCoordinator.isEditing ? 1 : 0.12)
+                        .blur(radius: appModel.lockerDoorState == .closed && !customizationCoordinator.isEditing ? 1.5 : 0)
                         .animation(
                             reduceMotion
                                 ? LockUDesign.Motion.soft
@@ -71,36 +88,33 @@ struct LockerHomeView: View {
 
                         LockerDoorView(customizationCoordinator: customizationCoordinator)
                             .environmentObject(canvasEditingCoordinator)
-                            .allowsHitTesting(!canvasEditingCoordinator.isEditing || customizationCoordinator.isEditing)
+                            .allowsHitTesting(
+                                customizationCoordinator.isEditing
+                                    ? [.door, .decor].contains(customizationCoordinator.selectedTool)
+                                    : !canvasEditingCoordinator.isEditing
+                            )
                             .zIndex(10)
-
-                        if appModel.lockerDoorState == .closed,
-                           !canvasEditingCoordinator.isEditing,
-                           !customizationCoordinator.isEditing {
-                            Button {
-                                customizationCoordinator.begin()
-                            } label: {
-                                Image(systemName: "pencil")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .frame(width: 44, height: 44)
-                                    .background(.thinMaterial, in: Circle())
-                                    .background(.white.opacity(0.78), in: Circle())
-                            }
-                            .foregroundStyle(LockUDesign.Color.schoolNavy)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                            .padding(8)
-                            .zIndex(30)
-                            .accessibilityLabel("ロッカーを編集")
-                        }
                     }
                     .frame(width: lockerWidth, height: lockerHeight)
                     .animation(.easeOut(duration: 0.22), value: isOpen)
                     .zIndex(LockUSceneTokens.Layer.physical)
 
-                    LockerCanvasExternalControls(coordinator: canvasEditingCoordinator)
+                    if !customizationCoordinator.isEditing {
+                        Button {
+                            customizationCoordinator.begin(tool: isOpen ? .draw : .door)
+                        } label: {
+                            Label("編集", systemImage: "pencil")
+                                .font(.system(size: 15, weight: .medium))
+                                .frame(minWidth: 96, minHeight: 48)
+                                .background(.thinMaterial, in: Capsule())
+                                .background(.white.opacity(0.78), in: Capsule())
+                        }
+                        .foregroundStyle(LockUDesign.Color.schoolNavy)
                         .padding(.top, 10)
                         .frame(width: lockerWidth, height: editZoneHeight, alignment: .topTrailing)
                         .zIndex(LockUSceneTokens.Layer.interface)
+                        .accessibilityLabel("ロッカーそのものを編集")
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -156,8 +170,15 @@ private struct LockerCustomizationColor: Identifiable {
 
 private struct LockerCustomizationPanel: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var decorationRepository: DecorationRepository
     @EnvironmentObject private var appModel: LockUAppModel
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var coordinator: LockerCustomizationCoordinator
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var isCuttingOut = false
+    @State private var message: String?
+    @State private var penPalette = LockerDailyPenPaletteProvider.palette(for: .now)
+    @State private var cutoutTask: Task<Void, Never>?
 
     private let colors = [
         LockerCustomizationColor(name: "スクールブルー", hex: "#7A97A6"),
@@ -169,7 +190,7 @@ private struct LockerCustomizationPanel: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("EDIT LOCKER")
                     .font(.system(size: 11, weight: .semibold))
@@ -179,59 +200,276 @@ private struct LockerCustomizationPanel: View {
                     .font(.system(size: 14, weight: .semibold))
             }
 
-            Text("COLOR")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.5)
-                .foregroundStyle(LockUDesign.Color.textSecondary)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 13) {
-                    ForEach(colors) { item in
-                        let selected = settingsRepository.settings.lockerColorHex.uppercased() == item.hex
-                        Button { selectColor(item) } label: {
-                            Circle()
-                                .fill(Color(lockUHex: item.hex))
-                                .frame(width: 28, height: 28)
-                                .padding(4)
-                                .overlay(Circle().stroke(selected ? LockUDesign.Color.schoolNavy : .clear, lineWidth: 2))
-                                .scaleEffect(selected ? 1.06 : 1)
-                        }
-                        .frame(width: 44, height: 44)
-                        .accessibilityLabel("ロッカーの色：\(item.name)")
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
-                }
-            }
-
-            Picker("編集面", selection: Binding(
-                get: { coordinator.mode },
-                set: { selectMode($0) }
+            Picker("編集ツール", selection: Binding(
+                get: { coordinator.selectedTool },
+                set: { selectTool($0) }
             )) {
-                Text("DOOR").tag(LockerCustomizationCoordinator.Mode.door)
-                Text("INSIDE").tag(LockerCustomizationCoordinator.Mode.inside)
+                Label("Draw", systemImage: "pencil.tip").tag(LockerCustomizationCoordinator.Tool.draw)
+                Label("Background", systemImage: "rectangle.fill").tag(LockerCustomizationCoordinator.Tool.background)
+                Label("Door", systemImage: "door.left.hand.open").tag(LockerCustomizationCoordinator.Tool.door)
+                Label("Decor", systemImage: "scissors").tag(LockerCustomizationCoordinator.Tool.decor)
             }
             .pickerStyle(.segmented)
 
-            Text(coordinator.mode == .door
-                 ? "飾りをドラッグ・拡大・回転。長押しで反転や削除。"
-                 : "上の棚に小さな画像を5個まで置けます。")
-                .font(LockUDesign.Typography.caption)
-                .foregroundStyle(LockUDesign.Color.textSecondary)
+            switch coordinator.selectedTool {
+            case .draw: drawingControls
+            case .background: backgroundControls
+            case .door: doorControls
+            case .decor: decorControls
+            }
         }
         .padding(.horizontal, 22)
         .padding(.top, 18)
         .foregroundStyle(LockUDesign.Color.schoolNavy)
+        .onChange(of: selectedPhoto) { _, item in
+            guard let item else { return }
+            cutoutTask?.cancel()
+            cutoutTask = Task { await importCutout(from: item) }
+        }
+        .onAppear { refreshPenPalette() }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { refreshPenPalette() } }
+        .onDisappear {
+            cutoutTask?.cancel()
+            cutoutTask = nil
+        }
     }
 
-    private func selectColor(_ item: LockerCustomizationColor) {
+    private var drawingControls: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                toolButton("pencil.tip", selected: !coordinator.erasing) { coordinator.erasing = false }
+                toolButton("eraser", selected: coordinator.erasing) { coordinator.erasing = true }
+                toolButton("arrow.uturn.backward", selected: false) { coordinator.undo() }
+                toolButton("arrow.uturn.forward", selected: false) { coordinator.redo() }
+                ForEach(penPalette) { pen in
+                    let selected = coordinator.penColor.isEqual(pen.uiColor)
+                    Button {
+                        coordinator.penColor = pen.uiColor
+                        coordinator.erasing = false
+                    } label: {
+                        Circle().fill(pen.color).frame(width: 27, height: 27).padding(4)
+                            .overlay(Circle().stroke(selected ? pen.color : .clear, lineWidth: 2.5))
+                    }
+                    .frame(width: 44, height: 44)
+                    .accessibilityLabel(pen.name)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+                ForEach([(1.5, 4.0), (3.0, 7.0), (6.0, 11.0)], id: \.0) { width, dot in
+                    let selected = coordinator.penWidth == width
+                    Button { coordinator.penWidth = width; coordinator.erasing = false } label: {
+                        Circle().fill(LockUDesign.Color.schoolNavy)
+                            .frame(width: dot, height: dot)
+                            .frame(width: 30, height: 30)
+                            .overlay(Circle().stroke(selected ? LockUDesign.Color.ramuneBlue : .clear, lineWidth: 2))
+                    }
+                    .frame(width: 44, height: 44)
+                }
+            }
+        }
+    }
+
+    private var doorControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            colorPalette(selectedHex: settingsRepository.settings.doorColorHex, door: true)
+            HStack {
+                Text("Closed")
+                Slider(value: Binding(
+                    get: { settingsRepository.settings.doorOpenProgress },
+                    set: { saveDoorProgress($0) }
+                ), in: 0...1)
+                Text("Open")
+            }
+            .font(LockUDesign.Typography.caption)
+            .accessibilityLabel("ドアの開き具合")
+        }
+    }
+
+    private var backgroundControls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("Locker").font(.system(size: 10, weight: .semibold))
+                ForEach(colors) { item in
+                    let selected = settingsRepository.settings.lockerColorHex.uppercased() == item.hex
+                    Button { selectColor(item, door: false) } label: {
+                        Circle().fill(Color(lockUHex: item.hex)).frame(width: 22, height: 22)
+                            .overlay(Circle().stroke(selected ? LockUDesign.Color.schoolNavy : .clear, lineWidth: 2))
+                    }
+                    .accessibilityLabel("ロッカーの色：\(item.name)")
+                }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(LockerBackgroundStyle.allCases) { style in
+                        let selected = settingsRepository.settings.appearance.backgroundStyle == style
+                        Button { saveBackground(style) } label: {
+                            VStack(spacing: 3) {
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill(LinearGradient(colors: style.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .frame(width: 40, height: 27)
+                                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(selected ? LockUDesign.Color.schoolNavy : .white.opacity(0.7), lineWidth: selected ? 2 : 1))
+                                Text(style.title).font(.system(size: 9, weight: .medium)).lineLimit(1)
+                            }
+                        }
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var decorControls: some View {
+        HStack(spacing: 12) {
+            if decorationRepository.decorations.count >= DecorationRepository.maximumDoorDecorations {
+                Button { message = "ドアには5個まで貼れます" } label: { addCutoutLabel }
+            } else {
+                PhotosPicker(selection: $selectedPhoto, matching: .images) { addCutoutLabel }
+                    .disabled(isCuttingOut)
+            }
+            if isCuttingOut { ProgressView() }
+            Text(message ?? "\(decorationRepository.decorations.count) / 5")
+                .font(LockUDesign.Typography.caption)
+                .foregroundStyle(message == nil ? .secondary : Color.red)
+        }
+    }
+
+    private var addCutoutLabel: some View {
+        Label(isCuttingOut ? "切り抜き中…" : "Add Cutout", systemImage: "plus")
+            .font(.system(size: 14, weight: .semibold))
+            .frame(minWidth: 132, minHeight: 44)
+            .background(LockUDesign.Color.ramuneBlue.opacity(0.18), in: Capsule())
+    }
+
+    private func colorPalette(selectedHex: String, door: Bool) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 13) {
+                ForEach(colors) { item in
+                    let selected = selectedHex.uppercased() == item.hex
+                    Button { selectColor(item, door: door) } label: {
+                        Circle().fill(Color(lockUHex: item.hex)).frame(width: 28, height: 28).padding(4)
+                            .overlay(Circle().stroke(selected ? LockUDesign.Color.schoolNavy : .clear, lineWidth: 2))
+                            .scaleEffect(selected ? 1.06 : 1)
+                    }
+                    .frame(width: 44, height: 44)
+                    .accessibilityLabel("\(door ? "ドア" : "ロッカー")の色：\(item.name)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+        }
+    }
+
+    private func toolButton(_ icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 42, height: 42)
+                .background(LockUDesign.Color.ramuneBlue.opacity(selected ? 0.2 : 0), in: RoundedRectangle(cornerRadius: 9))
+                .overlay(RoundedRectangle(cornerRadius: 9).stroke(LockUDesign.Color.ramuneBlue.opacity(selected ? 0.5 : 0), lineWidth: 1))
+        }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func selectColor(_ item: LockerCustomizationColor, door: Bool) {
         var next = settingsRepository.settings
-        next.lockerColorHex = item.hex
+        if door { next.doorColorHex = item.hex } else { next.lockerColorHex = item.hex }
         do { try settingsRepository.update(next) }
         catch { appModel.report(error) }
     }
 
-    private func selectMode(_ mode: LockerCustomizationCoordinator.Mode) {
-        coordinator.mode = mode
-        appModel.lockerDoorState = mode == .inside ? .open : .closed
+    private func saveDoorProgress(_ progress: Double) {
+        var next = settingsRepository.settings
+        next.doorOpenProgress = min(1, max(0, progress))
+        do { try settingsRepository.update(next) }
+        catch { appModel.report(error) }
+    }
+
+    private func saveBackground(_ style: LockerBackgroundStyle) {
+        var next = settingsRepository.settings
+        next.appearance.backgroundStyle = style
+        do { try settingsRepository.update(next) }
+        catch { appModel.report(error) }
+    }
+
+    private func importCutout(from item: PhotosPickerItem) async {
+        guard !isCuttingOut else { return }
+        guard decorationRepository.decorations.count < DecorationRepository.maximumDoorDecorations else {
+            message = "ドアには5個まで貼れます"; selectedPhoto = nil; return
+        }
+        guard #available(iOS 17.0, *), ImageAnalyzer.isSupported else {
+            message = "この機能はこのiOSでは利用できません"; selectedPhoto = nil; return
+        }
+        isCuttingOut = true; message = nil
+        #if DEBUG
+        print("[LockerDecor][PICKED]")
+        print("[LockerDecor][ANALYSIS_START]")
+        #endif
+        defer { isCuttingOut = false; selectedPhoto = nil }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else { throw LockUStorageError.invalidImage }
+            let preparedData = await Task.detached(priority: .userInitiated) {
+                CutoutImagePreparation.downsample(data, maximumPixelSize: 2_048)
+            }.value
+            try Task.checkCancellation()
+            guard let preparedData, let source = UIImage(data: preparedData) else { throw LockUStorageError.invalidImage }
+            let analyzer = ImageAnalyzer()
+            let analysis = try await analyzer.analyze(source, configuration: .init([.visualLookUp]))
+            let interaction = ImageAnalysisInteraction()
+            interaction.analysis = analysis
+            interaction.preferredInteractionTypes = .imageSubject
+            let subjects = await interaction.subjects
+            try Task.checkCancellation()
+            guard !subjects.isEmpty else { throw CutoutImportError.noSubject }
+            let cutout = try await interaction.image(for: subjects)
+            try Task.checkCancellation()
+            try decorationRepository.add(image: cutout, initialPosition: CodablePoint(x: 0.5, y: 0.45))
+            #if DEBUG
+            print("[LockerDecor][ANALYSIS_SUCCESS] subjects=\(subjects.count)")
+            #endif
+        } catch is CancellationError {
+            #if DEBUG
+            print("[LockerDecor][ANALYSIS_FAILED] operation=cancelled")
+            #endif
+        } catch {
+            message = "被写体を切り抜けませんでした　別の写真を試してください"
+            #if DEBUG
+            print("[LockerDecor][ANALYSIS_FAILED] operation=subjectLift error=\(String(describing: error))")
+            #endif
+        }
+    }
+
+    private func refreshPenPalette(date: Date = .now) {
+        let next = LockerDailyPenPaletteProvider.palette(for: date)
+        let changed = next.map(\.id) != penPalette.map(\.id)
+        if changed { penPalette = next }
+        if changed || !next.contains(where: { coordinator.penColor.isEqual($0.uiColor) }) {
+            coordinator.penColor = next.first?.uiColor ?? coordinator.penColor
+            coordinator.erasing = false
+        }
+    }
+
+    private func selectTool(_ tool: LockerCustomizationCoordinator.Tool) {
+        coordinator.selectedTool = tool
+        coordinator.erasing = false
+        appModel.lockerDoorState = [.door, .decor].contains(tool) ? .closed : .open
+        #if DEBUG
+        print("[LockerEdit][TOOL] \(tool.rawValue)")
+        #endif
+    }
+}
+
+private enum CutoutImportError: Error { case noSubject }
+
+private nonisolated enum CutoutImagePreparation {
+    static func downsample(_ data: Data, maximumPixelSize: Int) -> Data? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options) else { return nil }
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize,
+            kCGImageSourceShouldCacheImmediately: true
+        ] as CFDictionary
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else { return nil }
+        return UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.94)
     }
 }
 
@@ -814,7 +1052,7 @@ struct LockerFrameView: View {
             ZStack {
                 LockerInteriorSurface(
                     lockerColor: lockerColor,
-                    isCustomizingTopShelf: customizationCoordinator.isEditing && customizationCoordinator.mode == .inside
+                    customizationCoordinator: customizationCoordinator
                 )
                     .padding(.horizontal, frameWidth)
                     .padding(.top, topHeight)
@@ -899,7 +1137,7 @@ struct LockerFrameView: View {
 private struct LockerInteriorSurface: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
     let lockerColor: Color
-    let isCustomizingTopShelf: Bool
+    @ObservedObject var customizationCoordinator: LockerCustomizationCoordinator
 
     var body: some View {
         GeometryReader { proxy in
@@ -929,12 +1167,22 @@ private struct LockerInteriorSurface: View {
                     .padding(.horizontal, 1)
 
                 InteriorLightFalloff(side: side, ceiling: ceiling, floor: floor)
+                    .allowsHitTesting(false)
+                LockerBodyDrawingLayer(
+                    coordinator: customizationCoordinator,
+                    isDrawingEnabled: customizationCoordinator.isEditing && customizationCoordinator.selectedTool == .draw
+                )
+                .padding(.horizontal, side + 1)
+                .padding(.top, ceiling)
+                .padding(.bottom, floor)
                 InteriorHardwareOverlay(side: side, ceiling: ceiling, floor: floor)
+                    .allowsHitTesting(false)
 
-                LockerInteriorContent(isCustomizingTopShelf: isCustomizingTopShelf)
+                LockerInteriorContent(isCustomizingTopShelf: false)
                     .padding(.horizontal, side + 1)
                     .padding(.top, ceiling)
                     .padding(.bottom, floor)
+                    .allowsHitTesting(!customizationCoordinator.isEditing)
 
                 InteriorAmbientOcclusion(side: side, ceiling: ceiling, floor: floor)
                 LinearGradient(colors: [.black.opacity(0.12), .clear, .white.opacity(0.08), .clear, .black.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)

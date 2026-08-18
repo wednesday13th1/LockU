@@ -875,6 +875,57 @@ private extension LockerTextDecoration {
     }
 }
 
+struct LockerBodyDrawingLayer: View {
+    @EnvironmentObject private var repository: LockerCanvasRepository
+    @ObservedObject var coordinator: LockerCustomizationCoordinator
+    let isDrawingEnabled: Bool
+    @State private var drawing = PKDrawing()
+    @State private var referenceSize: CGSize = .zero
+    @State private var currentSize: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { proxy in
+            LockerPencilCanvas(
+                drawing: $drawing,
+                canvasSize: proxy.size,
+                referenceSize: referenceSize == .zero ? proxy.size : referenceSize,
+                isDrawingEnabled: isDrawingEnabled,
+                color: coordinator.penColor,
+                width: coordinator.penWidth,
+                isEraser: coordinator.erasing,
+                undoNotification: Notification.Name("LockU.LockerBodyDrawing.Undo"),
+                redoNotification: Notification.Name("LockU.LockerBodyDrawing.Redo")
+            )
+            .onAppear {
+                currentSize = proxy.size
+                loadDrawing(fallbackSize: proxy.size)
+            }
+            .onChange(of: proxy.size) { _, size in currentSize = size }
+        }
+        .allowsHitTesting(isDrawingEnabled)
+        .onChange(of: isDrawingEnabled) { wasEnabled, enabled in
+            if wasEnabled && !enabled { saveDrawing() }
+        }
+        .onDisappear { saveDrawing() }
+        .accessibilityLabel("ロッカー本体の落書き")
+    }
+
+    private func loadDrawing(fallbackSize: CGSize) {
+        if let data = repository.lockerBodyDrawingData(), let loaded = try? PKDrawing(data: data) {
+            drawing = loaded
+        }
+        let width = repository.metadata.lockerBodyDrawingReferenceWidth.map { CGFloat($0) } ?? fallbackSize.width
+        let height = repository.metadata.lockerBodyDrawingReferenceHeight.map { CGFloat($0) } ?? fallbackSize.height
+        referenceSize = CGSize(width: width, height: height)
+    }
+
+    private func saveDrawing() {
+        guard currentSize.width > 0, currentSize.height > 0 else { return }
+        do { try repository.commitLockerBodyDrawing(drawing.dataRepresentation(), size: currentSize) }
+        catch { LockULog.error(.storage, "Locker body drawing save failed: \(error.localizedDescription)") }
+    }
+}
+
 private struct LockerPencilCanvas: UIViewRepresentable {
     @Binding var drawing: PKDrawing
     let canvasSize: CGSize
@@ -883,6 +934,30 @@ private struct LockerPencilCanvas: UIViewRepresentable {
     let color: UIColor
     let width: CGFloat
     let isEraser: Bool
+    let undoNotification: Notification.Name
+    let redoNotification: Notification.Name
+
+    init(
+        drawing: Binding<PKDrawing>,
+        canvasSize: CGSize,
+        referenceSize: CGSize,
+        isDrawingEnabled: Bool,
+        color: UIColor,
+        width: CGFloat,
+        isEraser: Bool,
+        undoNotification: Notification.Name = .lockerCanvasUndo,
+        redoNotification: Notification.Name = .lockerCanvasRedo
+    ) {
+        _drawing = drawing
+        self.canvasSize = canvasSize
+        self.referenceSize = referenceSize
+        self.isDrawingEnabled = isDrawingEnabled
+        self.color = color
+        self.width = width
+        self.isEraser = isEraser
+        self.undoNotification = undoNotification
+        self.redoNotification = redoNotification
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator(drawing: $drawing) }
     func makeUIView(context: Context) -> PKCanvasView {
@@ -901,11 +976,18 @@ private struct LockerPencilCanvas: UIViewRepresentable {
         view.delegate = context.coordinator
         context.coordinator.canvas = view
         context.coordinator.undoObserver = NotificationCenter.default.addObserver(
-            forName: .lockerCanvasUndo,
+            forName: undoNotification,
             object: nil,
             queue: .main
         ) { [weak view] _ in
             view?.undoManager?.undo()
+        }
+        context.coordinator.redoObserver = NotificationCenter.default.addObserver(
+            forName: redoNotification,
+            object: nil,
+            queue: .main
+        ) { [weak view] _ in
+            view?.undoManager?.redo()
         }
         #if DEBUG
         print("[LockerPencil][CANVAS_CREATED]")
@@ -947,11 +1029,18 @@ private struct LockerPencilCanvas: UIViewRepresentable {
             context.coordinator.isApplyingDrawing = false
         }
     }
-    static func dismantleUIView(_ uiView: PKCanvasView, coordinator: Coordinator) { if let observer = coordinator.undoObserver { NotificationCenter.default.removeObserver(observer) }; coordinator.undoObserver = nil; coordinator.canvas = nil }
+    static func dismantleUIView(_ uiView: PKCanvasView, coordinator: Coordinator) {
+        if let observer = coordinator.undoObserver { NotificationCenter.default.removeObserver(observer) }
+        if let observer = coordinator.redoObserver { NotificationCenter.default.removeObserver(observer) }
+        coordinator.undoObserver = nil
+        coordinator.redoObserver = nil
+        coordinator.canvas = nil
+    }
     final class Coordinator: NSObject, PKCanvasViewDelegate {
         @Binding var drawing: PKDrawing
         weak var canvas: PKCanvasView?
         var undoObserver: NSObjectProtocol?
+        var redoObserver: NSObjectProtocol?
         var isApplyingDrawing = false
         var lastLoggedSize: CGSize = .zero
         var lastLoggedStrokeCount = -1
@@ -1004,7 +1093,10 @@ private final class LockerInteractivePKCanvasView: PKCanvasView {
     }
 }
 
-private extension Notification.Name { static let lockerCanvasUndo = Notification.Name("LockU.LockerCanvas.Undo") }
+private extension Notification.Name {
+    static let lockerCanvasUndo = Notification.Name("LockU.LockerCanvas.Undo")
+    static let lockerCanvasRedo = Notification.Name("LockU.LockerCanvas.Redo")
+}
 
 private struct LockerMemoryPicker: View {
     @EnvironmentObject private var repository: MemoryRepository

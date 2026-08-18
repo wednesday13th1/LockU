@@ -17,7 +17,7 @@ nonisolated struct DefaultMemoryPresentationPolicy {
 
 nonisolated struct PlacementPolicy {
     let minimumScale: Double; let maximumScale: Double; let minimumCoordinate: Double; let maximumCoordinate: Double
-    static let locker = PlacementPolicy(minimumScale: 0.3, maximumScale: 3, minimumCoordinate: 0.04, maximumCoordinate: 0.96)
+    static let locker = PlacementPolicy(minimumScale: 0.35, maximumScale: 2.5, minimumCoordinate: 0.04, maximumCoordinate: 0.96)
 }
 
 nonisolated struct LockerPlacementValidator {

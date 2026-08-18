@@ -13,9 +13,15 @@ struct LockerDoorView: View {
     private var isOpen: Bool { appModel.lockerDoorState.isOpenOrOpening }
     private var lockerColor: Color {
         Color(
-            lockUHex: settingsRepository.settings.lockerColorHex,
+            lockUHex: settingsRepository.settings.doorColorHex,
             fallback: LockUDesign.Color.dustBlue
         )
+    }
+    private var displayedDoorAngle: Double {
+        if customizationCoordinator.isEditing && customizationCoordinator.selectedTool == .door {
+            return -96 * settingsRepository.settings.doorOpenProgress
+        }
+        return doorAngle
     }
 
     var body: some View {
@@ -34,7 +40,7 @@ struct LockerDoorView: View {
             .padding(.horizontal, proxy.size.width * 0.03)
             .padding(.vertical, 9)
             .rotation3DEffect(
-                .degrees(reduceMotion ? 0 : doorAngle),
+                .degrees(reduceMotion ? 0 : displayedDoorAngle),
                 axis: (x: 0, y: 1, z: 0),
                 anchor: .trailing,
                 anchorZ: doorForwardOffset,
@@ -42,7 +48,11 @@ struct LockerDoorView: View {
             )
             .offset(x: doorForwardOffset)
             .opacity(reduceMotion && isOpen ? 0 : 1)
-            .allowsHitTesting(appModel.lockerDoorState.acceptsInput && !editingCoordinator.isEditing)
+            .allowsHitTesting(
+                appModel.lockerDoorState.acceptsInput
+                    && !editingCoordinator.isEditing
+                    && (!customizationCoordinator.isEditing || [.door, .decor].contains(customizationCoordinator.selectedTool))
+            )
             .contentShape(Rectangle())
             .gesture(
                 !editingCoordinator.isEditing && !customizationCoordinator.isEditing
@@ -55,6 +65,7 @@ struct LockerDoorView: View {
             .onChange(of: isOpen) { _, opening in
                 animateDoor(opening: opening)
             }
+            .animation(.easeOut(duration: 0.16), value: settingsRepository.settings.doorOpenProgress)
 
             if appModel.lockerDoorState == .open
                 && !editingCoordinator.isEditing
@@ -139,7 +150,7 @@ struct LockerDoorView: View {
             .padding(.vertical, 24)
 
             LockerDecorationLayer(
-                isEditing: customizationCoordinator.isEditing && customizationCoordinator.mode == .door
+                isEditing: customizationCoordinator.isEditing && customizationCoordinator.selectedTool == .decor
             )
             .padding(18)
 
