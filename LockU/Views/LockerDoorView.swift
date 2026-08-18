@@ -18,9 +18,6 @@ struct LockerDoorView: View {
         )
     }
     private var displayedDoorAngle: Double {
-        if customizationCoordinator.isEditing && customizationCoordinator.selectedTool == .door {
-            return -96 * settingsRepository.settings.doorOpenProgress
-        }
         return doorAngle
     }
 
@@ -51,7 +48,7 @@ struct LockerDoorView: View {
             .allowsHitTesting(
                 appModel.lockerDoorState.acceptsInput
                     && !editingCoordinator.isEditing
-                    && (!customizationCoordinator.isEditing || [.door, .decor].contains(customizationCoordinator.selectedTool))
+                    && !customizationCoordinator.isEditing
             )
             .contentShape(Rectangle())
             .gesture(
@@ -150,7 +147,7 @@ struct LockerDoorView: View {
             .padding(.vertical, 24)
 
             LockerDecorationLayer(
-                isEditing: customizationCoordinator.isEditing && customizationCoordinator.selectedTool == .decor
+                isEditing: false
             )
             .padding(18)
 

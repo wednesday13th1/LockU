@@ -244,15 +244,17 @@ nonisolated struct LockerDecoration: Codable, Identifiable, Hashable, Sendable {
 }
 
 struct LockerSettings: Codable, Equatable, Sendable {
+    enum BackgroundMode: String, Codable, Sendable { case today, photo }
     var lockerColorHex: String
     var doorColorHex: String
     var doorOpenProgress: Double
     var lockerNumber: String
     var ownerName: String
     var appearance: LockerAppearanceSettings
+    var backgroundMode: BackgroundMode
 
     enum CodingKeys: String, CodingKey {
-        case lockerColorHex, doorColorHex, doorOpenProgress, lockerNumber, ownerName, appearance
+        case lockerColorHex, doorColorHex, doorOpenProgress, lockerNumber, ownerName, appearance, backgroundMode
     }
 
     init(
@@ -261,7 +263,8 @@ struct LockerSettings: Codable, Equatable, Sendable {
         ownerName: String,
         appearance: LockerAppearanceSettings = .default,
         doorColorHex: String? = nil,
-        doorOpenProgress: Double = 0
+        doorOpenProgress: Double = 0,
+        backgroundMode: BackgroundMode = .today
     ) {
         self.lockerColorHex = lockerColorHex
         self.doorColorHex = doorColorHex ?? lockerColorHex
@@ -269,6 +272,7 @@ struct LockerSettings: Codable, Equatable, Sendable {
         self.lockerNumber = lockerNumber
         self.ownerName = ownerName
         self.appearance = appearance
+        self.backgroundMode = backgroundMode
     }
 
     init(from decoder: Decoder) throws {
@@ -280,6 +284,7 @@ struct LockerSettings: Codable, Equatable, Sendable {
         lockerNumber = try container.decode(String.self, forKey: .lockerNumber)
         ownerName = try container.decode(String.self, forKey: .ownerName)
         appearance = (try? container.decodeIfPresent(LockerAppearanceSettings.self, forKey: .appearance)) ?? .default
+        backgroundMode = (try? container.decodeIfPresent(BackgroundMode.self, forKey: .backgroundMode)) ?? .today
     }
 
     static let `default` = LockerSettings(

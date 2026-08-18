@@ -104,6 +104,15 @@ nonisolated enum LockerDailyPenPaletteProvider {
     }
 }
 
+nonisolated enum LockerDailyBackgroundProvider {
+    static func style(for date: Date, calendar: Calendar = .autoupdatingCurrent) -> LockerBackgroundStyle {
+        let day = calendar.startOfDay(for: date)
+        let identifier = calendar.dateComponents([.day], from: Date(timeIntervalSince1970: 0), to: day).day ?? 0
+        let palette: [LockerBackgroundStyle] = [.clearBlue, .softSky, .softSky, .paleCream, .coolGray, .fadedSchoolBlue]
+        return palette[((identifier % palette.count) + palette.count) % palette.count]
+    }
+}
+
 enum LockUSceneTokens {
     enum Layer {
         static let environment = 0.0

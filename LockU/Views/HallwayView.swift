@@ -107,62 +107,12 @@ private struct LockerSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var repository: LockerSettingsRepository
     @EnvironmentObject private var appModel: LockUAppModel
-    @EnvironmentObject private var memoryRepository: MemoryRepository
-    @StateObject private var previewResurfacingCoordinator = LockerResurfacingCoordinator()
-    @StateObject private var previewCanvasEditingCoordinator = LockerCanvasEditingCoordinator()
     @State private var ownerName = ""
     @State private var lockerNumber = ""
-    @State private var appearance = LockerAppearanceSettings.default
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    ZStack {
-                        LockerInteriorBackground(style: appearance.backgroundStyle)
-                        LockerMemoryBoardView(appearanceOverride: appearance)
-                            .environmentObject(memoryRepository)
-                            .environmentObject(appModel)
-                            .environmentObject(previewResurfacingCoordinator)
-                            .environmentObject(previewCanvasEditingCoordinator)
-                    }
-                    .frame(height: 230)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.42), lineWidth: 1))
-                    .allowsHitTesting(false)
-                    .accessibilityLabel("現在のロッカープレビュー")
-                }
-
-                Section("見た目") {
-                    Picker("背景", selection: $appearance.backgroundStyle) {
-                        ForEach(LockerBackgroundStyle.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("コラージュ", selection: $appearance.collageStyle) {
-                        ForEach(LockerCollageStyle.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("フレーム", selection: $appearance.frameStyle) {
-                        ForEach(LockerFrameStyle.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("フィルター", selection: $appearance.filterStyle) {
-                        ForEach(LockerFilterStyle.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("棚の雰囲気", selection: $appearance.itemTheme) {
-                        ForEach(LockerItemTheme.allCases) { theme in
-                            Text(theme.title)
-                                .tag(theme)
-                                .accessibilityLabel("\(theme.title)のテーマ")
-                        }
-                    }
-                    Picker("動く思い出", selection: $appearance.featuredVideoMemoryID) {
-                        Text("自動・最新の思い出").tag(UUID?.none)
-                        ForEach(memoryRepository.memories) { memory in
-                            Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                .tag(Optional(memory.id))
-                        }
-                    }
-                    Toggle("日ごとに少し変える", isOn: $appearance.dailyVariationEnabled)
-                }
-
                 Section("ロッカー") {
                     TextField("名前", text: $ownerName)
                     TextField("ロッカーコード", text: $lockerNumber)
@@ -196,7 +146,6 @@ private struct LockerSettingsSheet: View {
                             var settings = repository.settings
                             settings.ownerName = ownerName.isEmpty ? "My" : ownerName
                             settings.lockerNumber = lockerNumber.isEmpty ? "24" : lockerNumber
-                            settings.appearance = appearance
                             try repository.update(settings)
                             dismiss()
                         } catch {
@@ -208,7 +157,6 @@ private struct LockerSettingsSheet: View {
             .onAppear {
                 ownerName = repository.settings.ownerName
                 lockerNumber = repository.settings.lockerNumber
-                appearance = repository.settings.appearance
             }
         }
     }

@@ -298,55 +298,90 @@ private struct DeterministicMemoryWallPlacementEngine {
         let variation = DailyLockerVariationEngine().variation(
             for: date,
             memories: memories,
-            isEnabled: appearance.dailyVariationEnabled
+            isEnabled: true
         )
 
-        return memories.enumerated().map { index, memory in
+        var occupied: [CGRect] = []
+        var placements: [MemoryWallPlacement] = []
+        for (index, memory) in memories.enumerated() {
             let presetIndex = index % anchors.count
             let anchor = anchors[presetIndex]
             let daily = variation.memoryAdjustments[memory.id] ?? .none
             let width = containerSize.width * widthFractions[presetIndex]
-            let halfX = width / containerSize.width / 2 + 0.012
             let printAspectRatio = daily.printAspectRatioOverride ?? aspectRatios[presetIndex]
             let estimatedHeight = width / printAspectRatio
-            let halfY = estimatedHeight / containerSize.height / 2 + 0.012
+            let rotation = index == 0
+                ? min(max(rotationPresets[presetIndex] + daily.rotationOffset * 0.3, -1.5), 1.5)
+                : min(max(rotationPresets[presetIndex] + daily.rotationOffset, -4), 4)
+            let radians = abs(rotation) * .pi / 180
+            let rotatedSize = CGSize(
+                width: abs(width * cos(radians)) + abs(estimatedHeight * sin(radians)),
+                height: abs(width * sin(radians)) + abs(estimatedHeight * cos(radians))
+            )
+            let base = CGPoint(x: anchor.x * containerSize.width, y: anchor.y * containerSize.height)
+            let dailyOffset = daily.positionOffset
+            let candidateOffsets = [
+                dailyOffset,
+                CGSize(width: dailyOffset.width * 0.5, height: dailyOffset.height * 0.5),
+                .zero,
+                CGSize(width: 8, height: 0), CGSize(width: -8, height: 0),
+                CGSize(width: 0, height: 6), CGSize(width: 0, height: -6)
+            ]
+            let margin: CGFloat = 10
+            var resolvedPosition = base
+            var resolvedBounds = CGRect.zero
+            for offset in candidateOffsets {
+                let halfWidth = rotatedSize.width / 2
+                let halfHeight = rotatedSize.height / 2
+                let position = CGPoint(
+                    x: min(max(base.x + offset.width, halfWidth + margin), containerSize.width - halfWidth - margin),
+                    y: min(max(base.y + offset.height, halfHeight + margin), containerSize.height - halfHeight - margin)
+                )
+                let bounds = CGRect(
+                    x: position.x - halfWidth - margin,
+                    y: position.y - halfHeight - margin,
+                    width: rotatedSize.width + margin * 2,
+                    height: rotatedSize.height + margin * 2
+                )
+                if !occupied.contains(where: { $0.intersects(bounds) }) {
+                    resolvedPosition = position
+                    resolvedBounds = bounds
+                    break
+                }
+            }
+            if resolvedBounds == .zero {
+                // The fixed anchors are the collision-free baseline when daily offsets cannot be used.
+                let halfWidth = rotatedSize.width / 2
+                let halfHeight = rotatedSize.height / 2
+                resolvedPosition = CGPoint(
+                    x: min(max(base.x, halfWidth + margin), containerSize.width - halfWidth - margin),
+                    y: min(max(base.y, halfHeight + margin), containerSize.height - halfHeight - margin)
+                )
+                resolvedBounds = CGRect(x: resolvedPosition.x - halfWidth, y: resolvedPosition.y - halfHeight, width: rotatedSize.width, height: rotatedSize.height)
+            }
+            occupied.append(resolvedBounds)
             let attachment: MemoryAttachment
             switch index {
             case 1, 4, 7: attachment = .maskingTape
             default: attachment = .none
             }
 
-            return MemoryWallPlacement(
+            placements.append(MemoryWallPlacement(
                 memory: memory,
                 index: index,
-                position: CGPoint(
-                    x: min(max(anchor.x * containerSize.width + daily.positionOffset.width, halfX * containerSize.width), (1 - halfX) * containerSize.width),
-                    y: min(max(anchor.y * containerSize.height + daily.positionOffset.height, halfY * containerSize.height), (1 - halfY) * containerSize.height)
-                ),
+                position: resolvedPosition,
                 width: width,
-                rotation: index == 0
-                    ? min(max(rotationPresets[presetIndex] + daily.rotationOffset * 0.3, -1.5), 1.5)
-                    : min(max(rotationPresets[presetIndex] + daily.rotationOffset, -4), 4),
+                rotation: rotation,
                 zIndex: index == 0 ? 30 : Double(20 + (index % 7)),
                 tapeStyle: index == 0 ? .none : attachment,
-                frameStyle: daily.frameOverride ?? resolvedFrame(appearance.frameStyle, collage: appearance.collageStyle, index: index),
-                filterStyle: appearance.filterStyle,
+                frameStyle: .borderless,
+                filterStyle: .clear,
                 filterAdjustment: index == 0 ? variation.filterAdjustment.featuredVideoAdjustment : variation.filterAdjustment,
                 printAspectRatio: printAspectRatio,
                 isLiving: index == 0
-            )
+            ))
         }
-    }
-
-    private func resolvedFrame(_ selected: LockerFrameStyle, collage: LockerCollageStyle, index: Int) -> LockerFrameStyle {
-        guard selected == .mixed else { return selected }
-        let sequence: [LockerFrameStyle]
-        switch collage {
-        case .polaroid: sequence = [.polaroid, .polaroid, .thinWhite, .polaroid]
-        case .digicam: sequence = [.thinWhite, .borderless, .thinWhite, .polaroid]
-        case .balanced, .casual: sequence = [.polaroid, .polaroid, .thinWhite, .borderless, .thinWhite, .polaroid, .borderless, .thinWhite]
-        }
-        return sequence[index % sequence.count]
+        return placements
     }
 }
 
@@ -394,20 +429,17 @@ private struct DailyLockerVariationEngine {
             selected.append(available.remove(at: generator.nextInt(in: 0...(available.count - 1))))
         }
 
-        let frameOptions: [LockerFrameStyle] = [.polaroid, .thinWhite, .borderless]
         var adjustments: [UUID: DailyLockerMemoryAdjustment] = [:]
-        for (offset, id) in selected.enumerated() {
+        for id in selected {
             let x = generator.nextDouble(in: -7...7)
             let y = generator.nextDouble(in: -7...7)
             let rotationMagnitude = generator.nextDouble(in: 0.5...1.2)
             let rotation = generator.nextBool() ? rotationMagnitude : -rotationMagnitude
-            let changesFrame = offset == 0 && generator.nextBool()
-            let usesSquarePrint = changesFrame && generator.nextInt(in: 0...3) == 3
             adjustments[id] = DailyLockerMemoryAdjustment(
                 positionOffset: CGSize(width: x, height: y),
                 rotationOffset: rotation,
-                frameOverride: changesFrame && !usesSquarePrint ? frameOptions[generator.nextInt(in: 0...(frameOptions.count - 1))] : nil,
-                printAspectRatioOverride: usesSquarePrint ? 1 : nil
+                frameOverride: nil,
+                printAspectRatioOverride: nil
             )
         }
 

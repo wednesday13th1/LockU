@@ -17,7 +17,6 @@ private final class FirstLockerOnboardingViewModel: ObservableObject {
     @Published private(set) var drafts: [SeedMemoryDraft] = []
     @Published private(set) var isLoadingSelection = false
     @Published private(set) var selectionWarning: String?
-    @Published var selectedBackgroundStyle: LockerBackgroundStyle = .clearBlue
     @Published private(set) var isCreatingLocker = false
     @Published private(set) var creationError: String?
     @Published private(set) var requiresRecovery = false
@@ -45,7 +44,8 @@ private final class FirstLockerOnboardingViewModel: ObservableObject {
             importedIDs = Set(imported.map(\.id))
 
             var updatedSettings = settingsRepository.settings
-            updatedSettings.appearance.backgroundStyle = selectedBackgroundStyle
+            updatedSettings.backgroundMode = .today
+            updatedSettings.appearance.backgroundStyle = LockerDailyBackgroundProvider.style(for: now)
             do {
                 try settingsRepository.update(updatedSettings)
             } catch let settingsError {
@@ -272,30 +272,11 @@ struct FirstLockerOnboardingView: View {
                 .font(LockUDesign.Typography.screenTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
                 .padding(.top, 24)
-            SeedLockerPreview(drafts: model.drafts, backgroundStyle: model.selectedBackgroundStyle)
+            SeedLockerPreview(drafts: model.drafts, backgroundStyle: LockerDailyBackgroundProvider.style(for: .now))
                 .frame(maxHeight: 430)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(LockerBackgroundStyle.allCases) { style in
-                        Button {
-                            model.selectedBackgroundStyle = style
-                        } label: {
-                            VStack(spacing: 6) {
-                                LockerInteriorBackground(style: style)
-                                    .frame(width: 72, height: 52)
-                                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(model.selectedBackgroundStyle == style ? LockUDesign.Color.schoolNavy : .white.opacity(0.7), lineWidth: 2))
-                                Text(style.title).font(.caption2)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(style.title)
-                        .accessibilityAddTraits(model.selectedBackgroundStyle == style ? .isSelected : [])
-                    }
-                }
-                .padding(.horizontal, 3)
-            }
+            Label("今日の色", systemImage: "sparkles")
+                .font(LockUDesign.Typography.caption)
+                .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.68))
 
             Button("次へ") { step = .final }
                 .buttonStyle(LockUPrimaryButtonStyle())
@@ -312,7 +293,7 @@ struct FirstLockerOnboardingView: View {
                 .font(LockUDesign.Typography.screenTitle)
                 .foregroundStyle(LockUDesign.Color.schoolNavy)
                 .padding(.top, 24)
-            SeedLockerPreview(drafts: model.drafts, backgroundStyle: model.selectedBackgroundStyle)
+            SeedLockerPreview(drafts: model.drafts, backgroundStyle: LockerDailyBackgroundProvider.style(for: .now))
                 .frame(maxHeight: 450)
             if let error = model.creationError {
                 Text(error)

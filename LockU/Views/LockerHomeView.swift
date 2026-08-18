@@ -1,12 +1,11 @@
 import PhotosUI
 import SwiftUI
 import UIKit
-import VisionKit
 import ImageIO
 
 @MainActor
 final class LockerCustomizationCoordinator: ObservableObject {
-    enum Tool: String, CaseIterable, Identifiable { case draw, background, door, decor; var id: String { rawValue } }
+    enum Tool: String, CaseIterable, Identifiable { case draw, background; var id: String { rawValue } }
     @Published var isEditing = false
     @Published var selectedTool: Tool = .draw
     @Published var erasing = false
@@ -90,7 +89,7 @@ struct LockerHomeView: View {
                             .environmentObject(canvasEditingCoordinator)
                             .allowsHitTesting(
                                 customizationCoordinator.isEditing
-                                    ? [.door, .decor].contains(customizationCoordinator.selectedTool)
+                                    ? false
                                     : !canvasEditingCoordinator.isEditing
                             )
                             .zIndex(10)
@@ -101,7 +100,8 @@ struct LockerHomeView: View {
 
                     if !customizationCoordinator.isEditing {
                         Button {
-                            customizationCoordinator.begin(tool: isOpen ? .draw : .door)
+                            appModel.lockerDoorState = .open
+                            customizationCoordinator.begin(tool: .draw)
                         } label: {
                             Label("編集", systemImage: "pencil")
                                 .font(.system(size: 15, weight: .medium))
@@ -162,32 +162,17 @@ struct LockerHomeView: View {
     }
 }
 
-private struct LockerCustomizationColor: Identifiable {
-    let name: String
-    let hex: String
-    var id: String { hex }
-}
-
 private struct LockerCustomizationPanel: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
-    @EnvironmentObject private var decorationRepository: DecorationRepository
+    @EnvironmentObject private var backgroundRepository: BackgroundRepository
     @EnvironmentObject private var appModel: LockUAppModel
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var coordinator: LockerCustomizationCoordinator
     @State private var selectedPhoto: PhotosPickerItem?
-    @State private var isCuttingOut = false
+    @State private var isImportingBackground = false
     @State private var message: String?
     @State private var penPalette = LockerDailyPenPaletteProvider.palette(for: .now)
-    @State private var cutoutTask: Task<Void, Never>?
-
-    private let colors = [
-        LockerCustomizationColor(name: "スクールブルー", hex: "#7A97A6"),
-        LockerCustomizationColor(name: "スカイブルー", hex: "#82B8D4"),
-        LockerCustomizationColor(name: "セージ", hex: "#91A88E"),
-        LockerCustomizationColor(name: "クリーム", hex: "#D8CDB2"),
-        LockerCustomizationColor(name: "ダストピンク", hex: "#C69AA2"),
-        LockerCustomizationColor(name: "ラベンダー", hex: "#A79BBE")
-    ]
+    @State private var backgroundTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -206,16 +191,12 @@ private struct LockerCustomizationPanel: View {
             )) {
                 Label("Draw", systemImage: "pencil.tip").tag(LockerCustomizationCoordinator.Tool.draw)
                 Label("Background", systemImage: "rectangle.fill").tag(LockerCustomizationCoordinator.Tool.background)
-                Label("Door", systemImage: "door.left.hand.open").tag(LockerCustomizationCoordinator.Tool.door)
-                Label("Decor", systemImage: "scissors").tag(LockerCustomizationCoordinator.Tool.decor)
             }
             .pickerStyle(.segmented)
 
             switch coordinator.selectedTool {
             case .draw: drawingControls
             case .background: backgroundControls
-            case .door: doorControls
-            case .decor: decorControls
             }
         }
         .padding(.horizontal, 22)
@@ -223,14 +204,19 @@ private struct LockerCustomizationPanel: View {
         .foregroundStyle(LockUDesign.Color.schoolNavy)
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
-            cutoutTask?.cancel()
-            cutoutTask = Task { await importCutout(from: item) }
+            backgroundTask?.cancel()
+            backgroundTask = Task { await importBackground(from: item) }
         }
-        .onAppear { refreshPenPalette() }
+        .onAppear {
+            refreshPenPalette()
+            if settingsRepository.settings.backgroundMode == .photo, backgroundRepository.image == nil {
+                saveBackgroundMode(.today)
+            }
+        }
         .onChange(of: scenePhase) { _, phase in if phase == .active { refreshPenPalette() } }
         .onDisappear {
-            cutoutTask?.cancel()
-            cutoutTask = nil
+            backgroundTask?.cancel()
+            backgroundTask = nil
         }
     }
 
@@ -268,93 +254,37 @@ private struct LockerCustomizationPanel: View {
         }
     }
 
-    private var doorControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            colorPalette(selectedHex: settingsRepository.settings.doorColorHex, door: true)
-            HStack {
-                Text("Closed")
-                Slider(value: Binding(
-                    get: { settingsRepository.settings.doorOpenProgress },
-                    set: { saveDoorProgress($0) }
-                ), in: 0...1)
-                Text("Open")
-            }
-            .font(LockUDesign.Typography.caption)
-            .accessibilityLabel("ドアの開き具合")
-        }
-    }
-
     private var backgroundControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text("Locker").font(.system(size: 10, weight: .semibold))
-                ForEach(colors) { item in
-                    let selected = settingsRepository.settings.lockerColorHex.uppercased() == item.hex
-                    Button { selectColor(item, door: false) } label: {
-                        Circle().fill(Color(lockUHex: item.hex)).frame(width: 22, height: 22)
-                            .overlay(Circle().stroke(selected ? LockUDesign.Color.schoolNavy : .clear, lineWidth: 2))
-                    }
-                    .accessibilityLabel("ロッカーの色：\(item.name)")
+        let photoSelected = settingsRepository.settings.backgroundMode == .photo
+        return HStack(spacing: 12) {
+            modeButton("今日の色", icon: "sparkles", mode: .today) { saveBackgroundMode(.today) }
+            if backgroundRepository.image == nil {
+                PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                    modeLabel("写真", icon: "photo", selected: photoSelected)
                 }
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(LockerBackgroundStyle.allCases) { style in
-                        let selected = settingsRepository.settings.appearance.backgroundStyle == style
-                        Button { saveBackground(style) } label: {
-                            VStack(spacing: 3) {
-                                RoundedRectangle(cornerRadius: 7)
-                                    .fill(LinearGradient(colors: style.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
-                                    .frame(width: 40, height: 27)
-                                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(selected ? LockUDesign.Color.schoolNavy : .white.opacity(0.7), lineWidth: selected ? 2 : 1))
-                                Text(style.title).font(.system(size: 9, weight: .medium)).lineLimit(1)
-                            }
-                        }
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private var decorControls: some View {
-        HStack(spacing: 12) {
-            if decorationRepository.decorations.count >= DecorationRepository.maximumDoorDecorations {
-                Button { message = "ドアには5個まで貼れます" } label: { addCutoutLabel }
+                .disabled(isImportingBackground)
             } else {
-                PhotosPicker(selection: $selectedPhoto, matching: .images) { addCutoutLabel }
-                    .disabled(isCuttingOut)
-            }
-            if isCuttingOut { ProgressView() }
-            Text(message ?? "\(decorationRepository.decorations.count) / 5")
-                .font(LockUDesign.Typography.caption)
-                .foregroundStyle(message == nil ? .secondary : Color.red)
-        }
-    }
-
-    private var addCutoutLabel: some View {
-        Label(isCuttingOut ? "切り抜き中…" : "Add Cutout", systemImage: "plus")
-            .font(.system(size: 14, weight: .semibold))
-            .frame(minWidth: 132, minHeight: 44)
-            .background(LockUDesign.Color.ramuneBlue.opacity(0.18), in: Capsule())
-    }
-
-    private func colorPalette(selectedHex: String, door: Bool) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 13) {
-                ForEach(colors) { item in
-                    let selected = selectedHex.uppercased() == item.hex
-                    Button { selectColor(item, door: door) } label: {
-                        Circle().fill(Color(lockUHex: item.hex)).frame(width: 28, height: 28).padding(4)
-                            .overlay(Circle().stroke(selected ? LockUDesign.Color.schoolNavy : .clear, lineWidth: 2))
-                            .scaleEffect(selected ? 1.06 : 1)
-                    }
-                    .frame(width: 44, height: 44)
-                    .accessibilityLabel("\(door ? "ドア" : "ロッカー")の色：\(item.name)")
-                    .accessibilityAddTraits(selected ? .isSelected : [])
+                modeButton("写真", icon: "photo", mode: .photo) { saveBackgroundMode(.photo) }
+                PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                    Text("写真を変更").font(.system(size: 12, weight: .medium)).frame(minHeight: 44)
                 }
+                .disabled(isImportingBackground)
             }
+            if isImportingBackground { ProgressView() }
         }
+    }
+
+    private func modeButton(_ title: String, icon: String, mode: LockerSettings.BackgroundMode, action: @escaping () -> Void) -> some View {
+        Button(action: action) { modeLabel(title, icon: icon, selected: settingsRepository.settings.backgroundMode == mode) }
+    }
+
+    private func modeLabel(_ title: String, icon: String, selected: Bool) -> some View {
+        Label(title, systemImage: icon)
+            .font(.system(size: 13, weight: .semibold))
+            .frame(minWidth: 92, minHeight: 44)
+            .background(selected ? LockUDesign.Color.ramuneBlue.opacity(0.20) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(selected ? LockUDesign.Color.ramuneBlue.opacity(0.65) : .secondary.opacity(0.18), lineWidth: 1))
+            .scaleEffect(selected ? 1.02 : 1)
     }
 
     private func toolButton(_ icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
@@ -368,71 +298,30 @@ private struct LockerCustomizationPanel: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private func selectColor(_ item: LockerCustomizationColor, door: Bool) {
+    private func saveBackgroundMode(_ mode: LockerSettings.BackgroundMode) {
         var next = settingsRepository.settings
-        if door { next.doorColorHex = item.hex } else { next.lockerColorHex = item.hex }
+        next.backgroundMode = mode
         do { try settingsRepository.update(next) }
         catch { appModel.report(error) }
     }
 
-    private func saveDoorProgress(_ progress: Double) {
-        var next = settingsRepository.settings
-        next.doorOpenProgress = min(1, max(0, progress))
-        do { try settingsRepository.update(next) }
-        catch { appModel.report(error) }
-    }
-
-    private func saveBackground(_ style: LockerBackgroundStyle) {
-        var next = settingsRepository.settings
-        next.appearance.backgroundStyle = style
-        do { try settingsRepository.update(next) }
-        catch { appModel.report(error) }
-    }
-
-    private func importCutout(from item: PhotosPickerItem) async {
-        guard !isCuttingOut else { return }
-        guard decorationRepository.decorations.count < DecorationRepository.maximumDoorDecorations else {
-            message = "ドアには5個まで貼れます"; selectedPhoto = nil; return
-        }
-        guard #available(iOS 17.0, *), ImageAnalyzer.isSupported else {
-            message = "この機能はこのiOSでは利用できません"; selectedPhoto = nil; return
-        }
-        isCuttingOut = true; message = nil
-        #if DEBUG
-        print("[LockerDecor][PICKED]")
-        print("[LockerDecor][ANALYSIS_START]")
-        #endif
-        defer { isCuttingOut = false; selectedPhoto = nil }
+    private func importBackground(from item: PhotosPickerItem) async {
+        guard !isImportingBackground else { return }
+        isImportingBackground = true; message = nil
+        defer { isImportingBackground = false; selectedPhoto = nil }
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else { throw LockUStorageError.invalidImage }
             let preparedData = await Task.detached(priority: .userInitiated) {
-                CutoutImagePreparation.downsample(data, maximumPixelSize: 2_048)
+                LockerBackgroundImagePreparation.downsample(data, maximumPixelSize: 2_048)
             }.value
             try Task.checkCancellation()
-            guard let preparedData, let source = UIImage(data: preparedData) else { throw LockUStorageError.invalidImage }
-            let analyzer = ImageAnalyzer()
-            let analysis = try await analyzer.analyze(source, configuration: .init([.visualLookUp]))
-            let interaction = ImageAnalysisInteraction()
-            interaction.analysis = analysis
-            interaction.preferredInteractionTypes = .imageSubject
-            let subjects = await interaction.subjects
-            try Task.checkCancellation()
-            guard !subjects.isEmpty else { throw CutoutImportError.noSubject }
-            let cutout = try await interaction.image(for: subjects)
-            try Task.checkCancellation()
-            try decorationRepository.add(image: cutout, initialPosition: CodablePoint(x: 0.5, y: 0.45))
-            #if DEBUG
-            print("[LockerDecor][ANALYSIS_SUCCESS] subjects=\(subjects.count)")
-            #endif
+            guard let preparedData, let image = UIImage(data: preparedData) else { throw LockUStorageError.invalidImage }
+            try backgroundRepository.save(image)
+            saveBackgroundMode(.photo)
         } catch is CancellationError {
-            #if DEBUG
-            print("[LockerDecor][ANALYSIS_FAILED] operation=cancelled")
-            #endif
         } catch {
-            message = "被写体を切り抜けませんでした　別の写真を試してください"
-            #if DEBUG
-            print("[LockerDecor][ANALYSIS_FAILED] operation=subjectLift error=\(String(describing: error))")
-            #endif
+            message = "写真を読み込めませんでした"
+            appModel.report(error)
         }
     }
 
@@ -449,16 +338,14 @@ private struct LockerCustomizationPanel: View {
     private func selectTool(_ tool: LockerCustomizationCoordinator.Tool) {
         coordinator.selectedTool = tool
         coordinator.erasing = false
-        appModel.lockerDoorState = [.door, .decor].contains(tool) ? .closed : .open
+        appModel.lockerDoorState = .open
         #if DEBUG
         print("[LockerEdit][TOOL] \(tool.rawValue)")
         #endif
     }
 }
 
-private enum CutoutImportError: Error { case noSubject }
-
-private nonisolated enum CutoutImagePreparation {
+private nonisolated enum LockerBackgroundImagePreparation {
     static func downsample(_ data: Data, maximumPixelSize: Int) -> Data? {
         let options = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, options) else { return nil }
@@ -1136,6 +1023,8 @@ struct LockerFrameView: View {
 
 private struct LockerInteriorSurface: View {
     @EnvironmentObject private var settingsRepository: LockerSettingsRepository
+    @EnvironmentObject private var backgroundRepository: BackgroundRepository
+    @EnvironmentObject private var demoClock: LockUDemoClock
     let lockerColor: Color
     @ObservedObject var customizationCoordinator: LockerCustomizationCoordinator
 
@@ -1147,9 +1036,20 @@ private struct LockerInteriorSurface: View {
             let shelfLip = min(8, floor * 0.36)
             let aging = LockUDesign.LockerSurfaceAge.threeMonths.agingProfile
             ZStack {
-                LockerInteriorBackground(style: settingsRepository.settings.appearance.backgroundStyle)
-                    .overlay(lockerColor.opacity(0.08))
+                Group {
+                    if settingsRepository.settings.backgroundMode == .photo,
+                       let image = backgroundRepository.image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .overlay(.white.opacity(0.035))
+                    } else {
+                        LockerInteriorBackground(style: LockerDailyBackgroundProvider.style(for: demoClock.now))
+                    }
+                }
+                    .overlay(lockerColor.opacity(0.055))
                     .clipShape(BackWallShape(side: side, ceiling: ceiling, floor: floor))
+                    .allowsHitTesting(false)
                 LockUSceneTokens.Material.leftWall
                     .clipShape(LeftInteriorWall(side: side, ceiling: ceiling, floor: floor))
                 LockUSceneTokens.Material.rightWall
@@ -1168,13 +1068,6 @@ private struct LockerInteriorSurface: View {
 
                 InteriorLightFalloff(side: side, ceiling: ceiling, floor: floor)
                     .allowsHitTesting(false)
-                LockerBodyDrawingLayer(
-                    coordinator: customizationCoordinator,
-                    isDrawingEnabled: customizationCoordinator.isEditing && customizationCoordinator.selectedTool == .draw
-                )
-                .padding(.horizontal, side + 1)
-                .padding(.top, ceiling)
-                .padding(.bottom, floor)
                 InteriorHardwareOverlay(side: side, ceiling: ceiling, floor: floor)
                     .allowsHitTesting(false)
 
@@ -1183,6 +1076,14 @@ private struct LockerInteriorSurface: View {
                     .padding(.top, ceiling)
                     .padding(.bottom, floor)
                     .allowsHitTesting(!customizationCoordinator.isEditing)
+
+                LockerBodyDrawingLayer(
+                    coordinator: customizationCoordinator,
+                    isDrawingEnabled: customizationCoordinator.isEditing && customizationCoordinator.selectedTool == .draw
+                )
+                .padding(.horizontal, side + 1)
+                .padding(.top, ceiling)
+                .padding(.bottom, floor)
 
                 InteriorAmbientOcclusion(side: side, ceiling: ceiling, floor: floor)
                 LinearGradient(colors: [.black.opacity(0.12), .clear, .white.opacity(0.08), .clear, .black.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)

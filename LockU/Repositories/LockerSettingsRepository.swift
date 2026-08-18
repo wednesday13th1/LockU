@@ -21,7 +21,10 @@ final class LockerSettingsRepository: ObservableObject {
             return
         }
         if let loaded = decode(at: fileURL) ?? decode(at: backupURL) {
-            settings = loaded
+            var resolved = loaded
+            resolved.appearance.dailyVariationEnabled = true
+            resolved.appearance.frameStyle = .borderless
+            settings = resolved
         } else {
             throw LockUStorageError.noRecoverableMetadata(fileURL.lastPathComponent)
         }
@@ -30,6 +33,8 @@ final class LockerSettingsRepository: ObservableObject {
     func update(_ newSettings: LockerSettings) throws {
         var sanitized = newSettings
         sanitized.doorOpenProgress = min(1, max(0, sanitized.doorOpenProgress.isFinite ? sanitized.doorOpenProgress : 0))
+        sanitized.appearance.dailyVariationEnabled = true
+        sanitized.appearance.frameStyle = .borderless
         let data = try JSONEncoder().encode(sanitized)
         let manager = FileManager.default
         if manager.fileExists(atPath: fileURL.path) {
