@@ -2,9 +2,7 @@ import Combine
 import SwiftUI
 import UIKit
 
-enum LockUTab: Hashable {
-    case locker, book, camera, peek
-}
+enum LockUTab: Hashable { case locker, camera, peek }
 
 enum LockerDoorState: Equatable {
     case closed
@@ -64,6 +62,7 @@ final class LockUAppModel: ObservableObject {
     let revisitCoordinator: RevisitCoordinator
     let reflectionRepository: MemoryReflectionRepository
     let lockerCanvasRepository: LockerCanvasRepository
+    let dailyLikeRepository: DailyLikeRepository
     let demoClock: LockUDemoClock
     let storageMode: StorageMode
     private let dependencies: LockUDependencyContainer
@@ -84,6 +83,7 @@ final class LockUAppModel: ObservableObject {
         revisitCoordinator = RevisitCoordinator()
         reflectionRepository = dependencies.reflectionRepository
         lockerCanvasRepository = dependencies.lockerCanvasRepository
+        dailyLikeRepository = dependencies.dailyLikeRepository
         demoClock = LockUDemoClock()
         launchLog("APP_LAUNCH")
         Task { @MainActor [weak self] in
@@ -302,6 +302,7 @@ struct LockURootView: View {
         .environmentObject(model.reflectionRepository)
         .environmentObject(model.lockerCanvasRepository)
         .environmentObject(model.demoClock)
+        .environmentObject(model.dailyLikeRepository)
         .alert(
             "LockU",
             isPresented: Binding(
@@ -322,10 +323,6 @@ struct LockURootView: View {
             HallwayView()
                 .frame(maxWidth: LockUDesign.contentMaxWidth)
                 .padding(.bottom, LockUDesign.bottomBarHeight + 8)
-        case .book:
-            MemoryBookshelfView()
-                .frame(maxWidth: LockUDesign.contentMaxWidth)
-                .padding(.bottom, LockUDesign.bottomBarHeight + LockUDesign.Spacing.medium)
         case .camera:
             CameraCaptureView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

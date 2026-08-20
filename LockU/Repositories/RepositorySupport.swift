@@ -40,6 +40,7 @@ struct LockUPaths: Sendable {
     let videos: URL
     let decorations: URL
     let backgrounds: URL
+    let dailyLikes: URL
 
     init(fileManager: FileManager = .default) throws {
         guard let applicationSupport = fileManager.urls(
@@ -53,7 +54,8 @@ struct LockUPaths: Sendable {
         videos = root.appendingPathComponent("Videos", isDirectory: true)
         decorations = root.appendingPathComponent("Decorations", isDirectory: true)
         backgrounds = root.appendingPathComponent("Backgrounds", isDirectory: true)
-        for directory in [root, memories, videos, decorations, backgrounds] {
+        dailyLikes = root.appendingPathComponent("DailyLikes", isDirectory: true)
+        for directory in [root, memories, videos, decorations, backgrounds, dailyLikes] {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }
@@ -64,7 +66,8 @@ struct LockUPaths: Sendable {
         videos = root.appendingPathComponent("Videos", isDirectory: true)
         decorations = root.appendingPathComponent("Decorations", isDirectory: true)
         backgrounds = root.appendingPathComponent("Backgrounds", isDirectory: true)
-        for directory in [root, memories, videos, decorations, backgrounds] {
+        dailyLikes = root.appendingPathComponent("DailyLikes", isDirectory: true)
+        for directory in [root, memories, videos, decorations, backgrounds, dailyLikes] {
             try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }

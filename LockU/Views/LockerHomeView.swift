@@ -35,8 +35,6 @@ struct LockerHomeView: View {
     @EnvironmentObject private var revisitCoordinator: RevisitCoordinator
     @EnvironmentObject private var demoClock: LockUDemoClock
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let onShare: () -> Void
-    let onCode: () -> Void
     let onSettings: () -> Void
     @State private var appeared = false
     @StateObject private var lockerResurfacingCoordinator = LockerResurfacingCoordinator()
@@ -59,8 +57,6 @@ struct LockerHomeView: View {
             VStack(spacing: LockUSceneTokens.Home.headerToLocker) {
                 LockerUtilityBar(
                     date: demoClock.now,
-                    onShare: onShare,
-                    onCode: onCode,
                     onSettings: onSettings
                 )
                 .padding(.horizontal, LockUSceneTokens.Home.headerHorizontalMargin)
@@ -400,7 +396,7 @@ private struct LockerCanvasExternalControls: View {
                             toolButton("textformat", compact ? nil : "文字", isSelected: coordinator.activeTool == .text) { coordinator.requestText() }
                                 .accessibilityLabel("文字を追加")
                             toolButton("plus.circle", compact ? nil : "思い出", isSelected: coordinator.activeTool == .memory) { coordinator.requestMemory() }
-                                .accessibilityLabel("過去の思い出を追加")
+                                .accessibilityLabel("過去の写真を追加")
                         case .text:
                             toolButton("character.cursor.ibeam", compact ? nil : "内容") { coordinator.requestTextContentEdit() }
                                 .accessibilityLabel("文字の内容を編集")
@@ -858,7 +854,7 @@ private struct LockerResurfacedMemoryCard: View {
                         .font(.system(size: 10, weight: .regular, design: .monospaced))
                         .foregroundStyle(Color.black.opacity(0.42))
                 }
-                Button("思い出を見る", action: onViewMemory)
+                Button("写真を見る", action: onViewMemory)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.black.opacity(0.54))
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -895,8 +891,6 @@ private struct LockerResurfacedMemoryCard: View {
 
 private struct LockerUtilityBar: View {
     let date: Date
-    let onShare: () -> Void
-    let onCode: () -> Void
     let onSettings: () -> Void
 
     var body: some View {
@@ -908,11 +902,7 @@ private struct LockerUtilityBar: View {
             Text(date.formatted(.dateTime.month(.abbreviated).day()))
                 .font(.system(size: 18, weight: .medium))
                 .frame(maxWidth: .infinity)
-            Menu {
-                Button("シェア", systemImage: "square.and.arrow.up", action: onShare)
-                Button("ロッカーコード", systemImage: "number", action: onCode)
-                Button("設定", systemImage: "gearshape", action: onSettings)
-            } label: {
+            Button(action: onSettings) {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 17, weight: .semibold))
                     .frame(width: 44, height: 44)

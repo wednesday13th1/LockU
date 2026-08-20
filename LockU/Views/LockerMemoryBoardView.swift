@@ -485,7 +485,7 @@ private struct LivingMemoryView: View {
     var body: some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            appModel.selectedTab = .book
+            appModel.selectedTab = .locker
         } label: {
             PolaroidPrint(memory: memory, frameStyle: frameStyle, filterStyle: filterStyle, filterAdjustment: filterAdjustment, isFeatured: true, printAspectRatio: printAspectRatio)
                 .overlay(alignment: .topTrailing) {
@@ -961,7 +961,7 @@ private struct MemoryPhysicalView: View {
         .contentShape(Rectangle())
         .onTapGesture { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onSelect() }
         .onTapGesture(count: 2) {
-            if !isResurfaced { appModel.selectedTab = .book }
+            if !isResurfaced { appModel.selectedTab = .locker }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.30), value: reflectionCount)
     }
@@ -1183,7 +1183,7 @@ struct PolaroidMemoryView: View {
     var body: some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            appModel.selectedTab = .book
+            appModel.selectedTab = .locker
         } label: {
             VStack(spacing: 0) {
                 Group {

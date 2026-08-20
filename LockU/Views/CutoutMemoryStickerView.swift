@@ -9,7 +9,7 @@ struct CutoutMemoryStickerView: View {
     var body: some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            appModel.selectedTab = .book
+            appModel.selectedTab = .locker
         } label: {
             Group {
                 if let image = repository.image(for: memory) {
@@ -33,6 +33,6 @@ struct CutoutMemoryStickerView: View {
         .accessibilityLabel(
             "Cutout memory from \(memory.createdAt.formatted(date: .long, time: .omitted))"
         )
-        .accessibilityHint("Opens Memory Book")
+        .accessibilityHint("ロッカーの写真を開きます")
     }
 }

@@ -281,7 +281,9 @@ struct CameraCaptureView: View {
             }
 
             CameraLightHUD(level: lightLevel)
-                .offset(y: 58)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.top, 104)
+                .padding(.trailing, 82)
                 .opacity(showLightHUD ? 1 : 0)
                 .scaleEffect(reduceMotion ? 1 : (showLightHUD ? 1 : 0.96))
                 .zIndex(30)
@@ -1078,7 +1080,7 @@ private struct VerticalCameraLightControl: View {
                 .font(.system(size: 9, weight: .semibold))
                 .tracking(1.5)
             Text("\(percentage)%")
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
 
             VerticalLightTrack(
@@ -1109,7 +1111,7 @@ private struct VerticalCameraLightControl: View {
                         .font(.system(size: 9, weight: .medium, design: .monospaced))
                         .monospacedDigit()
                 }
-                .frame(width: 52, height: 44)
+                .frame(width: 48, height: 44)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1118,7 +1120,7 @@ private struct VerticalCameraLightControl: View {
         }
         .foregroundStyle(.white.opacity(0.92))
         .padding(.vertical, 12)
-        .frame(width: 76)
+        .frame(width: 60)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
         .background(.black.opacity(0.38), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
         .overlay(
@@ -1147,12 +1149,12 @@ private struct VerticalLightTrack: View {
             ZStack(alignment: .top) {
                 Capsule()
                     .fill(.black.opacity(0.34))
-                    .frame(width: 7, height: trackHeight)
+                    .frame(width: 6, height: trackHeight)
                     .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
 
                 Capsule()
                     .fill(Color(red: 1, green: 0.92, blue: 0.70).opacity(0.88))
-                    .frame(width: 7, height: CGFloat(safeLevel) * trackHeight)
+                    .frame(width: 6, height: CGFloat(safeLevel) * trackHeight)
                     .position(
                         x: proxy.size.width / 2,
                         y: thumbY + (CGFloat(safeLevel) * trackHeight / 2)
@@ -1160,7 +1162,7 @@ private struct VerticalLightTrack: View {
 
                 Circle()
                     .fill(.white.opacity(0.96))
-                    .frame(width: 30, height: 30)
+                    .frame(width: 26, height: 26)
                     .overlay(Circle().stroke(.black.opacity(0.12), lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
                     .position(x: proxy.size.width / 2, y: thumbY)

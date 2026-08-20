@@ -1158,7 +1158,7 @@ private struct LockerMemoryPicker: View {
                 .padding(16)
                 .background(.ultraThinMaterial)
             }
-            .navigationTitle("思い出を追加")
+            .navigationTitle("写真を追加")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

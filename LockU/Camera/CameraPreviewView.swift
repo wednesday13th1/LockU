@@ -35,10 +35,10 @@ struct DualCameraOverlayLayout {
     }
     var lightControlFrame: CGRect {
         CGRect(
-            x: bounds.width - 16 - 76,
+            x: bounds.width - 16 - 60,
             y: lightControlTop,
-            width: 76,
-            height: lightTrackHeight + 154
+            width: 60,
+            height: lightTrackHeight + 140
         )
     }
     var topControlsFrame: CGRect {

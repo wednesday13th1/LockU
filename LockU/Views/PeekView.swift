@@ -1,4 +1,6 @@
+import PhotosUI
 import SwiftUI
+import UIKit
 
 // LockU presentation rule:
 // Locker shows how that day felt. Peek holds what that day said.
@@ -15,11 +17,11 @@ struct PeekView: View {
     @EnvironmentObject private var memoryRepository: MemoryRepository
     @EnvironmentObject private var reflectionRepository: MemoryReflectionRepository
     @EnvironmentObject private var demoClock: LockUDemoClock
-    @State private var code = ""
-    @State private var hasStarted = false
-    @State private var submittedCode: String?
-    @State private var presentedSelfDiscovery: SelfDiscoveryMoment?
-    @State private var presentedThenNowPair: ThenNowMemoryPair?
+    @EnvironmentObject private var dailyLikeRepository: DailyLikeRepository
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var draftImage: UIImage?
+    @State private var note = ""
+    @State private var isLoadingPhoto = false
     private let reflectionTraceService = MemoryReflectionTraceService()
     let contextOverride: PeekContext?
     let onCompleteRevisit: (RevisitPresentation, String) -> Void
@@ -107,168 +109,105 @@ struct PeekView: View {
     private var normalPeek: some View {
         ZStack {
             LockUPageBackground()
-            VStack(spacing: 22) {
-                Spacer()
-                Image(systemName: "photo.on.rectangle.angled")
-                    .font(.system(size: 28, weight: .light))
-                    .foregroundStyle(LockUDesign.Color.schoolNavy.opacity(0.46))
-                Text("過去の自分に、また会う。")
-                    .font(LockUDesign.Typography.screenTitle)
-                    .foregroundStyle(LockUDesign.Color.schoolNavy)
-                if let moment = currentSelfDiscovery {
-                    Button("こんな日もあった") { presentedSelfDiscovery = moment }
-                        .buttonStyle(LockUPrimaryButtonStyle())
-                } else if let pair = currentThenNowPair {
-                    Button("この頃と、今") { presentedThenNowPair = pair }
-                        .buttonStyle(LockUPrimaryButtonStyle())
-                } else {
-                    Text("忘れた頃に、\n今日にまた会える。")
-                        .font(LockUDesign.Typography.body)
-                        .foregroundStyle(LockUDesign.Color.softInkSecondary)
-                        .multilineTextAlignment(.center)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 28)
-        }
-        .sheet(item: $presentedSelfDiscovery) { SelfDiscoveryView(moment: $0) }
-        .sheet(item: $presentedThenNowPair) { ThenNowView(pair: $0) }
-    }
-
-    private var currentSelfDiscovery: SelfDiscoveryMoment? {
-        SelfDiscoveryService().moment(for: demoClock.now, memories: memoryRepository.memories)
-    }
-
-    private var currentThenNowPair: ThenNowMemoryPair? {
-        ThenNowPairingService().pair(for: demoClock.now, memories: memoryRepository.memories)
-    }
-
-    private var invitationCard: some View {
-        SummerGlassCard {
-            VStack(spacing: 18) {
-                Image(systemName: "envelope.open.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(LockUDesign.Color.ramuneBlue)
-                Text("誰かの青春を\n少しだけ覗いてみる")
-                    .font(LockUDesign.Typography.screenTitle)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(LockUDesign.Color.schoolNavy)
-                avatarStack
-                Button("はじめる") {
-                    withAnimation(.easeInOut(duration: 0.22)) { hasStarted = true }
-                }
-                .buttonStyle(LockUPrimaryButtonStyle())
-            }
-            .padding(24)
-        }
-    }
-
-    private var avatarStack: some View {
-        HStack(spacing: -9) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(avatarColor(index))
-                    .frame(width: 54, height: 54)
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .foregroundStyle(LockUDesign.Color.textSecondary)
-                    )
-                    .overlay(Circle().stroke(LockUDesign.Color.surface, lineWidth: 3))
-            }
-        }
-        .accessibilityLabel("友達3人")
-    }
-
-    private func avatarColor(_ index: Int) -> Color {
-        switch index {
-        case 0: return LockUDesign.Color.accentSoft
-        case 1: return LockUDesign.Color.mutedLavender.opacity(0.55)
-        default: return LockUDesign.Color.warmAccent.opacity(0.35)
-        }
-    }
-
-    private var codeEntry: some View {
-        SummerGlassCard {
-            VStack(spacing: 16) {
-                Image(systemName: "eye.circle.fill")
-                    .font(.system(size: 34))
-                    .foregroundStyle(LockUDesign.Color.ramuneBlue)
-                Text("友だちから届いたコードを入力してね")
-                    .font(LockUDesign.Typography.sectionTitle)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(LockUDesign.Color.schoolNavy)
-                TextField("LOCK-24", text: $code)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .font(.title3.monospaced())
-                    .multilineTextAlignment(.center)
-                    .padding()
-                    .background(.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 16))
-                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.75)))
-                    .accessibilityLabel("ロッカーコード")
-                Button("ロッカーをのぞく") {
-                    submittedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-                .buttonStyle(LockUPrimaryButtonStyle())
-                .disabled(code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Text("コードは友だちの共有画面に表示されています")
-                    .font(LockUDesign.Typography.caption)
-                    .foregroundStyle(LockUDesign.Color.softInkSecondary)
-            }
-            .padding(24)
-        }
-    }
-
-    private func preview(code: String) -> some View {
-        SummerGlassCard {
-            VStack(spacing: 15) {
-                Image(systemName: "eye.fill")
-                    .font(.title2)
-                    .foregroundStyle(LockUDesign.Color.ramuneBlue)
-                Text("今日のプレビュー")
-                    .font(LockUDesign.Typography.caption)
-                    .tracking(2)
-                Text("ロッカー \(code)")
-                    .font(LockUDesign.Typography.screenTitle)
-                Text("Haruのロッカー")
-                    .font(LockUDesign.Typography.body)
-                    .foregroundStyle(LockUDesign.Color.softInkSecondary)
-                VStack(spacing: 8) {
-                    LinearGradient(
-                        colors: [
-                            LockUDesign.Color.summerSkyTop,
-                            LockUDesign.Color.sunsetPeach.opacity(0.7)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .overlay(alignment: .topTrailing) {
-                        Image(systemName: "cloud.fill")
-                            .font(.system(size: 68))
-                            .foregroundStyle(.white.opacity(0.78))
-                            .padding()
-                    }
-                    .aspectRatio(4 / 3, contentMode: .fit)
-                    Text("夏休みまであと3日")
+            ScrollView {
+                VStack(spacing: 18) {
+                    Text("TODAY'S LIKE")
+                        .font(.system(size: 11, weight: .semibold))
+                        .tracking(1.8)
+                        .foregroundStyle(LockUDesign.Color.textSecondary)
+                    Text("今日の好き")
+                        .font(LockUDesign.Typography.screenTitle)
+                        .foregroundStyle(LockUDesign.Color.schoolNavy)
+                    Text(demoClock.now.formatted(.dateTime.month(.abbreviated).day().weekday(.wide)))
                         .font(LockUDesign.Typography.caption)
-                        .foregroundStyle(LockUDesign.Color.softInk)
+                        .foregroundStyle(LockUDesign.Color.softInkSecondary)
+
+                    if let today = dailyLikeRepository.log(for: demoClock.now) {
+                        likeImage(dailyLikeRepository.image(for: today))
+                        Text(today.note).font(LockUDesign.Typography.body)
+                        Text("今日もひとつ、好きが残った。")
+                            .font(LockUDesign.Typography.caption)
+                            .foregroundStyle(LockUDesign.Color.softInkSecondary)
+                    } else {
+                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                            likeImage(draftImage)
+                                .overlay {
+                                    if draftImage == nil {
+                                        Label("写真を選ぶ", systemImage: "photo")
+                                            .foregroundStyle(LockUDesign.Color.schoolNavy)
+                                    }
+                                }
+                        }
+                        .disabled(isLoadingPhoto)
+                        TextField("何が好きだった？", text: $note)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: note) { _, value in
+                                if value.count > 40 { note = String(value.prefix(40)) }
+                            }
+                        Text("\(note.count) / 40")
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        Button("今日の好きを残す", action: saveToday)
+                            .buttonStyle(LockUPrimaryButtonStyle())
+                            .disabled(draftImage == nil || note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+
+                    let past = dailyLikeRepository.logs.filter { !Calendar.autoupdatingCurrent.isDate($0.date, inSameDayAs: demoClock.now) }
+                    if !past.isEmpty {
+                        Text("これまでの好き")
+                            .font(LockUDesign.Typography.sectionTitle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 12)
+                        ForEach(past) { log in
+                            HStack(spacing: 12) {
+                                Image(uiImage: dailyLikeRepository.image(for: log) ?? UIImage())
+                                    .resizable().scaledToFill()
+                                    .frame(width: 64, height: 64).clipped()
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(log.date.formatted(.dateTime.month(.abbreviated).day()))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    Text(log.note).font(LockUDesign.Typography.body)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
                 }
-                .padding(10)
-                .background(LockUDesign.Color.notebookPaper)
-                .rotationEffect(.degrees(-1))
-                .shadow(color: LockUDesign.Color.schoolNavy.opacity(0.1), radius: 8, y: 4)
-                Button("このロッカーをのぞく") {}
-                    .buttonStyle(LockUPrimaryButtonStyle())
-                Button("別のコードを試す") {
-                    submittedCode = nil
-                    self.code = ""
-                }
-                .buttonStyle(LockUSecondaryButtonStyle())
+                .padding(.horizontal, 28)
+                .padding(.top, 26)
             }
-            .foregroundStyle(LockUDesign.Color.schoolNavy)
-            .padding(24)
+        }
+        .onChange(of: selectedPhoto) { _, item in
+            guard let item else { return }
+            Task { await loadPhoto(item) }
         }
     }
+
+    private func likeImage(_ image: UIImage?) -> some View {
+        Group {
+            if let image { Image(uiImage: image).resizable().scaledToFill() }
+            else { RoundedRectangle(cornerRadius: 18).fill(.white.opacity(0.42)) }
+        }
+        .frame(maxWidth: .infinity).aspectRatio(4 / 3, contentMode: .fit)
+        .clipped().clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func loadPhoto(_ item: PhotosPickerItem) async {
+        isLoadingPhoto = true
+        defer { isLoadingPhoto = false }
+        guard let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else {
+            appModel.presentedError = "写真を読み込めませんでした。"; return
+        }
+        draftImage = image.lockUDownsampled(maxDimension: 1600)
+    }
+
+    private func saveToday() {
+        guard let draftImage else { return }
+        do { try dailyLikeRepository.save(image: draftImage, note: note, date: demoClock.now) }
+        catch { appModel.report(error) }
+    }
+
 }
 
 private struct DualMemoryPeekView: View {

@@ -6,8 +6,7 @@ struct LockUBottomBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            tabButton(.locker, title: "ロッカー", icon: "cabinet.fill")
-            tabButton(.book, title: "思い出", icon: "book.closed.fill")
+            tabButton(.locker, title: "Locker", icon: "cabinet.fill")
             cameraButton
             tabButton(.peek, title: "Peek", icon: "eye.fill")
         }
@@ -51,13 +50,18 @@ struct LockUBottomBar: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             selection = .camera
         } label: {
-            ZStack {
-                Circle()
-                    .fill(Color(red: 49/255, green: 67/255, blue: 76/255))
-                    .frame(width: 40, height: 40)
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 23, weight: .semibold))
-                    .foregroundStyle(Color(red: 248/255, green: 247/255, blue: 242/255).opacity(0.94))
+            VStack(spacing: 2) {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 49/255, green: 67/255, blue: 76/255))
+                        .frame(width: 38, height: 38)
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(Color(red: 248/255, green: 247/255, blue: 242/255).opacity(0.94))
+                }
+                Text("Camera")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(Color(red: 49/255, green: 67/255, blue: 76/255).opacity(0.78))
             }
                 .shadow(color: .black.opacity(0.09), radius: 6, y: 3)
                 .scaleEffect(selection == .camera ? 1.04 : 1)

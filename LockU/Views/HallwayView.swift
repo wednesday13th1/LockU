@@ -3,24 +3,17 @@ import SwiftUI
 import UIKit
 
 struct HallwayView: View {
-    @EnvironmentObject private var settingsRepository: LockerSettingsRepository
     @State private var sheet: HallwaySheet?
 
     var body: some View {
         LockerHomeView(
-            onShare: { sheet = .share },
-            onCode: { sheet = .code },
             onSettings: { sheet = .settings }
         )
         .sheet(item: $sheet) { item in
             Group {
                 switch item {
-                case .code:
-                    LockerCodeSheet(code: settingsRepository.settings.lockerNumber)
                 case .settings:
                     LockerSettingsSheet()
-                case .share:
-                    ShareLockerSheet(code: settingsRepository.settings.lockerNumber)
                 }
             }
             .presentationBackground(.ultraThinMaterial)
@@ -30,79 +23,8 @@ struct HallwayView: View {
 }
 
 private enum HallwaySheet: Identifiable {
-    case share, code, settings
+    case settings
     var id: Self { self }
-}
-
-private struct LockerCodeSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let code: String
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "number.circle.fill")
-                .font(.system(size: 38))
-                .foregroundStyle(LockUDesign.Color.ramuneBlue)
-            Text("ロッカーコード").font(LockUDesign.Typography.screenTitle)
-            Text(code)
-                .font(.system(size: 38, weight: .bold, design: .rounded))
-                .tracking(3)
-            Text("このコードを友達に伝えると、今日の思い出をPeekできます。")
-                .font(LockUDesign.Typography.body)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(LockUDesign.Color.softInkSecondary)
-            Button("閉じる") { dismiss() }.buttonStyle(LockUPrimaryButtonStyle())
-        }
-        .foregroundStyle(LockUDesign.Color.schoolNavy)
-        .padding(32)
-        .presentationDetents([.medium])
-        .presentationCornerRadius(32)
-    }
-}
-
-private struct ShareLockerSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let code: String
-    var body: some View {
-        VStack(spacing: 18) {
-            Capsule().fill(LockUDesign.Color.ramuneBlue.opacity(0.35))
-                .frame(width: 52, height: 5)
-            Image(systemName: "paperplane.fill")
-                .font(.system(size: 36))
-                .foregroundStyle(LockUDesign.Color.ramuneBlue)
-            Text("ロッカーをシェア").font(LockUDesign.Typography.screenTitle)
-            Text("ロッカーコード")
-                .font(LockUDesign.Typography.caption)
-                .tracking(2)
-                .foregroundStyle(LockUDesign.Color.softInkSecondary)
-            HStack(spacing: 18) {
-                Text(code)
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .tracking(3)
-                Image(systemName: "qrcode")
-                    .font(.system(size: 48))
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity)
-            .background(LockUDesign.Color.notebookPaper, in: RoundedRectangle(cornerRadius: 18))
-            ShareLink(item: "LockUのロッカーコード：\(code)") {
-                Label("シェア", systemImage: "square.and.arrow.up")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(LockUPrimaryButtonStyle())
-            Button("閉じる") { dismiss() }.buttonStyle(LockUSecondaryButtonStyle())
-        }
-        .foregroundStyle(LockUDesign.Color.schoolNavy)
-        .padding(28)
-        .background(
-            LinearGradient(
-                colors: [LockUDesign.Color.summerSkyMiddle.opacity(0.28), .clear],
-                startPoint: .top,
-                endPoint: .center
-            )
-        )
-        .presentationDetents([.medium])
-        .presentationCornerRadius(32)
-    }
 }
 
 private struct LockerSettingsSheet: View {
@@ -121,8 +43,6 @@ private struct LockerSettingsSheet: View {
             Form {
                 Section("ロッカー") {
                     TextField("名前", text: $ownerName)
-                    TextField("ロッカーコード", text: $lockerNumber)
-                        .keyboardType(.numberPad)
                 }
 
                 Section("背景") {
@@ -134,8 +54,11 @@ private struct LockerSettingsSheet: View {
                             .clipped()
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
+                    Button { setBackgroundMode(.today) } label: {
+                        Label("今日の色", systemImage: repository.settings.backgroundMode == .today ? "largecircle.fill.circle" : "circle")
+                    }
                     PhotosPicker(selection: $selectedBackground, matching: .images) {
-                        Label(backgroundRepository.image == nil ? "背景を変更" : "変更", systemImage: "photo")
+                        Label("自分の写真", systemImage: repository.settings.backgroundMode == .photo ? "largecircle.fill.circle" : "circle")
                     }
                     .disabled(isImportingBackground)
                     if backgroundRepository.image != nil {
@@ -211,6 +134,12 @@ private struct LockerSettingsSheet: View {
             settings.backgroundMode = .today
             try repository.update(settings)
         } catch { appModel.report(error) }
+    }
+
+    private func setBackgroundMode(_ mode: LockerSettings.BackgroundMode) {
+        var settings = repository.settings
+        settings.backgroundMode = mode == .photo && backgroundRepository.image == nil ? .today : mode
+        do { try repository.update(settings) } catch { appModel.report(error) }
     }
 
     private func importBackground(from item: PhotosPickerItem) async {
